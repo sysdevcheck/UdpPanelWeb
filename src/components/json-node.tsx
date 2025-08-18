@@ -6,6 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Braces,
   Brackets,
   Type,
@@ -16,7 +23,6 @@ import {
   ChevronDown,
   ChevronRight,
   GripVertical,
-  Key,
   X,
   Check,
 } from 'lucide-react';
@@ -209,19 +215,12 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
                 {value === null ? 'null' : String(value)}
             </span>
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); onDelete(path)}}>
+                {!isRoot && (<Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); onDelete(path)}}>
                   <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
+                </Button>)}
             </div>
         </div>
       )}
     </div>
   );
 };
-
-// Dummy Select components for AddEntryForm to work
-const Select: React.FC<any> = ({ children, ...props }) => <select {...props}>{children}</select>;
-const SelectTrigger: React.FC<any> = ({ children, ...props }) => <div {...props}>{children}</div>;
-const SelectValue: React.FC<any> = ({...props}) => <div {...props} />;
-const SelectContent: React.FC<any> = ({ children, ...props }) => <div {...props}>{children}</div>;
-const SelectItem: React.FC<any> = ({ children, ...props }) => <option {...props}>{children}</option>;
