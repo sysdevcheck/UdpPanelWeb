@@ -1,21 +1,21 @@
-# User Management Panel for ZiVPN
+# Panel de Gestión de Usuarios para ZiVPN
 
-This is a Next.js web application that provides a user-friendly interface to manage users for a ZiVPN service. Instead of manually editing the configuration file on your server, you can use this panel to add, edit, delete, and renew users.
+Esta es una aplicación web Next.js que proporciona una interfaz amigable para gestionar usuarios de un servicio ZiVPN. En lugar de editar manualmente el archivo de configuración en tu servidor, puedes usar este panel para agregar, editar, eliminar y renovar usuarios.
 
-## Features
+## Características
 
-- **User Management**: Easily add, edit, and delete users from the configuration.
-- **Automatic Expiration**: Users are created with a 30-day lifetime. Expired users are automatically removed from the configuration file.
-- **User Renewal**: Renew a user's access for another 30 days with a single click.
-- **Status Indicators**: Users are visually tagged as "Active", "Expiring" (within 7 days), or "Expired".
-- **Filtering**: Filter the user list by their status to quickly find who you're looking for.
-- **Pagination**: The user list is paginated to ensure the interface remains fast and easy to navigate, even with many users.
+- **Gestión de Usuarios**: Agrega, edita y elimina usuarios de la configuración fácilmente.
+- **Expiración Automática**: Los usuarios se crean con una vida útil de 30 días. Los usuarios vencidos se eliminan automáticamente del archivo de configuración.
+- **Renovación de Usuarios**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
+- **Indicadores de Estado**: Los usuarios se etiquetan visualmente como "Activo", "Por Vencer" (dentro de 7 días) o "Vencido".
+- **Filtrado**: Filtra la lista de usuarios por su estado para encontrar rápidamente a quien buscas.
+- **Paginación**: La lista de usuarios está paginada para garantizar que la interfaz siga siendo rápida y fácil de navegar, incluso con muchos usuarios.
 
-## How It Works
+## Cómo Funciona
 
-The application reads and writes to a local JSON configuration file located at `/etc/zivpn/config.json` on the server where it's running. It does **not** use SSH. The panel must be deployed on the same VPS as your VPN service.
+La aplicación lee y escribe en un archivo de configuración JSON local ubicado en `/etc/zivpn/config.json` en el servidor donde se está ejecutando. **No** utiliza SSH. El panel debe ser desplegado en el mismo VPS que tu servicio de VPN.
 
-The user objects in the configuration file are structured as follows:
+Los objetos de usuario en el archivo de configuración tienen la siguiente estructura:
 
 ```json
 {
@@ -25,80 +25,80 @@ The user objects in the configuration file are structured as follows:
 }
 ```
 
-## Setup and Deployment on Your VPS
+## Instalación y Despliegue en tu VPS
 
-Follow these steps to get the user management panel running on your server.
+Sigue estos pasos para poner en funcionamiento el panel de gestión de usuarios en tu servidor.
 
-### 1. Prerequisites
+### 1. Prerrequisitos
 
-Make sure you have Node.js and npm installed on your VPS.
+Asegúrate de tener Node.js y npm instalados en tu VPS.
 
 ```bash
-# Example for Debian/Ubuntu
+# Ejemplo para Debian/Ubuntu
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-### 2. Clone the Project
+### 2. Clona el Proyecto
 
-Clone this repository to a location on your VPS.
+Clona este repositorio en una ubicación en tu VPS.
 
 ```bash
-git clone [URL_OF_YOUR_GIT_REPOSITORY]
-cd [PROJECT_DIRECTORY]
+git clone [URL_DE_TU_REPOSITORIO_GIT]
+cd [DIRECTORIO_DEL_PROYECTO]
 ```
 
-### 3. Install Dependencies
+### 3. Instala las Dependencias
 
-Install the necessary Node.js packages.
+Instala los paquetes de Node.js necesarios.
 
 ```bash
 npm install
 ```
 
-### 4. Set File Permissions
+### 4. Configura los Permisos de Archivo
 
-The application needs permission to write to the `/etc/zivpn/` directory.
+La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`.
 
-First, create the directory if it doesn't exist. Then, assign ownership to the user you will use to run the application (replace `your_user` with your actual username).
+Primero, crea el directorio si no existe. Luego, asigna la propiedad al usuario que usarás para ejecutar la aplicación (reemplaza `tu_usuario` con tu nombre de usuario real).
 
 ```bash
 sudo mkdir -p /etc/zivpn
-sudo chown -R your_user:your_user /etc/zivpn
+sudo chown -R tu_usuario:tu_usuario /etc/zivpn
 ```
 
-### 5. Build the Application
+### 5. Construye la Aplicación
 
-Create an optimized production build of the Next.js app.
+Crea una compilación de producción optimizada de la aplicación Next.js.
 
 ```bash
 npm run build
 ```
 
-### 6. Run the Application
+### 6. Ejecuta la Aplicación
 
-Start the application server.
+Inicia el servidor de la aplicación.
 
 ```bash
 npm start
 ```
 
-By default, the application will run on port 9002. You can access it in your browser at `http://<YOUR_VPS_IP>:9002`.
+Por defecto, la aplicación se ejecutará en el puerto 9002. Puedes acceder a ella en tu navegador en `http://<IP_DE_TU_VPS>:9002`.
 
-### 7. (Recommended) Keep it Running with PM2
+### 7. (Recomendado) Mantenla en Funcionamiento con PM2
 
-To ensure the panel stays online even after you close your terminal, use a process manager like `pm2`.
+Para asegurar que el panel permanezca en línea incluso después de cerrar tu terminal, usa un gestor de procesos como `pm2`.
 
 ```bash
-# Install pm2 globally
+# Instala pm2 globalmente
 sudo npm install -g pm2
 
-# Start the application with pm2
+# Inicia la aplicación con pm2
 pm2 start npm --name "zivpn-panel" -- start
 
-# (Optional) Check the status of your app
+# (Opcional) Verifica el estado de tu aplicación
 pm2 list
 
-# (Optional) View logs
+# (Opcional) Visualiza los registros
 pm2 logs zivpn-panel
 ```
