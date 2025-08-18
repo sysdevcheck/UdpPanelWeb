@@ -19,10 +19,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} dark`}>
+    <html lang="en" className={inter.variable}>
       <head>
       </head>
-      <body>
+      <body className="dark">
         {children}
         <Toaster />
       </body>

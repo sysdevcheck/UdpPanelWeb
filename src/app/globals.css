@@ -78,7 +78,10 @@
   * {
     @apply border-border;
   }
+  html {
+    @apply font-body;
+  }
   body {
-    @apply bg-background text-foreground font-body antialiased;
+    @apply bg-background text-foreground antialiased;
   }
 }
