@@ -137,3 +137,43 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
         return { success: false, error: error.message || 'Failed to delete user.' };
     }
 }
+
+/**
+ * Edits a user's username in the configuration.
+ */
+export async function editUser(oldUsername: string, newUsername: string): Promise<{ success: boolean; users?: any[], error?: string }> {
+    if (!oldUsername || !newUsername) {
+        return { success: false, error: "Old and new usernames cannot be empty." };
+    }
+    if (oldUsername === newUsername) {
+        return { success: false, error: "New username cannot be the same as the old one." };
+    }
+
+    try {
+        const config = await readConfig();
+        const users = config.auth?.config || [];
+
+        const userIndex = users.findIndex((user: any) => user.username === oldUsername);
+        if (userIndex === -1) {
+            return { success: false, error: `User "${oldUsername}" not found.`, users };
+        }
+
+        if (users.some((user: any) => user.username === newUsername)) {
+            return { success: false, error: `User "${newUsername}" already exists.`, users };
+        }
+        
+        const updatedUsers = [...users];
+        updatedUsers[userIndex] = { ...updatedUsers[userIndex], username: newUsername };
+        
+        config.auth.config = updatedUsers;
+
+        const result = await saveConfig(config);
+        if (result.success) {
+            return { success: true, users: updatedUsers };
+        } else {
+            return { success: false, error: result.error, users };
+        }
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to edit user.' };
+    }
+}

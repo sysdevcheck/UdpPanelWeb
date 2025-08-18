@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { addUser, deleteUser } from '@/app/actions';
+import { addUser, deleteUser, editUser } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, ShieldAlert } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, ShieldAlert, Pencil } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,8 +19,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNow } from 'date-fns';
+import { Label } from '@/components/ui/label';
 
 type User = {
   username: string;
@@ -31,6 +41,8 @@ type User = {
 export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [newUser, setNewUser] = useState('');
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [newUsername, setNewUsername] = useState('');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
 
@@ -82,6 +94,40 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     });
   };
 
+  const handleEditUser = () => {
+    if (!editingUser || !newUsername.trim()) {
+       toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'New username cannot be empty.',
+      });
+      return;
+    }
+    startTransition(async () => {
+      const result = await editUser(editingUser.username, newUsername.trim());
+      if (result.success && result.users) {
+        setUsers(result.users);
+        setEditingUser(null);
+        setNewUsername('');
+        toast({
+          title: 'Success',
+          description: `User "${editingUser.username}" has been updated to "${newUsername.trim()}".`,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Error Editing User',
+          description: result.error,
+        });
+      }
+    });
+  }
+
+  const openEditDialog = (user: User) => {
+    setEditingUser(user);
+    setNewUsername(user.username);
+  }
+
   const getDaysUntilExpiration = (expiresAt: string) => {
     const expirationDate = new Date(expiresAt);
     const now = new Date();
@@ -91,11 +137,12 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   }
 
   return (
+    <>
     <Card className="w-full max-w-4xl mx-auto shadow-lg">
       <CardHeader>
         <CardTitle className="text-xl">User Passwords</CardTitle>
         <CardDescription>
-          Add or remove users. Users will automatically expire and be removed after 30 days.
+          Add, edit, or remove users. Users will automatically expire and be removed after 30 days.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -156,6 +203,9 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                              </div>
                           </TableCell>
                           <TableCell className="text-right">
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => openEditDialog(user)}>
+                                <Pencil className="h-4 w-4" />
+                            </Button>
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
@@ -194,5 +244,41 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
         </div>
       </CardContent>
     </Card>
+
+    <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
+        <DialogContent>
+            <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+                Change the username for <strong className="font-mono">{editingUser?.username}</strong>.
+            </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-username" className="text-right">
+                    Username
+                    </Label>
+                    <Input
+                    id="new-username"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    className="col-span-3"
+                    disabled={isPending}
+                    />
+                </div>
+            </div>
+            <DialogFooter>
+                <DialogClose asChild>
+                    <Button type="button" variant="secondary" disabled={isPending}>
+                        Cancel
+                    </Button>
+                </DialogClose>
+                <Button onClick={handleEditUser} disabled={isPending}>
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }
