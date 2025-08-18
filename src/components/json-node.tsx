@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Braces,
-  Bracket,
+  Brackets,
   Type,
   Hash,
   ToggleRight,
@@ -40,7 +40,7 @@ const getValueType = (value: any) => {
 const getIconForType = (type: string) => {
   switch (type) {
     case 'object': return <Braces className="h-4 w-4 text-amber-500" />;
-    case 'array': return <Bracket className="h-4 w-4 text-sky-500" />;
+    case 'array': return <Brackets className="h-4 w-4 text-sky-500" />;
     case 'string': return <Type className="h-4 w-4 text-green-500" />;
     case 'number': return <Hash className="h-4 w-4 text-blue-500" />;
     case 'boolean': return <ToggleRight className="h-4 w-4 text-purple-500" />;
