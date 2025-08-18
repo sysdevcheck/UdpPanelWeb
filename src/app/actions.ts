@@ -53,6 +53,8 @@ export async function readConfig(): Promise<any> {
     // This allows the app to function on first run.
     if (error.code === 'ENOENT') {
       console.log(`Config file not found at ${configPath}. Using default config.`);
+      // Write the default config if it doesn't exist
+      await saveConfig(defaultConfig);
       return defaultConfig;
     }
     // For other errors, log them and re-throw.
@@ -78,4 +80,56 @@ export async function saveConfig(data: any): Promise<{ success: boolean; error?:
     console.error(`Error writing config file at ${configPath}:`, error);
     return { success: false, error: error.message || 'An unknown error occurred' };
   }
+}
+
+/**
+ * Adds a new user to the configuration.
+ */
+export async function addUser(username: string): Promise<{ success: boolean; users?: string[]; error?: string }> {
+    if (!username) {
+        return { success: false, error: "Username cannot be empty." };
+    }
+    try {
+        const config = await readConfig();
+        const users = config.auth?.config || [];
+        if (users.includes(username)) {
+            return { success: false, error: "User already exists.", users };
+        }
+        const newUsers = [...users, username];
+        config.auth.config = newUsers;
+        const result = await saveConfig(config);
+        if (result.success) {
+            return { success: true, users: newUsers };
+        } else {
+            return { success: false, error: result.error, users };
+        }
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to add user.' };
+    }
+}
+
+/**
+ * Deletes a user from the configuration.
+ */
+export async function deleteUser(username: string): Promise<{ success: boolean; users?: string[]; error?: string }> {
+     if (!username) {
+        return { success: false, error: "Username cannot be empty." };
+    }
+    try {
+        const config = await readConfig();
+        const users = config.auth?.config || [];
+        if (!users.includes(username)) {
+            return { success: false, error: "User not found.", users };
+        }
+        const newUsers = users.filter((user: string) => user !== username);
+        config.auth.config = newUsers;
+        const result = await saveConfig(config);
+        if (result.success) {
+            return { success: true, users: newUsers };
+        } else {
+            return { success: false, error: result.error, users };
+        }
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to delete user.' };
+    }
 }
