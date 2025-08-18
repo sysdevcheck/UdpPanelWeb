@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import { addUser, deleteUser, editUser, renewUser } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -62,8 +62,11 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newUsername, setNewUsername] = useState('');
   const [filter, setFilter] = useState<Status>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  
+  const USERS_PER_PAGE = 10;
 
   const handleAddUser = () => {
     if (!newUser.trim()) {
@@ -137,6 +140,26 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     });
   }, [users, filter]);
 
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+    return filteredUsers.slice(startIndex, startIndex + USERS_PER_PAGE);
+  }, [filteredUsers, currentPage]);
+
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    } else if (totalPages === 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+  
+  const handleFilterChange = (newFilter: Status) => {
+    setFilter(newFilter);
+    setCurrentPage(1);
+  };
+
   return (
     <>
     <Card className="w-full max-w-5xl mx-auto shadow-lg">
@@ -165,10 +188,10 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
         <div className="flex items-center gap-2 mb-4">
             <h3 className="text-lg font-medium text-foreground/80">Current Users</h3>
             <div className="flex gap-1 ml-auto">
-                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('all')}>All</Button>
-                <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('active')}>Active</Button>
-                <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('expiring')}>Expiring</Button>
-                <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilter('expired')}>Expired</Button>
+                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>All</Button>
+                <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Active</Button>
+                <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Expiring</Button>
+                <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expired')}>Expired</Button>
             </div>
         </div>
 
@@ -184,8 +207,8 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.length > 0 ? (
-                    filteredUsers.map((user) => {
+                  {paginatedUsers.length > 0 ? (
+                    paginatedUsers.map((user) => {
                       const { label, daysLeft, variant } = getStatus(user.expiresAt);
                       return (
                         <TableRow key={user.username}>
@@ -253,6 +276,29 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                 </TableBody>
               </Table>
             </div>
+             {totalPages > 1 && (
+              <div className="flex items-center justify-end pt-4 gap-2">
+                <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1 || isPending}
+                >
+                    Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                </span>
+                <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages || isPending}
+                >
+                    Next
+                </Button>
+              </div>
+            )}
         </div>
       </CardContent>
     </Card>
