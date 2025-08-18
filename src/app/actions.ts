@@ -177,3 +177,38 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
         return { success: false, error: error.message || 'Failed to edit user.' };
     }
 }
+
+/**
+ * Renews a user's subscription for another 30 days from today.
+ */
+export async function renewUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
+    if (!username) {
+        return { success: false, error: "Username cannot be empty." };
+    }
+    try {
+        const config = await readConfig();
+        const users = config.auth?.config || [];
+
+        const userIndex = users.findIndex((user: any) => user.username === username);
+        if (userIndex === -1) {
+            return { success: false, error: `User "${username}" not found.`, users };
+        }
+
+        const now = new Date();
+        const newExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+
+        const updatedUsers = [...users];
+        updatedUsers[userIndex] = { ...updatedUsers[userIndex], expiresAt: newExpiresAt.toISOString() };
+
+        config.auth.config = updatedUsers;
+        
+        const result = await saveConfig(config);
+        if (result.success) {
+            return { success: true, users: updatedUsers };
+        } else {
+            return { success: false, error: result.error, users };
+        }
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to renew user.' };
+    }
+}
