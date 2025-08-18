@@ -2,6 +2,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { exec } from 'child_process';
 
 // The path to the configuration file on the server.
 // IMPORTANT: The process running this Next.js app needs read/write permissions for this path.
@@ -18,6 +19,31 @@ const defaultConfig = {
     "config": []
   }
 };
+
+/**
+ * Executes a shell command, in this case to restart the VPN service.
+ * This requires the node process user to have passwordless sudo permissions.
+ */
+async function restartVpnService(): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    exec('sudo systemctl restart zivpn', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error restarting zivpn service: ${error.message}`);
+        // Often, stderr has more specific details from the command itself.
+        const errorMessage = stderr || error.message;
+        resolve({ success: false, error: `Failed to restart VPN service: ${errorMessage}` });
+        return;
+      }
+      if (stderr) {
+        // Some commands output to stderr for warnings, not necessarily errors.
+        console.warn(`Stderr while restarting zivpn service: ${stderr}`);
+      }
+      console.log(`zivpn service restarted successfully: ${stdout}`);
+      resolve({ success: true });
+    });
+  });
+}
+
 
 /**
  * Reads the configuration from the JSON file.
@@ -43,11 +69,14 @@ export async function readConfig(): Promise<any> {
   const users = config.auth?.config || [];
   const validUsers = users.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
 
-  // If there are expired users, update the config file
+  // If there are expired users, update the config file and restart the service
   if (validUsers.length < users.length) {
     console.log(`Removing ${users.length - validUsers.length} expired users.`);
     config.auth.config = validUsers;
-    await saveConfig(config);
+    const saveResult = await saveConfig(config);
+    if(saveResult.success) {
+        await restartVpnService();
+    }
   }
 
   return config;
@@ -102,6 +131,10 @@ export async function addUser(username: string): Promise<{ success: boolean; use
         
         const result = await saveConfig(config);
         if (result.success) {
+            const restartResult = await restartVpnService();
+            if (!restartResult.success) {
+                return { success: false, error: restartResult.error, users: newUsers };
+            }
             return { success: true, users: newUsers };
         } else {
             return { success: false, error: result.error, users };
@@ -129,6 +162,10 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
         config.auth.config = newUsers;
         const result = await saveConfig(config);
         if (result.success) {
+            const restartResult = await restartVpnService();
+            if (!restartResult.success) {
+                return { success: false, error: restartResult.error, users: newUsers };
+            }
             return { success: true, users: newUsers };
         } else {
             return { success: false, error: result.error, users };
@@ -169,6 +206,10 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
 
         const result = await saveConfig(config);
         if (result.success) {
+             const restartResult = await restartVpnService();
+            if (!restartResult.success) {
+                return { success: false, error: restartResult.error, users: updatedUsers };
+            }
             return { success: true, users: updatedUsers };
         } else {
             return { success: false, error: result.error, users };
@@ -204,6 +245,10 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
         
         const result = await saveConfig(config);
         if (result.success) {
+            const restartResult = await restartVpnService();
+            if (!restartResult.success) {
+                return { success: false, error: restartResult.error, users: updatedUsers };
+            }
             return { success: true, users: updatedUsers };
         } else {
             return { success: false, error: result.error, users };

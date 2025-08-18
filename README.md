@@ -8,6 +8,7 @@ Esta es una aplicación web Next.js que proporciona una interfaz amigable para g
 - **Expiración Automática**: Los usuarios se crean con una vida útil de 30 días. Los usuarios vencidos se eliminan automáticamente del archivo de configuración.
 - **Renovación de Usuarios**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
 - **Indicadores de Estado**: Los usuarios se etiquetan visualmente como "Activo", "Por Vencer" (dentro de 7 días) o "Vencido".
+- **Reinicio Automático del Servicio**: Después de cada acción (agregar, editar, eliminar, renovar), la aplicación reinicia automáticamente el servicio `zivpn` para aplicar los cambios de inmediato.
 - **Filtrado**: Filtra la lista de usuarios por su estado para encontrar rápidamente a quien buscas.
 - **Paginación**: La lista de usuarios está paginada para garantizar que la interfaz siga siendo rápida y fácil de navegar, incluso con muchos usuarios.
 
@@ -67,7 +68,21 @@ sudo mkdir -p /etc/zivpn
 sudo chown -R tu_usuario:tu_usuario /etc/zivpn
 ```
 
-### 5. Construye la Aplicación
+### 5. (MUY IMPORTANTE) Permisos de Sudo
+
+Para que la aplicación pueda reiniciar el servicio `zivpn` automáticamente, el usuario que ejecuta la aplicación Node.js necesita permisos para ejecutar el comando `systemctl` sin contraseña.
+
+Abre el archivo de sudoers para editarlo de forma segura:
+```bash
+sudo visudo
+```
+Agrega la siguiente línea al final del archivo, reemplazando `tu_usuario` con el nombre de usuario que ejecuta la aplicación:
+```
+tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
+```
+Esto permite que `tu_usuario` ejecute específicamente el comando de reinicio de `zivpn` sin necesitar una contraseña.
+
+### 6. Construye la Aplicación
 
 Crea una compilación de producción optimizada de la aplicación Next.js.
 
@@ -75,7 +90,7 @@ Crea una compilación de producción optimizada de la aplicación Next.js.
 npm run build
 ```
 
-### 6. Ejecuta la Aplicación
+### 7. Ejecuta la Aplicación
 
 Inicia el servidor de la aplicación.
 
@@ -85,7 +100,7 @@ npm start
 
 Por defecto, la aplicación se ejecutará en el puerto 9002. Puedes acceder a ella en tu navegador en `http://<IP_DE_TU_VPS>:9002`.
 
-### 7. (Recomendado) Mantenla en Funcionamiento con PM2
+### 8. (Recomendado) Mantenla en Funcionamiento con PM2
 
 Para asegurar que el panel permanezca en línea incluso después de cerrar tu terminal, usa un gestor de procesos como `pm2`.
 
