@@ -15,53 +15,44 @@ const defaultConfig = {
   "obfs": "zivpn",
   "auth": {
     "mode": "passwords",
-    "config": [
-      "root",
-      "chito",
-      "carol",
-      "mono",
-      "neri",
-      "thomas",
-      "anna",
-      "carloscana",
-      "carl",
-      "tomas",
-      "erick",
-      "yasser",
-      "augner",
-      "gilber",
-      "lino"
-    ]
+    "config": []
   }
 };
 
 /**
  * Reads the configuration from the JSON file.
  * Returns a default configuration if the file doesn't exist.
+ * It also filters out expired users and saves the updated config.
  */
 export async function readConfig(): Promise<any> {
+  let config;
   try {
-    // In a real environment, this will read from the absolute path.
     const data = await fs.readFile(configPath, 'utf8');
-    // Handle case where file is empty
-    if (!data.trim()) {
-      return defaultConfig;
-    }
-    return JSON.parse(data);
+    config = data.trim() ? JSON.parse(data) : defaultConfig;
   } catch (error: any) {
-    // If the file doesn't exist (ENOENT), return the default config.
-    // This allows the app to function on first run.
     if (error.code === 'ENOENT') {
       console.log(`Config file not found at ${configPath}. Using default config.`);
-      // Write the default config if it doesn't exist
       await saveConfig(defaultConfig);
       return defaultConfig;
     }
-    // For other errors, log them and re-throw.
     console.error(`Error reading config file at ${configPath}:`, error);
     throw new Error('Could not read configuration file.');
   }
+
+  const now = new Date();
+  const users = config.auth?.config || [];
+  const validUsers = users.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
+
+  // If there are expired users, update the config file
+  if (validUsers.length < users.length) {
+    console.log(`Removing ${users.length - validUsers.length} expired users.`);
+    config.auth.config = validUsers;
+    await saveConfig(config);
+  }
+
+  return config;
 }
+
 
 /**
  * Saves the provided data to the JSON configuration file.
@@ -83,20 +74,32 @@ export async function saveConfig(data: any): Promise<{ success: boolean; error?:
 }
 
 /**
- * Adds a new user to the configuration.
+ * Adds a new user to the configuration with creation and expiration dates.
  */
-export async function addUser(username: string): Promise<{ success: boolean; users?: string[]; error?: string }> {
+export async function addUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     if (!username) {
         return { success: false, error: "Username cannot be empty." };
     }
     try {
         const config = await readConfig();
         const users = config.auth?.config || [];
-        if (users.includes(username)) {
+
+        if (users.some((user: any) => user.username === username)) {
             return { success: false, error: "User already exists.", users };
         }
-        const newUsers = [...users, username];
+        
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+
+        const newUser = {
+            username,
+            createdAt: now.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+        };
+
+        const newUsers = [...users, newUser];
         config.auth.config = newUsers;
+        
         const result = await saveConfig(config);
         if (result.success) {
             return { success: true, users: newUsers };
@@ -108,20 +111,21 @@ export async function addUser(username: string): Promise<{ success: boolean; use
     }
 }
 
+
 /**
  * Deletes a user from the configuration.
  */
-export async function deleteUser(username: string): Promise<{ success: boolean; users?: string[]; error?: string }> {
+export async function deleteUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
      if (!username) {
         return { success: false, error: "Username cannot be empty." };
     }
     try {
         const config = await readConfig();
         const users = config.auth?.config || [];
-        if (!users.includes(username)) {
+        if (!users.some((user: any) => user.username === username)) {
             return { success: false, error: "User not found.", users };
         }
-        const newUsers = users.filter((user: string) => user !== username);
+        const newUsers = users.filter((user: any) => user.username !== username);
         config.auth.config = newUsers;
         const result = await saveConfig(config);
         if (result.success) {

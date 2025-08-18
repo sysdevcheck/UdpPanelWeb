@@ -6,7 +6,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trash2, Plus, Loader2, User } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Trash2, Plus, Loader2, User, Calendar, ShieldAlert } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,10 +18,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { Badge } from '@/components/ui/badge';
+import { format, formatDistanceToNow } from 'date-fns';
 
-export function UserManager({ initialUsers }: { initialUsers: string[] }) {
-  const [users, setUsers] = useState(initialUsers);
+type User = {
+  username: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export function UserManager({ initialUsers }: { initialUsers: User[] }) {
+  const [users, setUsers] = useState<User[]>(initialUsers);
   const [newUser, setNewUser] = useState('');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -73,12 +82,20 @@ export function UserManager({ initialUsers }: { initialUsers: string[] }) {
     });
   };
 
+  const getDaysUntilExpiration = (expiresAt: string) => {
+    const expirationDate = new Date(expiresAt);
+    const now = new Date();
+    const diffTime = expirationDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }
+
   return (
-    <Card className="w-full max-w-2xl mx-auto shadow-lg">
+    <Card className="w-full max-w-4xl mx-auto shadow-lg">
       <CardHeader>
         <CardTitle className="text-xl">User Passwords</CardTitle>
         <CardDescription>
-          Add or remove users from <code className="bg-muted px-1.5 py-0.5 rounded">auth.config</code>.
+          Add or remove users. Users will automatically expire and be removed after 30 days.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -99,41 +116,81 @@ export function UserManager({ initialUsers }: { initialUsers: string[] }) {
 
         <div className="space-y-3">
             <h3 className="text-lg font-medium text-foreground/80 mb-2">Current Users</h3>
-            {users.length > 0 ? (
-                <ul className="border rounded-md divide-y">
-                    {users.map((user) => (
-                    <li key={user} className="p-3 flex items-center justify-between hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center gap-3">
-                            <User className="w-5 h-5 text-muted-foreground" />
-                            <span className="font-mono text-base">{user}</span>
-                        </div>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user}</strong>.
-                                </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteUser(user)} className="bg-destructive hover:bg-destructive/90">
-                                    Delete
-                                </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </li>
-                    ))}
-                </ul>
-            ) : (
-                <p className="text-muted-foreground text-center py-4">No users configured.</p>
-            )}
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.length > 0 ? (
+                    users.map((user) => {
+                      const daysLeft = getDaysUntilExpiration(user.expiresAt);
+                      return (
+                        <TableRow key={user.username}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <User className="w-5 h-5 text-muted-foreground" />
+                              <span className="font-mono text-base">{user.username}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="w-4 h-4" />
+                              {format(new Date(user.createdAt), 'PPP')}
+                            </div>
+                          </TableCell>
+                           <TableCell>
+                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <ShieldAlert className="w-4 h-4" />
+                                <div className="flex flex-col">
+                                   <span>{format(new Date(user.expiresAt), 'PPP')}</span>
+                                   <span className={`text-xs ${daysLeft <= 7 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                      {daysLeft > 0 ? `in ${daysLeft} day(s)` : 'Expired'}
+                                   </span>
+                                </div>
+                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
+                                    </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteUser(user.username)} className="bg-destructive hover:bg-destructive/90">
+                                        Delete
+                                    </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        No users configured.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
         </div>
       </CardContent>
     </Card>
