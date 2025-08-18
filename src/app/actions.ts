@@ -9,25 +9,30 @@ const configPath = '/etc/zivpn/config.json';
 
 // A default configuration to use if the file doesn't exist or is empty.
 const defaultConfig = {
-  users: [
-    {
-      name: 'example-user-1',
-      uuid: 'a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6',
-      active: true,
-    },
-     {
-      name: 'example-user-2',
-      uuid: 'b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6',
-      active: false,
-    }
-  ],
-  settings: {
-    port: 443,
-    protocol: 'tcp',
-    tunnels: ['dns', 'http'],
-  },
-  version: 1.0,
-  enabled: true
+  "listen": ":5667",
+  "cert": "/etc/zivpn/zivpn.crt",
+  "key": "/etc/zivpn/zivpn.key",
+  "obfs": "zivpn",
+  "auth": {
+    "mode": "passwords",
+    "config": [
+      "root",
+      "chito",
+      "carol",
+      "mono",
+      "neri",
+      "thomas",
+      "anna",
+      "carloscana",
+      "carl",
+      "tomas",
+      "erick",
+      "yasser",
+      "augner",
+      "gilber",
+      "lino"
+    ]
+  }
 };
 
 /**
