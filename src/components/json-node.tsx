@@ -48,48 +48,68 @@ const getIconForType = (type: string) => {
   }
 };
 
-const AddEntryForm = ({ onAdd }: { onAdd: (key: string | null, value: any, type: string) => void }) => {
+const AddEntryForm = ({ onAdd, isArray }: { onAdd: (key: string | null, value: any, type: string) => void, isArray: boolean }) => {
   const [key, setKey] = useState('');
   const [value, setValue] = useState('');
   const [type, setType] = useState('string');
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     let parsedValue: any;
     switch (type) {
-      case 'number': parsedValue = parseFloat(value); break;
-      case 'boolean': parsedValue = value === 'true'; break;
+      case 'number': parsedValue = parseFloat(value) || 0; break;
+      case 'boolean': parsedValue = value.toLowerCase() === 'true'; break;
       case 'object': parsedValue = {}; break;
       case 'array': parsedValue = []; break;
       case 'null': parsedValue = null; break;
       default: parsedValue = value;
     }
-    onAdd(key, parsedValue, type);
+    onAdd(isArray ? null : key, parsedValue, type);
+    setKey('');
+    setValue('');
+    setType('string');
+    setPopoverOpen(false); // Close popover on submit
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 p-1">
-      <Input placeholder="Key" value={key} onChange={(e) => setKey(e.target.value)} className="h-8" />
-      { !['object', 'array', 'null'].includes(type) && (
-        <Input placeholder="Value" value={value} onChange={(e) => setValue(e.target.value)} className="h-8" />
-      )}
-      <select value={type} onChange={(e) => setType(e.target.value)} className="w-full h-8 border rounded-md px-2 bg-background">
-        <option value="string">String</option>
-        <option value="number">Number</option>
-        <option value="boolean">Boolean</option>
-        <option value="object">Object</option>
-        <option value="array">Array</option>
-        <option value="null">Null</option>
-      </select>
-      <Button type="submit" size="sm" className="w-full">Add Property</Button>
-    </form>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6"><PlusCircle className="h-4 w-4 text-green-500" /></Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-60" side="bottom" align="start" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={handleSubmit} className="space-y-3 p-1">
+                {!isArray && (
+                    <Input placeholder="Key" value={key} onChange={(e) => setKey(e.target.value)} className="h-8" required />
+                )}
+                { !['object', 'array', 'null'].includes(type) && (
+                    <Input placeholder="Value" value={value} onChange={(e) => setValue(e.target.value)} className="h-8" />
+                )}
+                 <Select value={type} onValueChange={setType} >
+                    <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="string">String</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="boolean">Boolean</SelectItem>
+                        <SelectItem value="object">Object</SelectItem>
+                        <SelectItem value="array">Array</SelectItem>
+                        <SelectItem value="null">Null</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button type="submit" size="sm" className="w-full">Add</Button>
+            </form>
+        </PopoverContent>
+    </Popover>
   );
 };
 
 
 export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRoot = false }: JsonNodeProps) => {
   const type = getValueType(value);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(isRoot ? false : true);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
 
@@ -110,16 +130,11 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
       </Button>
       {icon}
       <span className="font-semibold text-foreground/80">{label}</span>
-      <span className="text-muted-foreground text-xs">({childrenCount} {childrenCount === 1 ? 'item' : 'items'})</span>
+      {typeof childrenCount === 'number' &&
+        <span className="text-muted-foreground text-xs">({childrenCount} {childrenCount === 1 ? 'item' : 'items'})</span>
+      }
       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 ml-auto">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6"><PlusCircle className="h-4 w-4 text-green-500" /></Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-60">
-            <AddEntryForm onAdd={(k, v) => onAdd(path, k, v)} />
-          </PopoverContent>
-        </Popover>
+        <AddEntryForm onAdd={(k, v) => onAdd(path, k, v)} isArray={type === 'array'} />
         {!isRoot && (
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onDelete(path)}>
             <Trash2 className="h-4 w-4 text-red-500" />
@@ -132,7 +147,7 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
   if (type === 'object') {
     const entries = Object.entries(value);
     return (
-      <div>
+      <div className="relative">
         {renderHeader(isRoot ? 'root' : String(nodeKey), getIconForType(type), entries.length)}
         {!isCollapsed && (
           <div className="pl-6 border-l-2 border-dashed border-border/50 ml-3">
@@ -148,7 +163,7 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
 
   if (type === 'array') {
     return (
-      <div>
+      <div className="relative">
         {renderHeader(String(nodeKey), getIconForType(type), value.length)}
         {!isCollapsed && (
           <div className="pl-6 border-l-2 border-dashed border-border/50 ml-3">
@@ -171,11 +186,13 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
       {isEditing ? (
         <div className="flex items-center space-x-2 flex-1">
           {type === 'boolean' ? (
-            <Switch checked={editValue} onCheckedChange={(c) => { onUpdate(path, c); setIsEditing(false); }} />
+             <div className="flex items-center space-x-2">
+                <Switch checked={editValue} onCheckedChange={(c) => setEditValue(c)} />
+             </div>
           ) : (
             <Input
               type={type === 'number' ? 'number' : 'text'}
-              value={editValue}
+              value={String(editValue)}
               onChange={(e) => setEditValue(type === 'number' ? parseFloat(e.target.value) : e.target.value)}
               onBlur={handleEdit}
               onKeyDown={handleKeyDown}
@@ -187,8 +204,8 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsEditing(false)}><X className="h-4 w-4 text-red-500" /></Button>
         </div>
       ) : (
-        <div className="flex items-center flex-1 space-x-2" onClick={() => setIsEditing(true)}>
-            <span className={`px-2 py-1 rounded-md cursor-pointer hover:bg-muted`}>
+        <div className="flex items-center flex-1 space-x-2 min-h-[36px]" onDoubleClick={() => setIsEditing(true)}>
+             <span className={`px-2 py-1 rounded-md cursor-pointer hover:bg-muted`}>
                 {value === null ? 'null' : String(value)}
             </span>
             <div className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
@@ -201,3 +218,10 @@ export const JsonNode = ({ value, nodeKey, path, onUpdate, onDelete, onAdd, isRo
     </div>
   );
 };
+
+// Dummy Select components for AddEntryForm to work
+const Select: React.FC<any> = ({ children, ...props }) => <select {...props}>{children}</select>;
+const SelectTrigger: React.FC<any> = ({ children, ...props }) => <div {...props}>{children}</div>;
+const SelectValue: React.FC<any> = ({...props}) => <div {...props} />;
+const SelectContent: React.FC<any> = ({ children, ...props }) => <div {...props}>{children}</div>;
+const SelectItem: React.FC<any> = ({ children, ...props }) => <option {...props}>{children}</option>;

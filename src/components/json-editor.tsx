@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { JsonNode } from './json-node';
 import { set, del } from 'object-path-immutable';
 import { Badge } from '@/components/ui/badge';
+import get from 'lodash/get';
 
 type SavingStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -25,28 +26,31 @@ export function JsonEditor({ initialData }: { initialData: any }) {
   }, []);
   
   const handleAdd = useCallback((path: (string | number)[], key: string | null, value: any) => {
-    const newPath = key ? [...path, key] : [...path, Array.isArray(value) ? value.length : 0];
     setData(currentData => {
-        if(Array.isArray(currentData) && path.length === 0){
-             return set(currentData, newPath.slice(1), value);
-        }
-        
-        if(Array.isArray(data) && path.length>0){
-             const parent = path.slice(0,-1)
-             const last = path.slice(-1)
-             const currentArray = parent.length > 0 ? set(data,parent)[last[0]] : data
-             const newArray = [...currentArray, value]
-             return set(data, path, newArray);
+        const target = get(currentData, path);
+
+        if (Array.isArray(target)) {
+            return set(currentData, path, [...target, value]);
         }
 
-        if(key) {
-           return set(currentData, [...path, key], value);
-        } else {
-            const arr = set(currentData, path) as any[];
-            return set(currentData, path, [...arr, value]);
+        if (typeof target === 'object' && target !== null && key) {
+            return set(currentData, [...path, key], value);
         }
+        
+        // Handle adding to root array
+        if(Array.isArray(currentData) && path.length === 0) {
+            return [...currentData, value];
+        }
+
+        // Handle adding to root object
+        if(typeof currentData === 'object' && currentData !== null && path.length === 0 && key) {
+            return {...currentData, [key]: value};
+        }
+
+        console.warn("Could not add item at path", path);
+        return currentData;
     });
-  }, [data]);
+}, []);
 
   const saveData = useCallback(async () => {
     setStatus('saving');
@@ -116,6 +120,7 @@ export function JsonEditor({ initialData }: { initialData: any }) {
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             onAdd={handleAdd}
+            isRoot
           />
         </div>
       </CardContent>
