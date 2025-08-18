@@ -36,6 +36,7 @@ type User = {
   username: string;
   createdAt: string;
   expiresAt: string;
+  createdBy: string;
 }
 
 type Status = 'all' | 'active' | 'expiring' | 'expired';
@@ -67,6 +68,11 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const { toast } = useToast();
   
   const USERS_PER_PAGE = 10;
+
+  // When initialUsers changes, we update our state
+  useEffect(() => {
+    setUsers(initialUsers);
+  }, [initialUsers]);
 
   const handleAddUser = () => {
     if (!newUser.trim()) {
@@ -164,7 +170,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     <>
     <Card className="w-full max-w-5xl mx-auto shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">User Passwords</CardTitle>
+        <CardTitle className="text-xl">Your VPN Users</CardTitle>
         <CardDescription>
           Add, edit, renew, or remove users. Users will automatically expire and be removed after 30 days.
         </CardDescription>
@@ -269,7 +275,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                        No users match the current filter.
+                        You have not created any users, or no users match the current filter.
                       </TableCell>
                     </TableRow>
                   )}

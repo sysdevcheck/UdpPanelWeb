@@ -3,12 +3,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-// The path to the configuration file on the server.
-// IMPORTANT: The process running this Next.js app needs read/write permissions for this path.
+// Paths to configuration files
 const configPath = '/etc/zivpn/config.json';
+const managersConfigPath = '/etc/zivpn/managers.json';
 
-// A default configuration to use if the file doesn't exist or is empty.
+// Default configuration for zivpn if the file doesn't exist.
 const defaultConfig = {
   "listen": ":5667",
   "cert": "/etc/zivpn/zivpn.crt",
@@ -21,21 +23,19 @@ const defaultConfig = {
 };
 
 /**
- * Executes a shell command, in this case to restart the VPN service.
- * This requires the node process user to have passwordless sudo permissions.
+ * Executes a shell command to restart the VPN service.
+ * Requires the node process user to have passwordless sudo permissions.
  */
 async function restartVpnService(): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve) => {
     exec('sudo systemctl restart zivpn', (error, stdout, stderr) => {
       if (error) {
         console.error(`Error restarting zivpn service: ${error.message}`);
-        // Often, stderr has more specific details from the command itself.
         const errorMessage = stderr || error.message;
         resolve({ success: false, error: `Failed to restart VPN service: ${errorMessage}` });
         return;
       }
       if (stderr) {
-        // Some commands output to stderr for warnings, not necessarily errors.
         console.warn(`Stderr while restarting zivpn service: ${stderr}`);
       }
       console.log(`zivpn service restarted successfully: ${stdout}`);
@@ -44,34 +44,46 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
   });
 }
 
+/**
+ * Reads the VPN user configuration from the JSON file.
+ * Filters out expired users and saves the updated config if needed.
+ */
+async function readRawConfig(): Promise<any> {
+    try {
+        await fs.access(configPath);
+        const data = await fs.readFile(configPath, 'utf8');
+        return data.trim() ? JSON.parse(data) : defaultConfig;
+    } catch (error) {
+        console.log(`Config file not found or empty at ${configPath}. Using default config.`);
+        await saveConfig(defaultConfig);
+        return defaultConfig;
+    }
+}
 
 /**
- * Reads the configuration from the JSON file.
- * Returns a default configuration if the file doesn't exist.
- * It also filters out expired users and saves the updated config.
+ * Reads the configuration visible to the currently logged-in manager.
+ * It also filters out expired users from the main config file.
  */
 export async function readConfig(): Promise<any> {
+  const managerUsername = await getLoggedInUser();
+  if (!managerUsername) {
+    redirect('/login');
+  }
+
   let config;
   try {
-    const data = await fs.readFile(configPath, 'utf8');
-    config = data.trim() ? JSON.parse(data) : defaultConfig;
+    config = await readRawConfig();
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.log(`Config file not found at ${configPath}. Using default config.`);
-      await saveConfig(defaultConfig);
-      return defaultConfig;
-    }
     console.error(`Error reading config file at ${configPath}:`, error);
     throw new Error('Could not read configuration file.');
   }
 
   const now = new Date();
-  const users = config.auth?.config || [];
-  const validUsers = users.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
+  const allUsers = config.auth?.config || [];
+  const validUsers = allUsers.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
 
-  // If there are expired users, update the config file and restart the service
-  if (validUsers.length < users.length) {
-    console.log(`Removing ${users.length - validUsers.length} expired users.`);
+  if (validUsers.length < allUsers.length) {
+    console.log(`Removing ${allUsers.length - validUsers.length} expired users.`);
     config.auth.config = validUsers;
     const saveResult = await saveConfig(config);
     if(saveResult.success) {
@@ -79,21 +91,19 @@ export async function readConfig(): Promise<any> {
     }
   }
 
-  return config;
+  // Filter users to show only those created by the logged-in manager
+  const managerUsers = config.auth.config.filter((user: any) => user.createdBy === managerUsername);
+  
+  return { ...config, auth: { ...config.auth, config: managerUsers } };
 }
-
 
 /**
  * Saves the provided data to the JSON configuration file.
- * The data is prettified for readability.
  */
 export async function saveConfig(data: any): Promise<{ success: boolean; error?: string }> {
   try {
     const dir = path.dirname(configPath);
-    // Ensure directory exists, create if not.
     await fs.mkdir(dir, { recursive: true });
-    
-    // Write the file, prettifying the JSON with 2-space indentation.
     await fs.writeFile(configPath, JSON.stringify(data, null, 2), 'utf8');
     return { success: true };
   } catch (error: any) {
@@ -103,72 +113,70 @@ export async function saveConfig(data: any): Promise<{ success: boolean; error?:
 }
 
 /**
- * Adds a new user to the configuration with creation and expiration dates.
+ * Adds a new VPN user, associating it with the logged-in manager.
  */
 export async function addUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
-    if (!username) {
-        return { success: false, error: "Username cannot be empty." };
-    }
+    const managerUsername = await getLoggedInUser();
+    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!username) return { success: false, error: "Username cannot be empty." };
+
     try {
-        const config = await readConfig();
+        const config = await readRawConfig();
         const users = config.auth?.config || [];
 
         if (users.some((user: any) => user.username === username)) {
-            return { success: false, error: "User already exists.", users };
+            return { success: false, error: "User already exists." };
         }
         
         const now = new Date();
-        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
         const newUser = {
             username,
             createdAt: now.toISOString(),
             expiresAt: expiresAt.toISOString(),
+            createdBy: managerUsername, // Link user to the manager
         };
 
-        const newUsers = [...users, newUser];
-        config.auth.config = newUsers;
+        config.auth.config.push(newUser);
         
         const result = await saveConfig(config);
         if (result.success) {
-            const restartResult = await restartVpnService();
-            if (!restartResult.success) {
-                return { success: false, error: restartResult.error, users: newUsers };
-            }
-            return { success: true, users: newUsers };
+            await restartVpnService();
+            const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+            return { success: true, users: managerUsers };
         } else {
-            return { success: false, error: result.error, users };
+            return { success: false, error: result.error };
         }
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to add user.' };
     }
 }
 
-
 /**
- * Deletes a user from the configuration.
+ * Deletes a user, ensuring the manager has permission.
  */
 export async function deleteUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
-     if (!username) {
-        return { success: false, error: "Username cannot be empty." };
-    }
+    const managerUsername = await getLoggedInUser();
+    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!username) return { success: false, error: "Username cannot be empty." };
+
     try {
-        const config = await readConfig();
+        const config = await readRawConfig();
         const users = config.auth?.config || [];
-        if (!users.some((user: any) => user.username === username)) {
-            return { success: false, error: "User not found.", users };
-        }
-        const newUsers = users.filter((user: any) => user.username !== username);
-        config.auth.config = newUsers;
+        const userToDelete = users.find((user: any) => user.username === username);
+
+        if (!userToDelete) return { success: false, error: "User not found." };
+        if (userToDelete.createdBy !== managerUsername) return { success: false, error: "Permission denied." };
+        
+        config.auth.config = users.filter((user: any) => user.username !== username);
         const result = await saveConfig(config);
         if (result.success) {
-            const restartResult = await restartVpnService();
-            if (!restartResult.success) {
-                return { success: false, error: restartResult.error, users: newUsers };
-            }
-            return { success: true, users: newUsers };
+            await restartVpnService();
+            const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+            return { success: true, users: managerUsers };
         } else {
-            return { success: false, error: result.error, users };
+            return { success: false, error: result.error };
         }
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to delete user.' };
@@ -176,43 +184,33 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
 }
 
 /**
- * Edits a user's username in the configuration.
+ * Edits a user's username, ensuring the manager has permission.
  */
 export async function editUser(oldUsername: string, newUsername: string): Promise<{ success: boolean; users?: any[], error?: string }> {
-    if (!oldUsername || !newUsername) {
-        return { success: false, error: "Old and new usernames cannot be empty." };
-    }
-    if (oldUsername === newUsername) {
-        return { success: false, error: "New username cannot be the same as the old one." };
-    }
+    const managerUsername = await getLoggedInUser();
+    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!oldUsername || !newUsername) return { success: false, error: "Usernames cannot be empty." };
+    if (oldUsername === newUsername) return { success: false, error: "New username is the same as the old one." };
 
     try {
-        const config = await readConfig();
+        const config = await readRawConfig();
         const users = config.auth?.config || [];
-
         const userIndex = users.findIndex((user: any) => user.username === oldUsername);
-        if (userIndex === -1) {
-            return { success: false, error: `User "${oldUsername}" not found.`, users };
-        }
 
-        if (users.some((user: any) => user.username === newUsername)) {
-            return { success: false, error: `User "${newUsername}" already exists.`, users };
-        }
+        if (userIndex === -1) return { success: false, error: `User "${oldUsername}" not found.` };
+        if (users[userIndex].createdBy !== managerUsername) return { success: false, error: "Permission denied." };
+        if (users.some((user: any) => user.username === newUsername)) return { success: false, error: `User "${newUsername}" already exists.` };
         
-        const updatedUsers = [...users];
-        updatedUsers[userIndex] = { ...updatedUsers[userIndex], username: newUsername };
-        
-        config.auth.config = updatedUsers;
+        users[userIndex].username = newUsername;
+        config.auth.config = users;
 
         const result = await saveConfig(config);
         if (result.success) {
-             const restartResult = await restartVpnService();
-            if (!restartResult.success) {
-                return { success: false, error: restartResult.error, users: updatedUsers };
-            }
-            return { success: true, users: updatedUsers };
+            await restartVpnService();
+            const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+            return { success: true, users: managerUsers };
         } else {
-            return { success: false, error: result.error, users };
+            return { success: false, error: result.error };
         }
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to edit user.' };
@@ -220,40 +218,83 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
 }
 
 /**
- * Renews a user's subscription for another 30 days from today.
+ * Renews a user's subscription, ensuring the manager has permission.
  */
 export async function renewUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
-    if (!username) {
-        return { success: false, error: "Username cannot be empty." };
-    }
-    try {
-        const config = await readConfig();
-        const users = config.auth?.config || [];
+    const managerUsername = await getLoggedInUser();
+    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!username) return { success: false, error: "Username cannot be empty." };
 
+    try {
+        const config = await readRawConfig();
+        const users = config.auth?.config || [];
         const userIndex = users.findIndex((user: any) => user.username === username);
-        if (userIndex === -1) {
-            return { success: false, error: `User "${username}" not found.`, users };
-        }
+
+        if (userIndex === -1) return { success: false, error: `User "${username}" not found.` };
+        if (users[userIndex].createdBy !== managerUsername) return { success: false, error: "Permission denied." };
 
         const now = new Date();
-        const newExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
-
-        const updatedUsers = [...users];
-        updatedUsers[userIndex] = { ...updatedUsers[userIndex], expiresAt: newExpiresAt.toISOString() };
-
-        config.auth.config = updatedUsers;
+        const newExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        users[userIndex].expiresAt = newExpiresAt.toISOString();
+        config.auth.config = users;
         
         const result = await saveConfig(config);
         if (result.success) {
-            const restartResult = await restartVpnService();
-            if (!restartResult.success) {
-                return { success: false, error: restartResult.error, users: updatedUsers };
-            }
-            return { success: true, users: updatedUsers };
+            await restartVpnService();
+            const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+            return { success: true, users: managerUsers };
         } else {
-            return { success: false, error: result.error, users };
+            return { success: false, error: result.error };
         }
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to renew user.' };
     }
+}
+
+
+// --- Authentication Actions ---
+
+/**
+ * Attempts to log in a manager.
+ */
+export async function login(formData: FormData) {
+  const username = formData.get('username') as string;
+  const password = formData.get('password') as string;
+
+  if (!username || !password) {
+    return { error: 'Username and password are required.' };
+  }
+
+  try {
+    const data = await fs.readFile(managersConfigPath, 'utf8');
+    const managers = JSON.parse(data);
+    const manager = managers.find((m: any) => m.username === username && m.password === password);
+
+    if (manager) {
+      cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+      redirect('/');
+    } else {
+      return { error: 'Invalid credentials.' };
+    }
+  } catch (error) {
+    console.error('Error reading managers file:', error);
+    // Create a default managers file if it doesn't exist
+    await fs.writeFile(managersConfigPath, JSON.stringify([{username: 'admin', password: 'password'}], null, 2), 'utf8');
+    return { error: 'Login failed. A default admin user has been created. Use username "admin" and password "password". Please change the password.' };
+  }
+}
+
+/**
+ * Logs out the current manager.
+ */
+export async function logout() {
+  cookies().delete('session');
+  redirect('/login');
+}
+
+/**
+ * Retrieves the currently logged-in user from the session cookie.
+ */
+export async function getLoggedInUser() {
+  return cookies().get('session')?.value;
 }

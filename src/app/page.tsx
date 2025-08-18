@@ -1,8 +1,15 @@
-import { readConfig } from './actions';
+import { readConfig, getLoggedInUser, logout } from './actions';
 import { UserManager } from '@/components/user-manager';
-import { Users } from 'lucide-react';
+import { Users, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { redirect } from 'next/navigation';
 
 export default async function Home() {
+  const loggedInUser = await getLoggedInUser();
+  if (!loggedInUser) {
+    redirect('/login');
+  }
+
   const initialData = await readConfig();
   const users = initialData.auth?.config || [];
 
@@ -16,6 +23,15 @@ export default async function Home() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
                 User Manager
               </h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">Welcome, <strong className="font-medium text-foreground">{loggedInUser}</strong></span>
+              <form action={logout}>
+                <Button variant="outline" size="sm">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </Button>
+              </form>
             </div>
           </div>
         </div>
