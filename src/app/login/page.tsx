@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
+import { Terminal, Info } from 'lucide-react';
 
 export default function LoginPage() {
   const [state, formAction] = useActionState(login, undefined);
@@ -24,9 +24,9 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="grid gap-4">
             {state?.error && (
-               <Alert variant="destructive">
-                  <Terminal className="h-4 w-4" />
-                  <AlertTitle>Login Failed</AlertTitle>
+               <Alert variant={state.error.includes('default user') ? 'default' : 'destructive'} className={state.error.includes('default user') ? 'bg-blue-900/20 border-blue-500/50' : ''}>
+                  {state.error.includes('default user') ? <Info className="h-4 w-4" /> : <Terminal className="h-4 w-4" />}
+                  <AlertTitle>{state.error.includes('default user') ? 'Welcome!' : 'Login Failed'}</AlertTitle>
                   <AlertDescription>
                     {state.error}
                   </AlertDescription>

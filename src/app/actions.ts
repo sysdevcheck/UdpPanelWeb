@@ -252,7 +252,24 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
 }
 
 
-// --- Authentication Actions ---
+// --- Authentication and Manager Actions ---
+
+async function readManagersFile(): Promise<any[]> {
+    try {
+        const data = await fs.readFile(managersConfigPath, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.warn('Managers file not found. A default one will be created on first login attempt.');
+        return [];
+    }
+}
+
+async function saveManagersFile(managers: any[]): Promise<void> {
+    const dir = path.dirname(managersConfigPath);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(managersConfigPath, JSON.stringify(managers, null, 2), 'utf8');
+}
+
 
 /**
  * Attempts to log in a manager.
@@ -266,8 +283,16 @@ export async function login(formData: FormData) {
   }
 
   try {
-    const data = await fs.readFile(managersConfigPath, 'utf8');
-    const managers = JSON.parse(data);
+    let managers = await readManagersFile();
+    
+    // If no managers exist, create a default admin
+    if (managers.length === 0) {
+        console.log('No managers file found. Creating a default admin user.');
+        managers = [{ username: 'admin', password: 'password' }];
+        await saveManagersFile(managers);
+        return { error: 'No managers were configured. A default user has been created. Username: "admin", Password: "password". Please log in and change the password immediately.' };
+    }
+    
     const manager = managers.find((m: any) => m.username === username && m.password === password);
 
     if (manager) {
@@ -276,11 +301,9 @@ export async function login(formData: FormData) {
     } else {
       return { error: 'Invalid credentials.' };
     }
-  } catch (error) {
-    console.error('Error reading managers file:', error);
-    // Create a default managers file if it doesn't exist
-    await fs.writeFile(managersConfigPath, JSON.stringify([{username: 'admin', password: 'password'}], null, 2), 'utf8');
-    return { error: 'Login failed. A default admin user has been created. Use username "admin" and password "password". Please change the password.' };
+  } catch (error: any) {
+    console.error('Error during login process:', error);
+    return { error: 'An unexpected error occurred during login. Check server logs.' };
   }
 }
 
@@ -297,4 +320,76 @@ export async function logout() {
  */
 export async function getLoggedInUser() {
   return cookies().get('session')?.value;
+}
+
+
+// --- Superadmin (Owner) Actions for Manager Management ---
+
+export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
+    const loggedInUser = await getLoggedInUser();
+    if (!loggedInUser) return { error: "Authentication required." };
+    
+    try {
+        const managers = await readManagersFile();
+        return { managers };
+    } catch (error: any) {
+        return { error: 'Could not read managers file.' };
+    }
+}
+
+async function isOwner(username: string): Promise<boolean> {
+    const managers = await readManagersFile();
+    return managers.length > 0 && managers[0].username === username;
+}
+
+export async function addManager(formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
+    const loggedInUser = await getLoggedInUser();
+    if (!loggedInUser) return { success: false, error: "Authentication required." };
+    if (!await isOwner(loggedInUser)) return { success: false, error: "Permission denied. Only the owner can add managers." };
+    
+    const username = formData.get('username') as string;
+    const password = formData.get('password') as string;
+    if (!username || !password) return { success: false, error: "Username and password are required." };
+
+    try {
+        const managers = await readManagersFile();
+        if (managers.some(m => m.username === username)) {
+            return { success: false, error: "Manager username already exists." };
+        }
+        
+        managers.push({ username, password });
+        await saveManagersFile(managers);
+        
+        return { success: true, managers };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to add manager.' };
+    }
+}
+
+export async function deleteManager(username: string): Promise<{ success: boolean; managers?: any[], error?: string }> {
+    const loggedInUser = await getLoggedInUser();
+    if (!loggedInUser) return { success: false, error: "Authentication required." };
+
+    const managers = await readManagersFile();
+    const ownerUsername = managers.length > 0 ? managers[0].username : null;
+
+    if (loggedInUser !== ownerUsername) {
+        return { success: false, error: "Permission denied. Only the owner can delete managers." };
+    }
+
+    if (username === ownerUsername) {
+        return { success: false, error: "The owner account cannot be deleted." };
+    }
+    
+    const updatedManagers = managers.filter(m => m.username !== username);
+    if (updatedManagers.length === managers.length) {
+        return { success: false, error: "Manager not found." };
+    }
+
+    try {
+        await saveManagersFile(updatedManagers);
+        return { success: true, managers: updatedManagers };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to delete manager.' };
+    }
 }
