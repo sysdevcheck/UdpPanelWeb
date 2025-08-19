@@ -162,7 +162,7 @@ pm2 start npm --name "zivpn-panel" -- start
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
 pm2 startup
 
-# El comando anterior te dará un comando para copiar y pegar. Cópialo y ejecútalo como root (con sudo).
+# El comando anterior te dará un comando para copiar y pegar. Cópialo y pégalo como root (con sudo).
 # Generalmente se ve así:
 # sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin /home/tu_usuario/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
 
@@ -253,7 +253,7 @@ pm2 stop zivpn-panel
 sudo systemctl status zivpn
 ```
 
-**Reiniciar manualmente el servicio de la VPN:**
+**Reiniciar manually el servicio de la VPN:**
 ```bash
 sudo systemctl restart zivpn
 ```
