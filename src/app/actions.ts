@@ -256,10 +256,11 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
 
 async function readManagersFile(): Promise<any[]> {
     try {
+        await fs.access(managersConfigPath);
         const data = await fs.readFile(managersConfigPath, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        console.warn('Managers file not found. A default one will be created on first login attempt.');
+        // This is not a warning, it's an expected case for the first run.
         return [];
     }
 }
@@ -285,12 +286,20 @@ export async function login(prevState: any, formData: FormData) {
   try {
     let managers = await readManagersFile();
     
-    // If no managers exist, create a default admin
+    // If no managers exist, create a default admin and log in.
     if (managers.length === 0) {
         console.log('No managers file found. Creating a default admin user.');
-        managers = [{ username: 'admin', password: 'password' }];
-        await saveManagersFile(managers);
-        return { error: 'No managers were configured. A default user has been created. Username: "admin", Password: "password". Please log in and change the password immediately.' };
+        const defaultManager = { username: 'admin', password: 'password' };
+        await saveManagersFile([defaultManager]);
+        
+        // Authenticate with the newly created default user
+        if (username === defaultManager.username && password === defaultManager.password) {
+             cookies().set('session', defaultManager.username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+             redirect('/');
+        } else {
+            // This case happens if the user tries other credentials on the very first attempt
+             return { error: 'Invalid credentials. A default user (admin/password) was created.' };
+        }
     }
     
     const manager = managers.find((m: any) => m.username === username && m.password === password);
@@ -393,3 +402,5 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
+
+    
