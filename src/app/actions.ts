@@ -358,14 +358,16 @@ export async function saveManagersFile(managers: any[]): Promise<{success: boole
  * Retrieves the currently logged-in user from the session cookie.
  */
 export async function getLoggedInUser() {
-  return cookies().get('session')?.value;
+  const cookieStore = await cookies();
+  return cookieStore.get('session')?.value;
 }
 
 /**
  * Logs out the current manager by deleting the session cookie.
  */
 export async function logout() {
-  cookies().delete('session');
+  const cookieStore = await cookies();
+  cookieStore.delete('session');
   redirect('/login');
 }
 
@@ -404,7 +406,8 @@ export async function login(prevState: any, formData: FormData) {
   const manager = managers.find((m) => m.username === username && m.password === password);
 
   if (manager) {
-    cookies().set('session', username, { httpOnly: true, secure: isProduction });
+    const cookieStore = await cookies();
+    cookieStore.set('session', username, { httpOnly: true, secure: isProduction });
     redirect('/');
   } else {
     return { error: 'Invalid username or password.' };
