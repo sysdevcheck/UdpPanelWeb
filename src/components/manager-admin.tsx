@@ -62,7 +62,7 @@ const initialActionState = {
     success: false,
     error: undefined,
     message: undefined,
-    managers: [] as Manager[],
+    managers: undefined,
 };
 
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
@@ -77,21 +77,23 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
   
   useEffect(() => {
-    if (addManagerState?.success && addManagerState.managers) {
+    if (!addManagerState) return;
+    if (addManagerState.success && addManagerState.managers) {
         setManagers(addManagerState.managers);
         toast({ title: 'Success', description: addManagerState.message, className: 'bg-green-500 text-white' });
         addFormRef.current?.reset();
-    } else if (addManagerState?.error) {
+    } else if (addManagerState.error) {
         toast({ variant: 'destructive', title: 'Error Adding Manager', description: addManagerState.error });
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    if (editManagerState?.success && editManagerState.managers) {
+    if (!editManagerState) return;
+    if (editManagerState.success && editManagerState.managers) {
         setManagers(editManagerState.managers);
         toast({ title: 'Success', description: editManagerState.message });
         setEditingManager(null);
-    } else if (editManagerState?.error) {
+    } else if (editManagerState.error) {
         toast({ variant: 'destructive', title: 'Error Editing Manager', description: editManagerState.error });
     }
   }, [editManagerState, toast]);
@@ -186,7 +188,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                     </Badge>
                                  )}
                                 <Badge variant={variant} className="w-fit">{label}</Badge>
-                                {daysLeft !== null && (
+                                {daysLeft !== null && !isOwner && (
                                    <span className="text-xs text-muted-foreground">
                                       {daysLeft > 0 ? `Expires in ${daysLeft} day(s)` : `Expired ${-daysLeft} day(s) ago`}
                                    </span>
@@ -299,3 +301,5 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     </div>
   );
 }
+
+    

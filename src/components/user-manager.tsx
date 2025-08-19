@@ -57,7 +57,7 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
     return { label: 'Active', daysLeft, variant: 'default' };
 };
 
-const initialActionState = { success: false, error: undefined, message: undefined, users: [] as User[] };
+const initialActionState = { success: false, error: undefined, message: undefined, users: undefined };
 
 export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const [users, setUsers] = useState<User[]>(initialUsers);
@@ -85,6 +85,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
 
   // Effect for Add User action
   useEffect(() => {
+    if (!addUserState) return;
     if (addUserState.success) {
       if(addUserState.users) setUsers(addUserState.users);
       toast({ title: 'Success', description: addUserState.message, className: 'bg-green-500 text-white' });
@@ -96,6 +97,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
 
   // Effect for Edit User action
   useEffect(() => {
+    if (!editUserState) return;
     if (editUserState.success) {
       if(editUserState.users) setUsers(editUserState.users);
       toast({ title: 'Success', description: editUserState.message });
@@ -343,3 +345,5 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     </>
   );
 }
+
+    

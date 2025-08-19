@@ -313,7 +313,7 @@ export async function readManagersFile(): Promise<any[]> {
         if (managers.length > 0) {
             const owner = managers[0];
             const otherManagers = managers.slice(1);
-            const validManagers = otherManagers.filter((m: any) => m.expiresAt && new Date(m.expiresAt) > now);
+            const validManagers = otherManagers.filter((m: any) => !m.expiresAt || new Date(m.expiresAt) > now);
             const updatedManagers = [owner, ...validManagers];
 
             if (updatedManagers.length < managers.length) {
@@ -533,3 +533,5 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
 
     return { success: true, managers, message: `Manager "${newUsername}" has been updated.` };
 }
+
+    
