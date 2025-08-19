@@ -308,8 +308,7 @@ export async function logout() {
 
 /**
  * Validates credentials against the managers.json file and creates a session.
- * This function has been simplified to only validate. The creation of the default
- * manager is handled by initializeManagers() on the main page.
+ * If no managers exist, it creates a default admin manager.
  */
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
@@ -319,10 +318,21 @@ export async function login(prevState: any, formData: FormData) {
     return { error: 'Username and password are required.' };
   }
 
-  const managers = await readManagersFile();
+  let managers = await readManagersFile();
   
+  // If no managers file exists, create the default user.
   if (managers.length === 0) {
-      return { error: 'No managers configured. The default user will be created on the main page. Please try logging in again shortly.' };
+      console.log('No managers found or file does not exist. Creating a default admin user.');
+      const defaultManager = { username: 'admin', password: 'password' };
+      const result = await saveManagersFile([defaultManager]);
+      
+      if (!result.success) {
+          // This is a critical error, likely due to file permissions.
+          return { error: result.error };
+      }
+
+      // Update the in-memory list of managers
+      managers = [defaultManager];
   }
 
   const manager = managers.find((m) => m.username === username && m.password === password);
@@ -417,3 +427,4 @@ export async function deleteManager(username: string): Promise<{ success: boolea
       return { success: false, error: result.error, managers: await readManagersFile() };
     }
 }
+

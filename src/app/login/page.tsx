@@ -14,29 +14,27 @@ export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, undefined);
 
   // Check for specific informative messages to style them differently
-  const isDefaultUserMessage = state?.error?.includes('default user');
   const isPermissionsError = state?.error?.includes('permissions');
 
   const getAlertVariant = () => {
-    if (isDefaultUserMessage || isPermissionsError) {
-      return 'default';
+    if (isPermissionsError) {
+      return 'default'; // Use a neutral variant for actionable advice
     }
     if (state?.error) {
-      return 'destructive';
+      return 'destructive'; // For actual login errors
     }
     return 'destructive'; // Fallback
   };
 
   const getAlertIcon = () => {
-    if (isDefaultUserMessage || isPermissionsError) {
+    if (isPermissionsError) {
       return <Info className="h-4 w-4" />;
     }
     return <Terminal className="h-4 w-4" />;
   };
 
   const getAlertTitle = () => {
-    if (isDefaultUserMessage) return 'Welcome!';
-    if (isPermissionsError) return 'Permissions Error';
+    if (isPermissionsError) return 'Permissions Issue Detected';
     if (state?.error) return 'Login Failed';
     return 'Error';
   };
@@ -53,7 +51,7 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="grid gap-4">
             {state && state.error && (
-               <Alert variant={getAlertVariant()} className={ (isDefaultUserMessage || isPermissionsError) ? 'bg-blue-900/20 border-blue-500/50' : ''}>
+               <Alert variant={getAlertVariant()} className={ isPermissionsError ? 'bg-blue-900/20 border-blue-500/50' : ''}>
                   {getAlertIcon()}
                   <AlertTitle>{getAlertTitle()}</AlertTitle>
                   <AlertDescription>

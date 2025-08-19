@@ -1,4 +1,4 @@
-import { readConfig, getLoggedInUser, logout, readManagersFile, saveManagersFile } from './actions';
+import { readConfig, getLoggedInUser, logout, readManagersFile } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { Users, LogOut, UserCog } from 'lucide-react';
@@ -11,41 +11,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
-/**
- * Initializes the manager configuration on the server. If the manager file doesn't exist,
- * it creates it with a default admin user. This is a critical step for the first run.
- * @returns {Promise<any[]>} The list of all managers.
- */
-async function initializeManagers() {
-    let managers;
-    try {
-        // This function now simply returns an empty array if the file doesn't exist.
-        managers = await readManagersFile();
-    } catch (e: any) {
-        // This will be caught by the Next.js error boundary if reading fails for other reasons.
-        throw new Error(`CRITICAL: Could not read managers file. Check server logs. Error: ${e.message}`);
-    }
-
-    // If the list is empty, it means the file didn't exist or was empty.
-    // We create the default manager here.
-    if (managers.length === 0) {
-        console.log('No managers found or file does not exist. Creating a default admin user.');
-        const defaultManager = { username: 'admin', password: 'password' };
-        const result = await saveManagersFile([defaultManager]);
-        
-        // This error is critical because the app can't function without it.
-        if (!result.success) {
-            throw new Error(`CRITICAL: Could not create default manager file. Reason: ${result.error}`);
-        }
-        
-        // Return the newly created list of managers
-        return [defaultManager];
-    }
-    
-    // If managers already exist, just return them.
-    return managers;
-}
-
 
 export default async function Home() {
   const loggedInUser = await getLoggedInUser();
@@ -53,8 +18,16 @@ export default async function Home() {
     redirect('/login');
   }
 
-  // This function now ensures the manager file exists with a default user before we proceed.
-  const allManagers = await initializeManagers();
+  // The login action now handles the creation of the initial manager.
+  // We can just read the files here.
+  const allManagers = await readManagersFile();
+  if (allManagers.length === 0) {
+    // This case should theoretically not be hit if login is successful,
+    // but as a safeguard, we redirect to login to re-trigger the creation logic.
+    console.error("Critical State: Logged in, but no managers found. Redirecting to login.");
+    redirect('/login');
+  }
+
 
   // Fetch initial data for the logged-in user
   const initialVpnUsersData = await readConfig();
