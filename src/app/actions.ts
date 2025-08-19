@@ -202,7 +202,7 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
     }
 
     const config = await readRawConfig();
-    const users = config.auth?.config || [];
+    let users = config.auth?.config || [];
     const userToDelete = users.find((user: any) => user.username === username);
 
     if (!userToDelete) {
