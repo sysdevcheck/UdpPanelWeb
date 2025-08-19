@@ -262,7 +262,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 <input type="hidden" name="username" value={user.username} />
                                 <input type="hidden" name="managerUsername" value={managerUsername} />
                                 <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
-                                    {isRenewingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {isRenewingPending && renewUserState?.users?.find(u=>u.username===user.username) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 </Button>
                              </form>
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
@@ -287,7 +287,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                             <input type="hidden" name="managerUsername" value={managerUsername} />
                                             <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                                {isDeletingPending && deleteUserState?.users?.find(u=>u.username===user.username) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </form>
