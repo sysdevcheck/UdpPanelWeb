@@ -151,6 +151,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
         </CardHeader>
         <CardContent>
           <form ref={addFormRef} action={addManagerAction} className="flex flex-col sm:flex-row gap-2">
+            <input type="hidden" name="ownerUsername" value={ownerUsername} />
             <div className="grid w-full gap-1.5">
                 <Label htmlFor="username">Username</Label>
                 <Input name="username" id="username" placeholder="New manager username" required disabled={isPending} />
@@ -189,7 +190,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                   {managers.length > 0 ? (
                     managers.map((manager) => {
                        const { label, daysLeft, variant } = manager.status;
-                       const isOwner = manager.username === ownerUsername;
+                       const isOwnerRow = manager.username === ownerUsername;
                        return (
                         <TableRow key={manager.username}>
                           <TableCell>
@@ -200,7 +201,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                           </TableCell>
                            <TableCell>
                              <div className="flex flex-col gap-1">
-                                {isOwner ? (
+                                {isOwnerRow ? (
                                     <Badge variant="default" className="bg-amber-500 hover:bg-amber-500/90 w-fit">
                                         <Crown className="mr-2 h-4 w-4" />
                                         Owner
@@ -212,7 +213,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                     </Badge>
                                  )}
                                 <Badge variant={variant} className="w-fit">{label}</Badge>
-                                {daysLeft !== null && !isOwner && (
+                                {daysLeft !== null && !isOwnerRow && (
                                    <span className="text-xs text-muted-foreground">
                                       {daysLeft > 0 ? `Expires in ${daysLeft} day(s)` : `Expired ${-daysLeft} day(s) ago`}
                                    </span>
@@ -228,7 +229,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                              ) : 'N/A'}
                           </TableCell>
                           <TableCell className="text-right">
-                            {!isOwner && (
+                            {!isOwnerRow && (
                               <>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
                                     <Pencil className="h-4 w-4" />
@@ -249,6 +250,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
                                                 <input type="hidden" name="username" value={manager.username} />
+                                                <input type="hidden" name="ownerUsername" value={ownerUsername} />
                                                 <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
                                                 <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
                                                     {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
@@ -288,6 +290,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <input type="hidden" name="oldUsername" value={editingManager?.username || ''} />
+                <input type="hidden" name="ownerUsername" value={ownerUsername} />
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="newUsername" className="text-right">Username</Label>
                     <Input

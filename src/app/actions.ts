@@ -122,8 +122,7 @@ async function saveConfig(data: any): Promise<{ success: boolean; error?: string
 /**
  * Reads the configuration, filters out expired users, and returns users for the current manager.
  */
-export async function readConfig(): Promise<any> {
-  const managerUsername = await getLoggedInUser();
+export async function readConfig(managerUsername: string): Promise<any> {
   if (!managerUsername) {
     redirect('/login');
   }
@@ -437,19 +436,16 @@ async function isOwner(username: string): Promise<boolean> {
 }
 
 export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
-    const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser) return { error: "Authentication required." };
-    
     const managers = await readManagersFile();
     return { managers };
 }
 
 export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string, message?: string }> {
-    const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser) {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!ownerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const isOwnerCheck = await isOwner(loggedInUser);
+    const isOwnerCheck = await isOwner(ownerUsername);
     if(!isOwnerCheck) {
         return { success: false, error: "Permission denied. Only the owner can add managers." };
     }
@@ -484,23 +480,23 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
 }
 
 export async function deleteManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
-    const username = formData.get('username') as string;
-    const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser) {
+    const usernameToDelete = formData.get('username') as string;
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!ownerUsername) {
         return { success: false, error: "Authentication required." };
     }
 
-    const isOwnerCheck = await isOwner(loggedInUser);
+    const isOwnerCheck = await isOwner(ownerUsername);
     if(!isOwnerCheck) {
         return { success: false, error: "Permission denied. Only the owner can delete managers." };
     }
 
-    if (username === loggedInUser) {
+    if (usernameToDelete === ownerUsername) {
         return { success: false, error: "The owner account cannot be deleted." };
     }
     
     let managers = await readManagersFile();
-    const updatedManagers = managers.filter(m => m.username !== username);
+    const updatedManagers = managers.filter(m => m.username !== usernameToDelete);
 
     if (updatedManagers.length === managers.length) {
         return { success: false, error: "Manager not found." };
@@ -517,12 +513,12 @@ export async function deleteManager(prevState: any, formData: FormData): Promise
 
 
 export async function editManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[]; error?: string; message?: string; }> {
-    const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser) {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!ownerUsername) {
         return { success: false, error: "Authentication required." };
     }
 
-    const isOwnerCheck = await isOwner(loggedInUser);
+    const isOwnerCheck = await isOwner(ownerUsername);
     if (!isOwnerCheck) {
         return { success: false, error: "Permission denied. Only the owner can edit managers." };
     }

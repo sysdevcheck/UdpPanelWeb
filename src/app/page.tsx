@@ -1,5 +1,5 @@
 
-import { readConfig, getLoggedInUser, logout, readManagersFile } from './actions';
+import { readConfig, getLoggedInUser, logout, readManagers } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { Users, LogOut, UserCog } from 'lucide-react';
@@ -19,9 +19,14 @@ export default async function Home() {
     redirect('/login');
   }
 
-  // The login action now handles the creation of the initial manager.
-  // We can just read the files here.
-  const allManagers = await readManagersFile();
+  const managersData = await readManagers();
+  if (managersData.error || !managersData.managers) {
+    console.error("Critical State: Could not read managers file.", managersData.error);
+    // Optional: Redirect to an error page or show a message
+    return <div>Error loading manager data. Please try again later.</div>;
+  }
+  const allManagers = managersData.managers;
+
   if (allManagers.length === 0) {
     // This case should theoretically not be hit if login is successful,
     // but as a safeguard, we redirect to login to re-trigger the creation logic.
@@ -29,9 +34,8 @@ export default async function Home() {
     redirect('/login');
   }
 
-
   // Fetch initial data for the logged-in user
-  const initialVpnUsersData = await readConfig();
+  const initialVpnUsersData = await readConfig(loggedInUser);
   const vpnUsers = initialVpnUsersData.auth?.config || [];
   
   // The first manager in the list is the owner/superadmin
