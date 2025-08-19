@@ -412,7 +412,12 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
 
   if (manager) {
     const cookieStore = cookies();
-    cookieStore.set('session', username, { httpOnly: true, secure: isProduction });
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    cookieStore.set('session', username, { 
+        httpOnly: true, 
+        secure: isProduction,
+        expires: Date.now() + thirtyDays,
+    });
     redirect('/');
   } else {
     return { error: 'Invalid username or password.' };
