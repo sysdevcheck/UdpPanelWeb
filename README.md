@@ -56,7 +56,7 @@ Cada usuario de la VPN tiene un campo `createdBy` para asociarlo a un manager.
 
 ## Instalación y Despliegue en tu VPS
 
-Sigue estos pasos en la terminal de tu servidor VPS.
+Sigue estos pasos en la terminal de tu servidor VPS para instalar y ejecutar el panel.
 
 ### 1. Prerrequisitos
 
@@ -64,12 +64,17 @@ Asegúrate de tener **Node.js (v20 o superior)** y `npm` instalados.
 ```bash
 # Comprueba tu versión de Node.js
 node -v
+# Si no lo tienes o la versión es antigua, la forma más sencilla es usar nvm (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install 20
+nvm use 20
 ```
-Si no lo tienes, puedes instalarlo usando nvm (Node Version Manager).
 
 ### 2. Clona el Proyecto
 
-Clona tu repositorio de GitHub en la carpeta que prefieras en tu VPS.
+Clona el repositorio desde GitHub en la carpeta que prefieras en tu VPS.
 
 ```bash
 git clone https://github.com/sysdevcheck/UdpPanelWeb.git
@@ -92,6 +97,7 @@ sudo mkdir -p /etc/zivpn
 
 # Asigna la propiedad al usuario que usarás para ejecutar la aplicación.
 # Reemplaza 'tu_usuario' con tu nombre de usuario actual en el VPS (ej. ubuntu, root, etc.)
+# Usar la variable de entorno $USER lo hará automáticamente.
 sudo chown -R $USER:$USER /etc/zivpn
 ```
 
@@ -103,11 +109,13 @@ Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al final del archivo, reemplazando `tu_usuario` con tu nombre de usuario actual (`$USER`):
+Agrega la siguiente línea al **final del archivo**, reemplazando `tu_usuario` por tu nombre de usuario actual (o usa `$USER` si estás logueado como ese usuario).
 ```
 tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 ```
-**Nota:** `$USER` es una variable de entorno que normalmente contiene tu nombre de usuario actual. Puedes usarla directamente en el comando.
+Para guardar y salir en `visudo` (que usa un editor como `nano` o `vim`):
+*   Si es `nano`: `Ctrl+X`, luego `Y`, luego `Enter`.
+*   Si es `vim`: presiona `Esc`, escribe `:wq` y presiona `Enter`.
 
 ### 6. Construye y Ejecuta la Aplicación
 
@@ -116,13 +124,14 @@ Construye la aplicación para producción:
 npm run build
 ```
 
-Inicia el servidor (por defecto, en el puerto 9002):
+**Prueba inicial (Opcional):**
+Puedes probar si la aplicación se inicia correctamente.
 ```bash
 npm start
 ```
-Puedes verificar que funciona visitando `http://[IP_DE_TU_VPS]:9002`.
+Debería indicar que está corriendo en el puerto 9002. Puedes detenerla con `Ctrl+C`.
 
-### 7. (Recomendado) Mantenla en Funcionamiento con PM2
+### 7. Mantén la Aplicación en Funcionamiento con PM2
 
 Para que el panel permanezca en línea incluso si cierras la terminal o reinicias el servidor, usa un gestor de procesos como `pm2`.
 
@@ -130,18 +139,54 @@ Para que el panel permanezca en línea incluso si cierras la terminal o reinicia
 # Instala pm2 globalmente
 sudo npm install -g pm2
 
-# Inicia la aplicación con pm2 y dale un nombre
+# Dentro de la carpeta del proyecto (UdpPanelWeb), inicia la aplicación con pm2
 pm2 start npm --name "zivpn-panel" -- start
 
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
 pm2 startup
 
-# Sigue las instrucciones que te dé el comando anterior (generalmente es copiar y pegar un comando)
+# El comando anterior te dará un comando para copiar y pegar. Cópialo y ejecútalo.
+# Generalmente se ve así: sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin /home/tu_usuario/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
 
 # Guarda la configuración actual de pm2
 pm2 save
 ```
 
-Ahora tu aplicación está en línea, ejecutándose en segundo plano y se reiniciará automáticamente. Para ver los logs o el estado, puedes usar `pm2 logs zivpn-panel` o `pm2 status`.
+**¡Instalación completa!** Ahora deberías poder acceder a tu panel visitando `http://[IP_DE_TU_VPS]:9002`.
+El login por defecto será:
+- **Usuario:** `admin`
+- **Contraseña:** `password`
 
-**¡Instalación completa!** Ahora deberías poder acceder a tu panel. Recuerda configurar un subdominio para no exponer tu IP y puerto.
+### Resolución de Problemas y Comandos Útiles
+
+**Verificar el estado del servicio del panel:**
+```bash
+pm2 status zivpn-panel
+```
+
+**Ver los logs del panel en tiempo real (muy útil para ver errores):**
+```bash
+pm2 logs zivpn-panel
+```
+
+**Reiniciar el panel si has hecho cambios en el código:**
+```bash
+# Primero, asegúrate de traer los últimos cambios desde GitHub
+git pull
+# Luego, reinstala dependencias por si algo cambió
+npm install
+# Reconstruye la aplicación
+npm run build
+# Finalmente, reinicia la aplicación con pm2
+pm2 restart zivpn-panel
+```
+
+**Verificar el estado del servicio de la VPN (zivpn):**
+```bash
+sudo systemctl status zivpn
+```
+
+**Reiniciar manualmente el servicio de la VPN:**
+```bash
+sudo systemctl restart zivpn
+```
