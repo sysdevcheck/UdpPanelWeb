@@ -61,11 +61,11 @@ export default function LoginPage() {
             )}
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" name="username" type="text" required defaultValue="admin" disabled={isPending}/>
+              <Input id="username" name="username" type="text" required placeholder="admin" disabled={isPending}/>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required defaultValue="password" disabled={isPending}/>
+              <Input id="password" name="password" type="password" required placeholder="password" disabled={isPending}/>
             </div>
           </CardContent>
           <CardFooter>
