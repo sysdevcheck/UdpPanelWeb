@@ -266,10 +266,16 @@ async function readManagersFile(): Promise<any[]> {
     }
 }
 
-async function saveManagersFile(managers: any[]): Promise<void> {
-    const dir = path.dirname(managersConfigPath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(managersConfigPath, JSON.stringify(managers, null, 2), 'utf8');
+async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
+    try {
+        const dir = path.dirname(managersConfigPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(managersConfigPath, JSON.stringify(managers, null, 2), 'utf8');
+        return { success: true };
+    } catch (error: any) {
+        console.error(`Error saving managers file:`, error);
+        return { success: false, error: `Failed to write to ${managersConfigPath}. Please check directory permissions.` };
+    }
 }
 
 
@@ -291,8 +297,15 @@ export async function login(prevState: any, formData: FormData) {
     if (managers.length === 0) {
         console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
-        await saveManagersFile([defaultManager]);
-        managers = await readManagersFile(); // Re-read the file after creation
+        const result = await saveManagersFile([defaultManager]);
+
+        // If saving the file fails, return a specific error.
+        if (!result.success) {
+            return { error: result.error };
+        }
+        
+        // After creating, re-read the file to continue with login.
+        managers = await readManagersFile();
     }
     
     const manager = managers.find((m: any) => m.username === username && m.password === password);
@@ -364,7 +377,10 @@ export async function addManager(formData: FormData): Promise<{ success: boolean
         }
         
         managers.push({ username, password });
-        await saveManagersFile(managers);
+        const result = await saveManagersFile(managers);
+        if (!result.success) {
+            return { success: false, error: result.error };
+        }
         
         return { success: true, managers };
     } catch (error: any) {
@@ -393,12 +409,13 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     }
 
     try {
-        await saveManagersFile(updatedManagers);
+        const result = await saveManagersFile(updatedManagers);
+        if (!result.success) {
+            return { success: false, error: result.error };
+        }
         return { success: true, managers: updatedManagers };
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
-    
-
     

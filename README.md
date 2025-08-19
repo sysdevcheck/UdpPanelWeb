@@ -108,9 +108,9 @@ cd UdpPanelWeb
 npm install
 ```
 
-### 4. Configura los Permisos y Archivos (Paso Crítico)
+### 4. Configura los Permisos de Archivos (Paso Crítico)
 
-La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`.
+La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`. El usuario que ejecute la aplicación (`pm2` lo hará por ti) debe ser el propietario de este directorio.
 
 ```bash
 # Crea el directorio si no existe.
@@ -118,7 +118,7 @@ sudo mkdir -p /etc/zivpn
 
 # Asigna la propiedad al usuario que usarás para ejecutar la aplicación.
 # Reemplaza 'tu_usuario' con tu nombre de usuario actual en el VPS (ej. ubuntu, root, etc.)
-# Usar la variable de entorno $USER lo hará automáticamente.
+# Usar la variable de entorno $USER lo hará automáticamente por el usuario actual.
 sudo chown -R $USER:$USER /etc/zivpn
 ```
 
@@ -130,7 +130,7 @@ Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usarás para `pm2`). Si no estás seguro, usa el usuario con el que te conectas por SSH (ej. `ubuntu`).
+Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usaste en el paso anterior y con el que te conectas por SSH, ej. `ubuntu`).
 
 ```
 # Reemplaza 'tu_usuario' por el nombre de usuario de tu VPS (ej. ubuntu)
@@ -156,7 +156,7 @@ Para que el panel permanezca en línea incluso si cierras la terminal o reinicia
 sudo npm install -g pm2
 
 # Dentro de la carpeta del proyecto (UdpPanelWeb), inicia la aplicación con pm2
-# Asegúrate de ejecutar este comando como el usuario que configuraste en sudoers.
+# Asegúrate de ejecutar este comando como el usuario que configuraste en los permisos.
 pm2 start npm --name "zivpn-panel" -- start
 
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
@@ -222,12 +222,8 @@ Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos paso
 
 ### Resolución de Problemas y Comandos Útiles
 
-**Verificar el estado del panel:**
-```bash
-pm2 status zivpn-panel
-```
 **Verificar con qué usuario está corriendo la aplicación:**
-Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers`!
+Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers` y que es dueño de `/etc/zivpn`!
 ```bash
 pm2 list
 ```
@@ -243,17 +239,22 @@ pm2 logs zivpn-panel
 pm2 restart zivpn-panel
 ```
 
-**Parar el panel:**
+**Si tienes procesos duplicados en PM2:**
+A veces, al solucionar problemas, puedes iniciar el mismo proceso varias veces. Para limpiar:
 ```bash
+# Detiene todos los procesos con ese nombre
 pm2 stop zivpn-panel
+# Elimina todos los procesos detenidos con ese nombre
+pm2 delete zivpn-panel
+# Guarda la lista de procesos ahora limpia
+pm2 save
+# Inicia el proceso de nuevo, una sola vez
+pm2 start npm --name "zivpn-panel" -- start
+# Guarda la configuración final
+pm2 save
 ```
 
 **Verificar el estado del servicio de la VPN (zivpn):**
 ```bash
 sudo systemctl status zivpn
-```
-
-**Reiniciar manually el servicio de la VPN:**
-```bash
-sudo systemctl restart zivpn
 ```
