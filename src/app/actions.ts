@@ -278,7 +278,6 @@ async function saveManagersFile(managers: any[]): Promise<{success: boolean, err
     }
 }
 
-
 /**
  * Attempts to log in a manager.
  */
@@ -293,15 +292,13 @@ export async function login(prevState: any, formData: FormData) {
   try {
     let managers = await readManagersFile();
     
-    // If no managers exist, create a default admin and log in.
     if (managers.length === 0) {
         console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         const result = await saveManagersFile([defaultManager]);
-
-        // If saving the file fails, return a specific error.
+        
         if (!result.success) {
-            return { error: result.error };
+            return { error: result.error }; // Return specific file write error
         }
         
         // After creating, re-read the file to continue with login.
@@ -314,7 +311,6 @@ export async function login(prevState: any, formData: FormData) {
       cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
       redirect('/');
     } else {
-      // Specific message if the default user was just created.
       if (managers.length === 1 && managers[0].username === 'admin') {
          return { error: 'Invalid credentials. A default user (admin/password) was created.' };
       }
@@ -418,4 +414,6 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
+    
+
     

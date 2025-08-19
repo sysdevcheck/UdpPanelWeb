@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState } from 'react';
 import { login } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,11 +12,35 @@ import { Terminal, Info } from 'lucide-react';
 
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, undefined);
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password');
 
+  // Check for specific informative messages to style them differently
   const isDefaultUserMessage = state?.error?.includes('default user');
+  const isPermissionsError = state?.error?.includes('permissions');
 
+  const getAlertVariant = () => {
+    if (isDefaultUserMessage || isPermissionsError) {
+      return 'default';
+    }
+    if (state?.error) {
+      return 'destructive';
+    }
+    return 'destructive'; // Fallback
+  };
+
+  const getAlertIcon = () => {
+    if (isDefaultUserMessage || isPermissionsError) {
+      return <Info className="h-4 w-4" />;
+    }
+    return <Terminal className="h-4 w-4" />;
+  };
+
+  const getAlertTitle = () => {
+    if (isDefaultUserMessage) return 'Welcome!';
+    if (isPermissionsError) return 'Permissions Error';
+    if (state?.error) return 'Login Failed';
+    return 'Error';
+  };
+  
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <form action={formAction}>
@@ -29,9 +53,9 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="grid gap-4">
             {state && state.error && (
-               <Alert variant={isDefaultUserMessage ? 'default' : 'destructive'} className={isDefaultUserMessage ? 'bg-blue-900/20 border-blue-500/50' : ''}>
-                  {isDefaultUserMessage ? <Info className="h-4 w-4" /> : <Terminal className="h-4 w-4" />}
-                  <AlertTitle>{isDefaultUserMessage ? 'Welcome!' : 'Login Failed'}</AlertTitle>
+               <Alert variant={getAlertVariant()} className={ (isDefaultUserMessage || isPermissionsError) ? 'bg-blue-900/20 border-blue-500/50' : ''}>
+                  {getAlertIcon()}
+                  <AlertTitle>{getAlertTitle()}</AlertTitle>
                   <AlertDescription>
                     {state.error}
                   </AlertDescription>
@@ -39,11 +63,11 @@ export default function LoginPage() {
             )}
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" name="username" type="text" required value={username} onChange={e => setUsername(e.target.value)} disabled={isPending}/>
+              <Input id="username" name="username" type="text" required defaultValue="admin" disabled={isPending}/>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required value={password} onChange={e => setPassword(e.target.value)} disabled={isPending}/>
+              <Input id="password" name="password" type="password" required defaultValue="password" disabled={isPending}/>
             </div>
           </CardContent>
           <CardFooter>
