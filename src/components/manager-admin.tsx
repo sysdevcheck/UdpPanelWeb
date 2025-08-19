@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
 import { addManager, deleteManager, editManager } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +20,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -74,6 +73,7 @@ const initialActionState = {
 };
 
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
+  const [isClient, setIsClient] = useState(false);
   const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
   const { toast } = useToast();
@@ -85,6 +85,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const [deleteManagerState, deleteManagerAction, isDeletingPending] = useActionState(deleteManager, initialActionState);
   
   useEffect(() => {
+    setIsClient(true);
     setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
   }, [initialManagers]);
   
@@ -118,6 +119,22 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [deleteManagerState, toast]);
 
   const isPending = isAddingPending || isEditingPending || isDeletingPending;
+
+  if (!isClient) {
+    return (
+        <Card className="w-full max-w-4xl mx-auto shadow-lg">
+            <CardHeader>
+                <CardTitle>Current Managers</CardTitle>
+                <CardDescription>List of all accounts with access to this panel.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-24 text-center text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+            </CardContent>
+        </Card>
+    )
+  }
 
   return (
     <div className="space-y-6">

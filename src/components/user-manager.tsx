@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
 import { addUser, deleteUser, editUser, renewUser } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -68,10 +68,9 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
 const initialActionState = { success: false, error: undefined, message: undefined, users: undefined };
 
 export function UserManager({ initialUsers, managerUsername }: { initialUsers: User[], managerUsername: string }) {
+  const [isClient, setIsClient] = useState(false);
   const [users, setUsers] = useState<UserWithStatus[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const [renewingUser, setRenewingUser] = useState<User | null>(null);
   
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,6 +87,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   const [renewUserState, renewUserAction, isRenewingPending] = useActionState(renewUser, initialActionState);
 
   useEffect(() => {
+    setIsClient(true);
     setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
   }, [initialUsers]);
 
@@ -115,7 +115,6 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     if (deleteUserState?.success) {
       if(deleteUserState.users) setUsers(deleteUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: `User has been deleted.` });
-      setDeletingUser(null);
     } else if (deleteUserState?.error) {
       toast({ variant: 'destructive', title: 'Error Deleting User', description: deleteUserState.error });
     }
@@ -125,7 +124,6 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     if (renewUserState?.success) {
       if(renewUserState.users) setUsers(renewUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: `User has been renewed.` });
-      setRenewingUser(null);
     } else if (renewUserState?.error) {
       toast({ variant: 'destructive', title: 'Error Renewing User', description: renewUserState.error });
     }
@@ -161,6 +159,24 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     setFilter(newFilter);
     setCurrentPage(1);
   };
+  
+  if (!isClient) {
+    return (
+        <Card className="w-full max-w-5xl mx-auto shadow-lg">
+            <CardHeader>
+                <CardTitle className="text-xl">Your VPN Users</CardTitle>
+                <CardDescription>
+                Add, edit, renew, or remove users. Users will automatically expire and be removed after 30 days.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-24 text-center text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+            </CardContent>
+        </Card>
+    )
+  }
 
   return (
     <>
@@ -241,7 +257,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 <input type="hidden" name="username" value={user.username} />
                                 <input type="hidden" name="managerUsername" value={managerUsername} />
                                 <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
-                                    {isRenewingPending && renewingUser?.username === user.username ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {isRenewingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 </Button>
                              </form>
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
