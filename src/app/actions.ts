@@ -304,6 +304,7 @@ export async function login(prevState: any, formData: FormData) {
   }
   
   if (managers.length === 0) {
+      // This state should ideally not be hit if the main page logic works correctly
       return { error: 'No managers configured. Please load the main page first or contact support.' };
   }
 
@@ -337,7 +338,7 @@ export async function readManagers(): Promise<{ managers?: any[], error?: string
     return { managers };
 }
 
-export async function addManager(formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
+export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
     const loggedInUser = await getLoggedInUser();
     if (!loggedInUser) {
         return { success: false, error: "Authentication required." };
