@@ -23,7 +23,7 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {state?.error && (
+            {state && state.error && (
                <Alert variant={state.error.includes('default user') ? 'default' : 'destructive'} className={state.error.includes('default user') ? 'bg-blue-900/20 border-blue-500/50' : ''}>
                   {state.error.includes('default user') ? <Info className="h-4 w-4" /> : <Terminal className="h-4 w-4" />}
                   <AlertTitle>{state.error.includes('default user') ? 'Welcome!' : 'Login Failed'}</AlertTitle>
