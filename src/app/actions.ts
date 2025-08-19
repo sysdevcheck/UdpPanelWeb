@@ -141,8 +141,12 @@ export async function readConfig(): Promise<any> {
 
 export async function addUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     const managerUsername = await getLoggedInUser();
-    if (!managerUsername) return { success: false, error: "Authentication required." };
-    if (!username) return { success: false, error: "Username cannot be empty." };
+    if (!managerUsername) {
+        return { success: false, error: "Authentication required." };
+    }
+    if (!username) {
+        return { success: false, error: "Username cannot be empty." };
+    }
 
     const config = await readRawConfig();
     const users = config.auth?.config || [];
@@ -162,54 +166,70 @@ export async function addUser(username: string): Promise<{ success: boolean; use
     });
     
     const result = await saveConfig(config);
-    if (result.success) {
-        const restartResult = await restartVpnService();
-        if(!restartResult.success) {
-            return { success: false, error: restartResult.error };
-        }
-        const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-        return { success: true, users: managerUsers };
-    } else {
+    if (!result.success) {
         return { success: false, error: result.error };
     }
+    
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
+
+    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    return { success: true, users: managerUsers };
 }
 
 export async function deleteUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     const managerUsername = await getLoggedInUser();
-    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!managerUsername) {
+        return { success: false, error: "Authentication required." };
+    }
 
     const config = await readRawConfig();
     const users = config.auth?.config || [];
     const userToDelete = users.find((user: any) => user.username === username);
 
-    if (!userToDelete) return { success: false, error: "User not found." };
-    if (userToDelete.createdBy !== managerUsername) return { success: false, error: "Permission denied." };
+    if (!userToDelete) {
+        return { success: false, error: "User not found." };
+    }
+    if (userToDelete.createdBy !== managerUsername) {
+        return { success: false, error: "Permission denied." };
+    }
     
     config.auth.config = users.filter((user: any) => user.username !== username);
     const result = await saveConfig(config);
-    if (result.success) {
-        const restartResult = await restartVpnService();
-         if(!restartResult.success) {
-            return { success: false, error: restartResult.error };
-        }
-        const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-        return { success: true, users: managerUsers };
-    } else {
+    if (!result.success) {
         return { success: false, error: result.error };
     }
+    
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
+
+    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    return { success: true, users: managerUsers };
 }
 
 export async function editUser(oldUsername: string, newUsername: string): Promise<{ success: boolean; users?: any[], error?: string }> {
     const managerUsername = await getLoggedInUser();
-    if (!managerUsername) return { success: false, error: "Authentication required." };
-    if (!oldUsername || !newUsername) return { success: false, error: "Usernames cannot be empty." };
+    if (!managerUsername) {
+        return { success: false, error: "Authentication required." };
+    }
+    if (!oldUsername || !newUsername) {
+        return { success: false, error: "Usernames cannot be empty." };
+    }
 
     const config = await readRawConfig();
     const users = config.auth?.config || [];
     const userIndex = users.findIndex((user: any) => user.username === oldUsername);
 
-    if (userIndex === -1) return { success: false, error: `User "${oldUsername}" not found.` };
-    if (users[userIndex].createdBy !== managerUsername) return { success: false, error: "Permission denied." };
+    if (userIndex === -1) {
+        return { success: false, error: `User "${oldUsername}" not found.` };
+    }
+    if (users[userIndex].createdBy !== managerUsername) {
+        return { success: false, error: "Permission denied." };
+    }
     if (oldUsername !== newUsername && users.some((user: any) => user.username === newUsername)) {
         return { success: false, error: `User "${newUsername}" already exists.` };
     }
@@ -218,28 +238,35 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
     config.auth.config = users;
 
     const result = await saveConfig(config);
-    if (result.success) {
-        const restartResult = await restartVpnService();
-        if(!restartResult.success) {
-            return { success: false, error: restartResult.error };
-        }
-        const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-        return { success: true, users: managerUsers };
-    } else {
+    if (!result.success) {
         return { success: false, error: result.error };
     }
+    
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
+
+    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    return { success: true, users: managerUsers };
 }
 
 export async function renewUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     const managerUsername = await getLoggedInUser();
-    if (!managerUsername) return { success: false, error: "Authentication required." };
+    if (!managerUsername) {
+        return { success: false, error: "Authentication required." };
+    }
 
     const config = await readRawConfig();
     const users = config.auth?.config || [];
     const userIndex = users.findIndex((user: any) => user.username === username);
 
-    if (userIndex === -1) return { success: false, error: `User "${username}" not found.` };
-    if (users[userIndex].createdBy !== managerUsername) return { success: false, error: "Permission denied." };
+    if (userIndex === -1) {
+        return { success: false, error: `User "${username}" not found.` };
+    }
+    if (users[userIndex].createdBy !== managerUsername) {
+        return { success: false, error: "Permission denied." };
+    }
 
     const now = new Date();
     const newExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -247,16 +274,17 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
     config.auth.config = users;
     
     const result = await saveConfig(config);
-    if (result.success) {
-        const restartResult = await restartVpnService();
-         if(!restartResult.success) {
-            return { success: false, error: restartResult.error };
-        }
-        const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-        return { success: true, users: managerUsers };
-    } else {
+    if (!result.success) {
         return { success: false, error: result.error };
     }
+
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
+
+    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    return { success: true, users: managerUsers };
 }
 
 // ====================================================================
@@ -428,3 +456,4 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     }
 }
 
+    
