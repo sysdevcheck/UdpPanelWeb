@@ -1,4 +1,4 @@
-import { readConfig, getLoggedInUser, logout, readManagers, readManagersFile, saveManagersFile } from './actions';
+import { readConfig, getLoggedInUser, logout, readManagersFile, saveManagersFile } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { Users, LogOut, UserCog } from 'lucide-react';
@@ -12,14 +12,27 @@ import {
 } from "@/components/ui/tabs";
 import { Card, CardContent } from '@/components/ui/card';
 
+/**
+ * Initializes the manager configuration. If the manager file doesn't exist,
+ * it creates it with a default admin user. This is critical for the first run.
+ * @returns {Promise<any[]>} The list of managers.
+ */
 async function initializeManagers() {
-    let managers = await readManagersFile();
+    let managers;
+    try {
+        managers = await readManagersFile();
+    } catch (e: any) {
+        // This will be caught by the Next.js error boundary
+        throw new Error(`CRITICAL: Could not read managers file. ${e.message}`);
+    }
+
     if (managers.length === 0) {
-        console.log('No managers file found on page load. Creating a default admin user.');
+        console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         const result = await saveManagersFile([defaultManager]);
         if (!result.success) {
-            // This will be caught by the error boundary
+            // This error is critical because the app can't function without it.
+            // It will be caught by the error boundary and shown to the user.
             throw new Error(`CRITICAL: Could not create default manager file. ${result.error}`);
         }
         // Return the newly created list of managers
@@ -35,12 +48,11 @@ export default async function Home() {
     redirect('/login');
   }
 
-  // Ensure manager file exists before proceeding
+  // This function now ensures the manager file exists before we proceed.
   const allManagers = await initializeManagers();
 
-  // Fetch initial data in parallel
+  // Fetch initial data for the logged-in user
   const initialVpnUsersData = await readConfig();
-
   const vpnUsers = initialVpnUsersData.auth?.config || [];
   
   // The first manager in the list is the owner/superadmin
@@ -97,5 +109,3 @@ export default async function Home() {
     </div>
   );
 }
-
-    

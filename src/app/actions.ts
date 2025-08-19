@@ -259,7 +259,7 @@ export async function readManagersFile(): Promise<any[]> {
     try {
         await fs.access(managersConfigPath);
         const data = await fs.readFile(managersConfigPath, 'utf8');
-        return JSON.parse(data);
+        return data.trim() ? JSON.parse(data) : [];
     } catch (error) {
         // File doesn't exist, which is a valid state before first run.
         return [];
@@ -279,7 +279,8 @@ export async function saveManagersFile(managers: any[]): Promise<{success: boole
 }
 
 /**
- * Attempts to log in a manager. This function NO LONGER creates the default user.
+ * Attempts to log in a manager. This function now ONLY validates credentials.
+ * The creation of the default manager is handled by the main page component.
  */
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
@@ -290,22 +291,15 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   try {
-    // This now assumes the managers file might not exist.
-    // The creation is handled by the main page load.
     const managers = await readManagersFile();
     
-    // If no managers exist yet, even the default admin won't be there.
-    // The main page load will create it.
+    // If no managers exist yet, it's impossible to log in.
+    // The main page should create the default user on first load.
     if (managers.length === 0) {
-        // Special case for the very first login attempt ever.
-        if (username === 'admin' && password === 'password') {
-            cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-            redirect('/');
-        }
         return { error: 'No managers configured. Try reloading the main page or contact support.' };
     }
     
-    // Normal login scenario
+    // Normal login scenario: find the user in the existing file.
     const manager = managers.find((m: any) => m.username === username && m.password === password);
 
     if (manager) {
@@ -319,6 +313,7 @@ export async function login(prevState: any, formData: FormData) {
     return { error: 'An unexpected error occurred during login. Check server logs.' };
   }
 }
+
 
 /**
  * Logs out the current manager.
@@ -412,8 +407,4 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
-    
-
-    
-
     
