@@ -169,6 +169,51 @@ El login por defecto será:
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
+
+## Mantenimiento y Actualizaciones
+
+### Cómo Subir Cambios a GitHub
+
+Cuando se realicen cambios en el código fuente en el entorno de desarrollo, sigue estos pasos para subirlos a tu repositorio de GitHub.
+
+1.  **Añade todos los archivos modificados:**
+    ```bash
+    git add .
+    ```
+2.  **Crea un "commit" con un mensaje descriptivo:**
+    ```bash
+    git commit -m "Describe aquí los cambios que hiciste"
+    ```
+3.  **Sube los cambios a la rama principal:**
+    ```bash
+    git push origin main
+    ```
+
+### Cómo Actualizar la Aplicación en el VPS
+
+Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos para actualizar la aplicación en producción.
+
+1.  **Ve a la carpeta del proyecto:**
+    ```bash
+    cd UdpPanelWeb
+    ```
+2.  **Descarga la última versión desde GitHub:**
+    ```bash
+    git pull origin main
+    ```
+3.  **Instala las dependencias (importante si se añadieron nuevas librerías):**
+    ```bash
+    npm install
+    ```
+4.  **Reconstruye la aplicación con los nuevos cambios:**
+    ```bash
+    npm run build
+    ```
+5.  **Reinicia la aplicación con PM2 para que los cambios surtan efecto:**
+    ```bash
+    pm2 restart zivpn-panel
+    ```
+
 ### Resolución de Problemas y Comandos Útiles
 
 **Verificar el estado del panel:**
@@ -181,7 +226,7 @@ pm2 status zivpn-panel
 pm2 logs zivpn-panel
 ```
 
-**Reiniciar el panel si has hecho cambios en el código (por ejemplo, después de un `git pull`):**
+**Reiniciar el panel si has hecho cambios en el código (después de un `git pull`):**
 ```bash
 # Dentro de la carpeta UdpPanelWeb
 pm2 restart zivpn-panel
