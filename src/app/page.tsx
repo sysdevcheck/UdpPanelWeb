@@ -10,34 +10,39 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Card, CardContent } from '@/components/ui/card';
 
 /**
- * Initializes the manager configuration. If the manager file doesn't exist,
- * it creates it with a default admin user. This is critical for the first run.
- * @returns {Promise<any[]>} The list of managers.
+ * Initializes the manager configuration on the server. If the manager file doesn't exist,
+ * it creates it with a default admin user. This is a critical step for the first run.
+ * @returns {Promise<any[]>} The list of all managers.
  */
 async function initializeManagers() {
     let managers;
     try {
+        // This function now simply returns an empty array if the file doesn't exist.
         managers = await readManagersFile();
     } catch (e: any) {
-        // This will be caught by the Next.js error boundary
-        throw new Error(`CRITICAL: Could not read managers file. ${e.message}`);
+        // This will be caught by the Next.js error boundary if reading fails for other reasons.
+        throw new Error(`CRITICAL: Could not read managers file. Check server logs. Error: ${e.message}`);
     }
 
+    // If the list is empty, it means the file didn't exist or was empty.
+    // We create the default manager here.
     if (managers.length === 0) {
-        console.log('No managers file found. Creating a default admin user.');
+        console.log('No managers found or file does not exist. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         const result = await saveManagersFile([defaultManager]);
+        
+        // This error is critical because the app can't function without it.
         if (!result.success) {
-            // This error is critical because the app can't function without it.
-            // It will be caught by the error boundary and shown to the user.
-            throw new Error(`CRITICAL: Could not create default manager file. ${result.error}`);
+            throw new Error(`CRITICAL: Could not create default manager file. Reason: ${result.error}`);
         }
+        
         // Return the newly created list of managers
         return [defaultManager];
     }
+    
+    // If managers already exist, just return them.
     return managers;
 }
 
@@ -48,7 +53,7 @@ export default async function Home() {
     redirect('/login');
   }
 
-  // This function now ensures the manager file exists before we proceed.
+  // This function now ensures the manager file exists with a default user before we proceed.
   const allManagers = await initializeManagers();
 
   // Fetch initial data for the logged-in user
@@ -109,3 +114,5 @@ export default async function Home() {
     </div>
   );
 }
+
+    
