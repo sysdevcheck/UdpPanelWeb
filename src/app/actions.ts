@@ -1,3 +1,4 @@
+
 'use server';
 
 import fs from 'fs/promises';
@@ -292,7 +293,7 @@ export async function login(prevState: any, formData: FormData) {
         const defaultManager = { username: 'admin', password: 'password' };
         await saveManagersFile([defaultManager]);
         
-        // Authenticate with the newly created default user
+        // Authenticate with the newly created default user and redirect
         if (username === defaultManager.username && password === defaultManager.password) {
              cookies().set('session', defaultManager.username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
              redirect('/');
@@ -402,5 +403,6 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
+    
 
     
