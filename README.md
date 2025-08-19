@@ -128,7 +128,7 @@ Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al **final del archivo**, reemplazando `tu_usuario` por tu nombre de usuario actual.
+Agrega la siguiente línea al **final del archivo**, reemplazando `tu_usuario` por tu nombre de usuario actual. **Este debe ser el mismo usuario que luego usará `pm2` para correr la aplicación**.
 ```
 tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 ```
