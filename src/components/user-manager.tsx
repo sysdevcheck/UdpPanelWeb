@@ -19,6 +19,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -92,40 +93,44 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   }, [initialUsers]);
 
   useEffect(() => {
-    if (addUserState?.success) {
-      if(addUserState.users) setUsers(addUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
-      toast({ title: 'Success', description: addUserState.message, className: 'bg-green-500 text-white' });
+    const state = addUserState;
+    if (state?.success) {
+      if(state.users) setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+      toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
       addUserFormRef.current?.reset();
-    } else if (addUserState?.error) {
-      toast({ variant: 'destructive', title: 'Error Adding User', description: addUserState.error });
+    } else if (state?.error) {
+      toast({ variant: 'destructive', title: 'Error Adding User', description: state.error });
     }
   }, [addUserState, toast]);
 
   useEffect(() => {
-    if (editUserState?.success) {
-      if(editUserState.users) setUsers(editUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
-      toast({ title: 'Success', description: editUserState.message });
+    const state = editUserState;
+    if (state?.success) {
+      if(state.users) setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+      toast({ title: 'Success', description: state.message });
       setEditingUser(null);
-    } else if (editUserState?.error) {
-      toast({ variant: 'destructive', title: 'Error Editing User', description: editUserState.error });
+    } else if (state?.error) {
+      toast({ variant: 'destructive', title: 'Error Editing User', description: state.error });
     }
   }, [editUserState, toast]);
 
   useEffect(() => {
-    if (deleteUserState?.success) {
-      if(deleteUserState.users) setUsers(deleteUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+    const state = deleteUserState;
+    if (state?.success) {
+      if(state.users) setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: `User has been deleted.` });
-    } else if (deleteUserState?.error) {
-      toast({ variant: 'destructive', title: 'Error Deleting User', description: deleteUserState.error });
+    } else if (state?.error) {
+      toast({ variant: 'destructive', title: 'Error Deleting User', description: state.error });
     }
   }, [deleteUserState, toast]);
   
   useEffect(() => {
-    if (renewUserState?.success) {
-      if(renewUserState.users) setUsers(renewUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+    const state = renewUserState;
+    if (state?.success) {
+      if(state.users) setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: `User has been renewed.` });
-    } else if (renewUserState?.error) {
-      toast({ variant: 'destructive', title: 'Error Renewing User', description: renewUserState.error });
+    } else if (state?.error) {
+      toast({ variant: 'destructive', title: 'Error Renewing User', description: state.error });
     }
   }, [renewUserState, toast]);
 

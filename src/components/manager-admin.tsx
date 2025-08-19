@@ -20,6 +20,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -90,31 +91,34 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [initialManagers]);
   
   useEffect(() => {
-    if (addManagerState && addManagerState.success) {
-        if(addManagerState.managers) setManagers(addManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: addManagerState.message, className: 'bg-green-500 text-white' });
+    const state = addManagerState;
+    if (state && state.success) {
+        if(state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         addFormRef.current?.reset();
-    } else if (addManagerState && addManagerState.error) {
-        toast({ variant: 'destructive', title: 'Error Adding Manager', description: addManagerState.error });
+    } else if (state && state.error) {
+        toast({ variant: 'destructive', title: 'Error Adding Manager', description: state.error });
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    if (editManagerState && editManagerState.success) {
-        if (editManagerState.managers) setManagers(editManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: editManagerState.message });
+    const state = editManagerState;
+    if (state && state.success) {
+        if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        toast({ title: 'Success', description: state.message });
         setEditingManager(null);
-    } else if (editManagerState && editManagerState.error) {
-        toast({ variant: 'destructive', title: 'Error Editing Manager', description: editManagerState.error });
+    } else if (state && state.error) {
+        toast({ variant: 'destructive', title: 'Error Editing Manager', description: state.error });
     }
   }, [editManagerState, toast]);
 
   useEffect(() => {
-    if (deleteManagerState && deleteManagerState.success) {
-        if (deleteManagerState.managers) setManagers(deleteManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+    const state = deleteManagerState;
+    if (state && state.success) {
+        if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: `Manager has been deleted.` });
-    } else if (deleteManagerState && deleteManagerState.error) {
-        toast({ variant: 'destructive', title: 'Error Deleting Manager', description: deleteManagerState.error });
+    } else if (state && state.error) {
+        toast({ variant: 'destructive', title: 'Error Deleting Manager', description: state.error });
     }
   }, [deleteManagerState, toast]);
 
