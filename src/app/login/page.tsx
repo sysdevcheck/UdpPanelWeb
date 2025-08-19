@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, undefined);
 
   // Check for specific informative messages to style them differently
-  const isPermissionsError = state?.error?.includes('permissions');
+  const isPermissionsError = state?.error?.includes('permissions') || state?.error?.includes('owner');
 
   const getAlertVariant = () => {
     if (isPermissionsError) {
@@ -50,7 +50,7 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {state && state.error && (
+            {state?.error && (
                <Alert variant={getAlertVariant()} className={ isPermissionsError ? 'bg-blue-900/20 border-blue-500/50' : ''}>
                   {getAlertIcon()}
                   <AlertTitle>{getAlertTitle()}</AlertTitle>

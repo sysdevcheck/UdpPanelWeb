@@ -109,7 +109,7 @@ async function saveConfig(data: any): Promise<{ success: boolean; error?: string
     return { success: true };
   } catch (error: any) {
     console.error(`CRITICAL: Error writing config file at ${configPath}:`, error);
-    return { success: false, error: `Failed to write to ${configPath}. Check permissions.` };
+    return { success: false, error: `Failed to write to ${configPath}. Check permissions. The user running the app must own this directory.` };
   }
 }
 
@@ -350,7 +350,7 @@ export async function saveManagersFile(managers: any[]): Promise<{success: boole
         return { success: true };
     } catch (error: any) {
         console.error(`CRITICAL: Could not write to managers file:`, error);
-        return { success: false, error: `Failed to write to ${managersConfigPath}. Please check directory permissions.` };
+        return { success: false, error: `Failed to write to ${managersConfigPath}. The user running this app MUST be the owner of this directory.` };
     }
 }
 
@@ -375,7 +375,7 @@ export async function logout() {
  * Validates credentials against the managers.json file and creates a session.
  * If no managers exist, it creates a default admin manager.
  */
-export async function login(prevState: any, formData: FormData) {
+export async function login(prevState: any, formData: FormData): Promise<{ error?: string }> {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
 
