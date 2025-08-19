@@ -55,7 +55,7 @@ async function readRawConfig(): Promise<any> {
         const data = await fs.readFile(configPath, 'utf8');
         return data.trim() ? JSON.parse(data) : defaultConfig;
     } catch (error) {
-        console.log(`Config file not found or empty at ${configPath}. Using default config.`);
+        console.log(`Config file not found or empty at ${configPath}. Creating default config.`);
         await saveConfig(defaultConfig);
         return defaultConfig;
     }
@@ -109,7 +109,7 @@ export async function saveConfig(data: any): Promise<{ success: boolean; error?:
     return { success: true };
   } catch (error: any) {
     console.error(`Error writing config file at ${configPath}:`, error);
-    return { success: false, error: error.message || 'An unknown error occurred' };
+    return { success: false, error: `Failed to write to ${configPath}. Check permissions.` };
   }
 }
 
@@ -292,28 +292,28 @@ export async function login(prevState: any, formData: FormData) {
   try {
     let managers = await readManagersFile();
     
+    // First run scenario: create default admin and ask user to try again.
     if (managers.length === 0) {
         console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         const result = await saveManagersFile([defaultManager]);
         
         if (!result.success) {
-            return { error: result.error }; // Return specific file write error
+            // Return specific file write error if saving fails
+            return { error: result.error };
         }
         
-        // After creating, re-read the file to continue with login.
-        managers = await readManagersFile();
+        // Inform the user that the default account was created and they should log in.
+        return { error: 'A default user (admin/password) was created. Please sign in.' };
     }
     
+    // Normal login scenario
     const manager = managers.find((m: any) => m.username === username && m.password === password);
 
     if (manager) {
       cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
       redirect('/');
     } else {
-      if (managers.length === 1 && managers[0].username === 'admin') {
-         return { error: 'Invalid credentials. A default user (admin/password) was created.' };
-      }
       return { error: 'Invalid credentials.' };
     }
   } catch (error: any) {
