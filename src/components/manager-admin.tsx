@@ -87,37 +87,40 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   
   useEffect(() => {
     setIsClient(true);
+  }, []);
+
+  useEffect(() => {
     setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
   }, [initialManagers]);
   
   useEffect(() => {
     const state = addManagerState;
-    if (state && state.success) {
+    if (state?.success) {
         if(state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         addFormRef.current?.reset();
-    } else if (state && state.error) {
+    } else if (state?.error) {
         toast({ variant: 'destructive', title: 'Error Adding Manager', description: state.error });
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
     const state = editManagerState;
-    if (state && state.success) {
+    if (state?.success) {
         if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: state.message });
         setEditingManager(null);
-    } else if (state && state.error) {
+    } else if (state?.error) {
         toast({ variant: 'destructive', title: 'Error Editing Manager', description: state.error });
     }
   }, [editManagerState, toast]);
 
   useEffect(() => {
     const state = deleteManagerState;
-    if (state && state.success) {
+    if (state?.success) {
         if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: `Manager has been deleted.` });
-    } else if (state && state.error) {
+    } else if (state?.error) {
         toast({ variant: 'destructive', title: 'Error Deleting Manager', description: state.error });
     }
   }, [deleteManagerState, toast]);
@@ -126,17 +129,23 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   if (!isClient) {
     return (
-        <Card className="w-full max-w-4xl mx-auto shadow-lg">
-            <CardHeader>
-                <CardTitle>Current Managers</CardTitle>
-                <CardDescription>List of all accounts with access to this panel.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="h-24 text-center text-muted-foreground flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-            </CardContent>
-        </Card>
+        <div className="space-y-6">
+            <Card className="w-full max-w-4xl mx-auto shadow-lg">
+                <CardHeader><CardTitle>Add New Manager</CardTitle></CardHeader>
+                <CardContent><div className="h-24"><Loader2 className="h-6 w-6 animate-spin" /></div></CardContent>
+            </Card>
+            <Card className="w-full max-w-4xl mx-auto shadow-lg">
+                <CardHeader>
+                    <CardTitle>Current Managers</CardTitle>
+                    <CardDescription>List of all accounts with access to this panel.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="h-24 text-center text-muted-foreground flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
     )
   }
 
