@@ -69,13 +69,12 @@ Si no lo tienes, puedes instalarlo usando nvm (Node Version Manager).
 
 ### 2. Clona el Proyecto
 
-Clona tu repositorio de GitHub en la carpeta que prefieras en tu VPS. Reemplaza `[URL_DE_TU_REPOSITORIO_GIT]` con el link real.
+Clona tu repositorio de GitHub en la carpeta que prefieras en tu VPS.
 
 ```bash
-git clone [URL_DE_TU_REPOSITORIO_GIT]
-cd [NOMBRE_DEL_DIRECTORIO_DEL_PROYECTO]
+git clone https://github.com/sysdevcheck/UdpPanelWeb.git
+cd UdpPanelWeb
 ```
-Ejemplo: `cd zivpn-panel`
 
 ### 3. Instala las Dependencias
 
