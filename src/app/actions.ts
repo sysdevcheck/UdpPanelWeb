@@ -274,7 +274,7 @@ async function saveManagersFile(managers: any[]): Promise<void> {
 /**
  * Attempts to log in a manager.
  */
-export async function login(formData: FormData) {
+export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
 
