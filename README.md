@@ -120,7 +120,7 @@ sudo mkdir -p /etc/zivpn
 sudo chown -R $USER:$USER /etc/zivpn
 ```
 
-### 5. Permisos de Sudo para Reiniciar el Servicio
+### 5. Permisos de Sudo para Reiniciar el Servicio (Paso Crítico)
 
 Para que la aplicación pueda reiniciar `zivpn`, el usuario que ejecuta la aplicación necesita permisos para ejecutar `systemctl` sin contraseña.
 
@@ -128,8 +128,10 @@ Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al **final del archivo**, reemplazando `tu_usuario` por tu nombre de usuario actual. **Este debe ser el mismo usuario que luego usará `pm2` para correr la aplicación**.
+Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usarás para `pm2`). Si no estás seguro, usa el usuario con el que te conectas por SSH (ej. `ubuntu`).
+
 ```
+# Reemplaza 'tu_usuario' por el nombre de usuario de tu VPS (ej. ubuntu)
 tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 ```
 Para guardar y salir en `visudo` (que usa un editor como `nano` o `vim`):
@@ -152,13 +154,15 @@ Para que el panel permanezca en línea incluso si cierras la terminal o reinicia
 sudo npm install -g pm2
 
 # Dentro de la carpeta del proyecto (UdpPanelWeb), inicia la aplicación con pm2
+# Asegúrate de ejecutar este comando como el usuario que configuraste en sudoers.
 pm2 start npm --name "zivpn-panel" -- start
 
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
 pm2 startup
 
-# El comando anterior te dará un comando para copiar y pegar. Cópialo y ejecútalo.
-# Generalmente se ve así: sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin /home/tu_usuario/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
+# El comando anterior te dará un comando para copiar y pegar. Cópialo y ejecútalo como root (con sudo).
+# Generalmente se ve así:
+# sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin /home/tu_usuario/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
 
 # Guarda la configuración actual de pm2
 pm2 save
@@ -219,6 +223,11 @@ Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos paso
 **Verificar el estado del panel:**
 ```bash
 pm2 status zivpn-panel
+```
+**Verificar con qué usuario está corriendo la aplicación:**
+Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers`!
+```bash
+pm2 list
 ```
 
 **Ver los logs del panel en tiempo real (muy útil para ver errores):**
