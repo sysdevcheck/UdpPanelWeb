@@ -40,6 +40,14 @@ type Manager = {
   expiresAt?: string;
 }
 
+type ManagerWithStatus = Manager & {
+    status: {
+        label: 'Active' | 'Expiring' | 'Expired' | 'Permanent';
+        daysLeft: number | null;
+        variant: "default" | "destructive" | "secondary" | "outline";
+    }
+}
+
 const getStatus = (expiresAt: string | undefined): { label: 'Active' | 'Expiring' | 'Expired' | 'Permanent', daysLeft: number | null, variant: "default" | "destructive" | "secondary" | "outline" } => {
     if (!expiresAt) {
       return { label: 'Permanent', daysLeft: null, variant: 'outline' };
@@ -66,7 +74,7 @@ const initialActionState = {
 };
 
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
-  const [managers, setManagers] = useState<Manager[]>(initialManagers);
+  const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
   const [isDeleting, startDeleteTransition] = useTransition();
   const { toast } = useToast();
@@ -77,36 +85,34 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
   
   useEffect(() => {
-    if (!addManagerState) return;
-    if (addManagerState.success && addManagerState.managers) {
-        setManagers(addManagerState.managers);
+    setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+  }, [initialManagers]);
+  
+  useEffect(() => {
+    if (addManagerState && addManagerState.success && addManagerState.managers) {
+        setManagers(addManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: addManagerState.message, className: 'bg-green-500 text-white' });
         addFormRef.current?.reset();
-    } else if (addManagerState.error) {
+    } else if (addManagerState && addManagerState.error) {
         toast({ variant: 'destructive', title: 'Error Adding Manager', description: addManagerState.error });
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    if (!editManagerState) return;
-    if (editManagerState.success && editManagerState.managers) {
-        setManagers(editManagerState.managers);
+    if (editManagerState && editManagerState.success && editManagerState.managers) {
+        setManagers(editManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: editManagerState.message });
         setEditingManager(null);
-    } else if (editManagerState.error) {
+    } else if (editManagerState && editManagerState.error) {
         toast({ variant: 'destructive', title: 'Error Editing Manager', description: editManagerState.error });
     }
   }, [editManagerState, toast]);
-  
-  useEffect(() => {
-    setManagers(initialManagers);
-  }, [initialManagers]);
 
   const handleDeleteManager = (username: string) => {
     startDeleteTransition(async () => {
       const result = await deleteManager(username);
       if (result.success && result.managers) {
-        setManagers(result.managers);
+        setManagers(result.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: `Manager "${username}" has been deleted.` });
       } else {
         toast({ variant: 'destructive', title: 'Error Deleting Manager', description: result.error });
@@ -164,7 +170,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                 <TableBody>
                   {managers.length > 0 ? (
                     managers.map((manager) => {
-                       const { label, daysLeft, variant } = getStatus(manager.expiresAt);
+                       const { label, daysLeft, variant } = manager.status;
                        const isOwner = manager.username === ownerUsername;
                        return (
                         <TableRow key={manager.username}>
@@ -301,5 +307,3 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     </div>
   );
 }
-
-    

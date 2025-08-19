@@ -40,7 +40,15 @@ type User = {
   createdBy: string;
 }
 
-type Status = 'all' | 'active' | 'expiring' | 'expired';
+type UserWithStatus = User & {
+    status: {
+        label: 'Active' | 'Expiring' | 'Expired';
+        daysLeft: number;
+        variant: "default" | "destructive" | "secondary";
+    }
+}
+
+type StatusFilter = 'all' | 'active' | 'expiring' | 'expired';
 
 const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired', daysLeft: number, variant: "default" | "destructive" | "secondary" } => {
     const expirationDate = new Date(expiresAt);
@@ -60,10 +68,10 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
 const initialActionState = { success: false, error: undefined, message: undefined, users: undefined };
 
 export function UserManager({ initialUsers }: { initialUsers: User[] }) {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<UserWithStatus[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   
-  const [filter, setFilter] = useState<Status>('all');
+  const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [isRenewing, startRenewTransition] = useTransition();
@@ -74,35 +82,29 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   
   const USERS_PER_PAGE = 10;
   
-  // States for actions
   const [addUserState, addUserAction, isAddingPending] = useActionState(addUser, initialActionState);
   const [editUserState, editUserAction, isEditingPending] = useActionState(editUser, initialActionState);
 
-  // When initialUsers changes, we update our state
   useEffect(() => {
-    setUsers(initialUsers);
+    setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
   }, [initialUsers]);
 
-  // Effect for Add User action
   useEffect(() => {
-    if (!addUserState) return;
-    if (addUserState.success) {
-      if(addUserState.users) setUsers(addUserState.users);
+    if (addUserState && addUserState.success) {
+      if(addUserState.users) setUsers(addUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: addUserState.message, className: 'bg-green-500 text-white' });
       addUserFormRef.current?.reset();
-    } else if (addUserState.error) {
+    } else if (addUserState && addUserState.error) {
       toast({ variant: 'destructive', title: 'Error Adding User', description: addUserState.error });
     }
   }, [addUserState, toast]);
 
-  // Effect for Edit User action
   useEffect(() => {
-    if (!editUserState) return;
-    if (editUserState.success) {
-      if(editUserState.users) setUsers(editUserState.users);
+    if (editUserState && editUserState.success) {
+      if(editUserState.users) setUsers(editUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: editUserState.message });
       setEditingUser(null);
-    } else if (editUserState.error) {
+    } else if (editUserState && editUserState.error) {
       toast({ variant: 'destructive', title: 'Error Editing User', description: editUserState.error });
     }
   }, [editUserState, toast]);
@@ -112,7 +114,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     startDeleteTransition(async () => {
       const result = await deleteUser(username);
       if (result.success && result.users) {
-        setUsers(result.users);
+        setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
         toast({ title: 'Success', description: `User "${username}" has been deleted.` });
       } else {
         toast({ variant: 'destructive', title: 'Error Deleting User', description: result.error });
@@ -124,7 +126,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     startRenewTransition(async () => {
       const result = await renewUser(username);
       if (result.success && result.users) {
-        setUsers(result.users);
+        setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
         toast({ title: 'Success', description: `User "${username}" has been renewed for 30 days.` });
       } else {
         toast({ variant: 'destructive', title: 'Error Renewing User', description: result.error });
@@ -137,7 +139,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return users;
     return users.filter(user => {
-        const status = getStatus(user.expiresAt).label.toLowerCase();
+        const status = user.status.label.toLowerCase();
         return status === filter;
     });
   }, [users, filter]);
@@ -157,7 +159,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     }
   }, [totalPages, currentPage]);
   
-  const handleFilterChange = (newFilter: Status) => {
+  const handleFilterChange = (newFilter: StatusFilter) => {
     setFilter(newFilter);
     setCurrentPage(1);
   };
@@ -210,7 +212,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                 <TableBody>
                   {paginatedUsers.length > 0 ? (
                     paginatedUsers.map((user) => {
-                      const { label, daysLeft, variant } = getStatus(user.expiresAt);
+                      const { label, daysLeft, variant } = user.status;
                       return (
                         <TableRow key={user.username}>
                           <TableCell>
@@ -345,5 +347,3 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     </>
   );
 }
-
-    
