@@ -60,7 +60,8 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
     return { success: true };
   }
   return new Promise((resolve) => {
-    exec('sudo systemctl restart zivpn', (error, stdout, stderr) => {
+    // Using absolute paths for sudo and systemctl to avoid PATH issues in the exec environment.
+    exec('/usr/bin/sudo /usr/bin/systemctl restart zivpn', (error, stdout, stderr) => {
       if (error) {
         const errorMessage = `Error restarting zivpn service: ${stderr || error.message}`;
         console.error(errorMessage);
@@ -68,12 +69,14 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
         return;
       }
       if (stderr) {
+        // Stderr might contain non-error info, so we log it as a warning.
         console.warn(`Stderr while restarting zivpn service: ${stderr}`);
       }
       resolve({ success: true });
     });
   });
 }
+
 
 /**
  * Reads the raw VPN user configuration from the JSON file.
@@ -83,17 +86,20 @@ async function readRawConfig(): Promise<any> {
     await ensureDirExists();
     try {
         const data = await fs.readFile(configPath, 'utf8');
+        // Handle case where file is empty or just whitespace
         return data.trim() ? JSON.parse(data) : { ...defaultConfig };
     } catch (error: any) {
-        if (error.code === 'ENOENT') {
+        if (error.code === 'ENOENT') { // File does not exist
             console.log(`Config file not found at ${configPath}. Creating default config.`);
             await saveConfig({ ...defaultConfig });
             return { ...defaultConfig };
         }
+        // For other errors, it's a critical issue.
         console.error(`CRITICAL: Error reading config file at ${configPath}:`, error);
         throw new Error(`Could not read config file: ${error.message}`);
     }
 }
+
 
 /**
  * Saves the provided data to the main zivpn JSON configuration file.
@@ -134,7 +140,7 @@ export async function readConfig(): Promise<any> {
     config.auth.config = validUsers;
     const saveResult = await saveConfig(config);
     if(saveResult.success) {
-        // await restartVpnService();
+        await restartVpnService();
     }
   }
 
@@ -178,10 +184,10 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
         return { success: false, error: result.error };
     }
     
-    // const restartResult = await restartVpnService();
-    // if(!restartResult.success) {
-    //     return { success: false, error: restartResult.error };
-    // }
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
@@ -210,10 +216,10 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
         return { success: false, error: result.error };
     }
     
-    // const restartResult = await restartVpnService();
-    // if(!restartResult.success) {
-    //     return { success: false, error: restartResult.error };
-    // }
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers };
@@ -253,10 +259,10 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
         return { success: false, error: result.error };
     }
     
-    // const restartResult = await restartVpnService();
-    // if(!restartResult.success) {
-    //     return { success: false, error: restartResult.error };
-    // }
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
@@ -289,10 +295,10 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
         return { success: false, error: result.error };
     }
 
-    // const restartResult = await restartVpnService();
-    // if(!restartResult.success) {
-    //     return { success: false, error: restartResult.error };
-    // }
+    const restartResult = await restartVpnService();
+    if(!restartResult.success) {
+        return { success: false, error: restartResult.error };
+    }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers };
@@ -327,12 +333,14 @@ export async function readManagersFile(): Promise<any[]> {
         return managers;
     } catch (error: any) {
         if (error.code === 'ENOENT') {
+             // If the file doesn't exist, return an empty array.
             return []; 
         }
         console.error(`CRITICAL: Could not read managers file:`, error);
         throw new Error(`Failed to read managers file: ${error.message}`);
     }
 }
+
 
 /**
  * Saves the provided list of managers to the managers.json file.
@@ -390,7 +398,8 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
       const result = await saveManagersFile([defaultManager]);
       
       if (!result.success) {
-          return { error: result.error };
+          // Provide specific feedback if the initial file creation fails.
+          return { error: `Initial setup failed. Could not create managers file. Please check server permissions for the '/etc/zivpn' directory. Details: ${result.error}` };
       }
       managers = [defaultManager];
   }
