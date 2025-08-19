@@ -140,7 +140,10 @@ export async function addUser(username: string): Promise<{ success: boolean; use
     
     const result = await saveConfig(config);
     if (result.success) {
-        await restartVpnService();
+        const restartResult = await restartVpnService();
+        if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
         const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
         return { success: true, users: managerUsers };
     } else {
@@ -162,7 +165,10 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
     config.auth.config = users.filter((user: any) => user.username !== username);
     const result = await saveConfig(config);
     if (result.success) {
-        await restartVpnService();
+        const restartResult = await restartVpnService();
+         if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
         const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
         return { success: true, users: managerUsers };
     } else {
@@ -190,7 +196,10 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
 
     const result = await saveConfig(config);
     if (result.success) {
-        await restartVpnService();
+        const restartResult = await restartVpnService();
+        if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
         const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
         return { success: true, users: managerUsers };
     } else {
@@ -216,7 +225,10 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
     
     const result = await saveConfig(config);
     if (result.success) {
-        await restartVpnService();
+        const restartResult = await restartVpnService();
+         if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
         const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
         return { success: true, users: managerUsers };
     } else {
@@ -345,7 +357,11 @@ export async function addManager(formData: FormData): Promise<{ success: boolean
     managers.push({ username, password });
     const result = await saveManagersFile(managers);
     
-    return result.success ? { success: true, managers } : { success: false, error: result.error };
+    if (result.success) {
+      return { success: true, managers };
+    } else {
+      return { success: false, error: result.error, managers };
+    }
 }
 
 export async function deleteManager(username: string): Promise<{ success: boolean; managers?: any[], error?: string }> {
@@ -366,7 +382,12 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     }
 
     const result = await saveManagersFile(updatedManagers);
-    return result.success ? { success: true, managers: updatedManagers } : { success: false, error: result.error };
+
+    if (result.success) {
+      return { success: true, managers: updatedManagers };
+    } else {
+      return { success: false, error: result.error, managers: updatedManagers };
+    }
 }
 
     
