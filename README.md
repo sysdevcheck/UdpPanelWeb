@@ -15,7 +15,9 @@ Esta es una aplicación web Next.js que proporciona una interfaz amigable y mult
 
 ## Cómo Funciona
 
-La aplicación interactúa con dos archivos de configuración principales en el servidor donde se despliega:
+La aplicación interactúa con dos archivos de configuración principales en el servidor donde se despliega.
+
+**Importante:** Estos archivos **no están en el proyecto**. La aplicación los crea y gestiona por ti directamente en el directorio `/etc/zivpn/` de tu VPS. No necesitas crearlos manualmente.
 
 1.  `/etc/zivpn/managers.json`: Almacena las credenciales (usuario y contraseña) de los managers que pueden iniciar sesión en este panel. **La aplicación gestiona este archivo automáticamente.**
 2.  `/etc/zivpn/config.json`: Almacena la configuración de los usuarios finales de la VPN. La aplicación gestiona este archivo automáticamente.
