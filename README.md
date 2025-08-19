@@ -108,7 +108,7 @@ cd UdpPanelWeb
 npm install
 ```
 
-### 4. Configura los Permisos y Archivos
+### 4. Configura los Permisos y Archivos (Paso Crítico)
 
 La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`.
 
