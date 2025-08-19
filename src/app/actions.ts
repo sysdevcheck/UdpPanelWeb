@@ -284,8 +284,7 @@ export async function logout() {
 }
 
 /**
- * CLEAN AND SIMPLE LOGIN FUNCTION
- * Its only job is to validate credentials against the managers.json file.
+ * Validates credentials against the managers.json file and creates a session.
  */
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
@@ -298,14 +297,14 @@ export async function login(prevState: any, formData: FormData) {
   let managers: any[] = [];
   try {
     managers = await readManagersFile();
+    // This case handles a brand new setup. The main page should create the file.
+    // If we're here and it's still empty, something is wrong with permissions.
+    if (managers.length === 0) {
+        return { error: 'No managers configured. Please check server permissions for /etc/zivpn/ or contact support.' };
+    }
   } catch (error: any) {
       console.error("Login Error: Failed to read managers file.", error);
       return { error: 'Server error: Could not read configuration.' };
-  }
-  
-  if (managers.length === 0) {
-      // This state should ideally not be hit if the main page logic works correctly
-      return { error: 'No managers configured. Please load the main page first or contact support.' };
   }
 
   const manager = managers.find((m) => m.username === username && m.password === password);
@@ -343,7 +342,8 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
     if (!loggedInUser) {
         return { success: false, error: "Authentication required." };
     }
-    if(!await isOwner(loggedInUser)) {
+    const isOwnerCheck = await isOwner(loggedInUser);
+    if(!isOwnerCheck) {
         return { success: false, error: "Permission denied. Only the owner can add managers." };
     }
     
@@ -373,7 +373,9 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     if (!loggedInUser) {
         return { success: false, error: "Authentication required." };
     }
-    if(!await isOwner(loggedInUser)) {
+
+    const isOwnerCheck = await isOwner(loggedInUser);
+    if(!isOwnerCheck) {
         return { success: false, error: "Permission denied. Only the owner can delete managers." };
     }
 
@@ -381,7 +383,7 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: "The owner account cannot be deleted." };
     }
     
-    const managers = await readManagersFile();
+    let managers = await readManagersFile();
     const updatedManagers = managers.filter(m => m.username !== username);
 
     if (updatedManagers.length === managers.length) {
@@ -393,6 +395,10 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     if (result.success) {
       return { success: true, managers: updatedManagers };
     } else {
+      // Pass the latest list of managers back even on failure to keep UI consistent
       return { success: false, error: result.error, managers: updatedManagers };
     }
 }
+
+
+    
