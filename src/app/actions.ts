@@ -306,7 +306,23 @@ export async function readManagersFile(): Promise<any[]> {
     try {
         await fs.access(managersConfigPath);
         const data = await fs.readFile(managersConfigPath, 'utf8');
-        return data.trim() ? JSON.parse(data) : [];
+        const managers = data.trim() ? JSON.parse(data) : [];
+        
+        // Clean up expired managers, except the owner (first one)
+        const now = new Date();
+        if (managers.length > 0) {
+            const owner = managers[0];
+            const otherManagers = managers.slice(1);
+            const validManagers = otherManagers.filter((m: any) => m.expiresAt && new Date(m.expiresAt) > now);
+            const updatedManagers = [owner, ...validManagers];
+
+            if (updatedManagers.length < managers.length) {
+                console.log(`Removing ${managers.length - updatedManagers.length} expired managers.`);
+                await saveManagersFile(updatedManagers);
+                return updatedManagers;
+            }
+        }
+        return managers;
     } catch (error) {
         return [];
     }
@@ -355,18 +371,20 @@ export async function login(prevState: any, formData: FormData) {
 
   let managers = await readManagersFile();
   
-  // If no managers file exists, create the default user.
   if (managers.length === 0) {
-      console.log('No managers found or file does not exist. Creating a default admin user.');
-      const defaultManager = { username: 'admin', password: 'password' };
+      console.log('No managers found. Creating default admin user.');
+      const now = new Date();
+      const defaultManager = { 
+          username: 'admin', 
+          password: 'password',
+          createdAt: now.toISOString(),
+          // Owner does not expire, so no expiresAt field
+      };
       const result = await saveManagersFile([defaultManager]);
       
       if (!result.success) {
-          // This is a critical error, likely due to file permissions.
           return { error: result.error };
       }
-
-      // Update the in-memory list of managers
       managers = [defaultManager];
   }
 
@@ -400,7 +418,7 @@ export async function readManagers(): Promise<{ managers?: any[], error?: string
     return { managers };
 }
 
-export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
+export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string, message?: string }> {
     const loggedInUser = await getLoggedInUser();
     if (!loggedInUser) {
         return { success: false, error: "Authentication required." };
@@ -421,13 +439,21 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: "Manager username already exists." };
     }
     
-    managers.push({ username, password });
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    managers.push({ 
+        username, 
+        password,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+    });
     const result = await saveManagersFile(managers);
     
     if (result.success) {
-      return { success: true, managers };
+      return { success: true, managers, message: `Manager "${username}" has been added.` };
     } else {
-      return { success: false, error: result.error, managers: await readManagersFile() };
+      return { success: false, error: result.error };
     }
 }
 
@@ -458,7 +484,52 @@ export async function deleteManager(username: string): Promise<{ success: boolea
     if (result.success) {
       return { success: true, managers: updatedManagers };
     } else {
-      // Pass the latest list of managers back even on failure to keep UI consistent
-      return { success: false, error: result.error, managers: await readManagersFile() };
+      return { success: false, error: result.error };
     }
+}
+
+
+export async function editManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[]; error?: string; message?: string; }> {
+    const loggedInUser = await getLoggedInUser();
+    if (!loggedInUser) {
+        return { success: false, error: "Authentication required." };
+    }
+
+    const isOwnerCheck = await isOwner(loggedInUser);
+    if (!isOwnerCheck) {
+        return { success: false, error: "Permission denied. Only the owner can edit managers." };
+    }
+
+    const oldUsername = formData.get('oldUsername') as string;
+    const newUsername = formData.get('newUsername') as string;
+    const newPassword = formData.get('newPassword') as string;
+
+    if (!oldUsername || !newUsername) {
+        return { success: false, error: "Usernames cannot be empty." };
+    }
+
+    const managers = await readManagersFile();
+    const managerIndex = managers.findIndex(m => m.username === oldUsername);
+
+    if (managerIndex === -1) {
+        return { success: false, error: `Manager "${oldUsername}" not found.` };
+    }
+
+    // Check if new username already exists (and it's not the same manager)
+    if (newUsername !== oldUsername && managers.some(m => m.username === newUsername)) {
+        return { success: false, error: `Manager username "${newUsername}" already exists.` };
+    }
+    
+    // Update fields
+    managers[managerIndex].username = newUsername;
+    if (newPassword) { // Only update password if a new one is provided
+        managers[managerIndex].password = newPassword;
+    }
+
+    const result = await saveManagersFile(managers);
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+
+    return { success: true, managers, message: `Manager "${newUsername}" has been updated.` };
 }
