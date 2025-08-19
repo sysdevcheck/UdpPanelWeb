@@ -8,11 +8,15 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 // ====================================================================
-// Constants
+// Constants & Environment Configuration
 // ====================================================================
 
-const configPath = '/etc/zivpn/config.json';
-const managersConfigPath = '/etc/zivpn/managers.json';
+const isProduction = process.env.NODE_ENV === 'production';
+const basePath = isProduction ? '/etc/zivpn' : path.join(process.cwd(), 'src', 'lib', 'local-dev');
+
+const configPath = path.join(basePath, 'config.json');
+const managersConfigPath = path.join(basePath, 'managers.json');
+
 
 const defaultConfig = {
   "listen": ":5667",
@@ -25,14 +29,33 @@ const defaultConfig = {
   }
 };
 
+/**
+ * Ensures that the directory for config files exists, especially for local development.
+ */
+async function ensureDirExists() {
+    try {
+        await fs.mkdir(basePath, { recursive: true });
+    } catch (error: any) {
+        console.error(`CRITICAL: Could not create directory at ${basePath}:`, error);
+        // This is a critical failure, we should not proceed.
+        throw new Error(`Could not create base directory. Please check permissions. Path: ${basePath}`);
+    }
+}
+
+
 // ====================================================================
 // Core Service Functions
 // ====================================================================
 
 /**
  * Executes a shell command to restart the VPN service.
+ * In development, this function will just log the action.
  */
 async function restartVpnService(): Promise<{ success: boolean; error?: string }> {
+  if (!isProduction) {
+    console.log("DEV-MODE: Simulated systemctl restart zivpn");
+    return { success: true };
+  }
   return new Promise((resolve) => {
     exec('sudo systemctl restart zivpn', (error, stdout, stderr) => {
       if (error) {
@@ -54,6 +77,7 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
  * Creates a default config if the file doesn't exist.
  */
 async function readRawConfig(): Promise<any> {
+    await ensureDirExists();
     try {
         await fs.access(configPath);
         const data = await fs.readFile(configPath, 'utf8');
@@ -69,9 +93,8 @@ async function readRawConfig(): Promise<any> {
  * Saves the provided data to the main zivpn JSON configuration file.
  */
 async function saveConfig(data: any): Promise<{ success: boolean; error?: string }> {
+  await ensureDirExists();
   try {
-    const dir = path.dirname(configPath);
-    await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(configPath, JSON.stringify(data, null, 2), 'utf8');
     return { success: true };
   } catch (error: any) {
@@ -244,6 +267,7 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
  * Reads the managers.json file. Returns an empty array if it doesn't exist.
  */
 export async function readManagersFile(): Promise<any[]> {
+    await ensureDirExists();
     try {
         await fs.access(managersConfigPath);
         const data = await fs.readFile(managersConfigPath, 'utf8');
@@ -257,9 +281,8 @@ export async function readManagersFile(): Promise<any[]> {
  * Saves the provided list of managers to the managers.json file.
  */
 export async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
+    await ensureDirExists();
     try {
-        const dir = path.dirname(managersConfigPath);
-        await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(managersConfigPath, JSON.stringify(managers, null, 2), 'utf8');
         return { success: true };
     } catch (error: any) {
@@ -285,6 +308,8 @@ export async function logout() {
 
 /**
  * Validates credentials against the managers.json file and creates a session.
+ * This function has been simplified to only validate. The creation of the default
+ * manager is handled by initializeManagers() on the main page.
  */
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
@@ -294,23 +319,16 @@ export async function login(prevState: any, formData: FormData) {
     return { error: 'Username and password are required.' };
   }
 
-  let managers: any[] = [];
-  try {
-    managers = await readManagersFile();
-    // This case handles a brand new setup. The main page should create the file.
-    // If we're here and it's still empty, something is wrong with permissions.
-    if (managers.length === 0) {
-        return { error: 'No managers configured. Please check server permissions for /etc/zivpn/ or contact support.' };
-    }
-  } catch (error: any) {
-      console.error("Login Error: Failed to read managers file.", error);
-      return { error: 'Server error: Could not read configuration.' };
+  const managers = await readManagersFile();
+  
+  if (managers.length === 0) {
+      return { error: 'No managers configured. The default user will be created on the main page. Please try logging in again shortly.' };
   }
 
   const manager = managers.find((m) => m.username === username && m.password === password);
 
   if (manager) {
-    cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+    cookies().set('session', username, { httpOnly: true, secure: isProduction });
     redirect('/');
   } else {
     return { error: 'Invalid username or password.' };
@@ -364,7 +382,7 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
     if (result.success) {
       return { success: true, managers };
     } else {
-      return { success: false, error: result.error, managers };
+      return { success: false, error: result.error, managers: await readManagersFile() };
     }
 }
 
@@ -396,9 +414,6 @@ export async function deleteManager(username: string): Promise<{ success: boolea
       return { success: true, managers: updatedManagers };
     } else {
       // Pass the latest list of managers back even on failure to keep UI consistent
-      return { success: false, error: result.error, managers: updatedManagers };
+      return { success: false, error: result.error, managers: await readManagersFile() };
     }
 }
-
-
-    

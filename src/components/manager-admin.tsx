@@ -28,23 +28,42 @@ type Manager = {
   username: string;
 }
 
+const initialAddManagerState = {
+    success: false,
+    error: undefined,
+    managers: [] as Manager[],
+};
+
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
   const [managers, setManagers] = useState<Manager[]>(initialManagers);
   const [isDeleting, startDeleteTransition] = useTransition();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, { success: false, error: undefined, managers: initialManagers });
+  const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, {
+      ...initialAddManagerState,
+      managers: initialManagers,
+  });
 
   useEffect(() => {
-    if (addManagerState.success && addManagerState.managers) {
+    // This effect runs when the server action completes
+    if (addManagerState?.success && addManagerState.managers) {
         setManagers(addManagerState.managers);
         toast({ title: 'Success', description: `Manager has been added.`, className: 'bg-green-500 text-white' });
         formRef.current?.reset();
-    } else if (addManagerState.error) {
+    } else if (addManagerState?.error) {
         toast({ variant: 'destructive', title: 'Error Adding Manager', description: addManagerState.error });
+        // If the action failed but returned an updated list of managers, sync the state
+        if (addManagerState.managers) {
+            setManagers(addManagerState.managers);
+        }
     }
   }, [addManagerState, toast]);
+  
+  // Sync state if initialManagers prop changes from the server
+  useEffect(() => {
+    setManagers(initialManagers);
+  }, [initialManagers]);
 
 
   const handleDeleteManager = (username: string) => {
@@ -55,6 +74,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
         toast({ title: 'Success', description: `Manager "${username}" has been deleted.` });
       } else {
         toast({ variant: 'destructive', title: 'Error Deleting Manager', description: result.error });
+         // If the action failed but returned an updated list of managers, sync the state
+        if (result.managers) {
+            setManagers(result.managers);
+        }
       }
     });
   };
