@@ -175,6 +175,90 @@ El login por defecto será:
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
+## Opcional y Recomendado: Usar un Subdominio con HTTPS
+
+Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), puedes usar **Nginx** como reverse proxy y **Let's Encrypt** para obtener un certificado SSL gratuito.
+
+### Prerrequisitos del Subdominio
+
+1.  **Tener un dominio**: Debes ser dueño de un nombre de dominio.
+2.  **Configurar un Registro DNS**: En el panel de control de tu proveedor de dominio, crea un **registro `A`** para tu subdominio (ej. `panel`) que apunte a la dirección IP pública de tu VPS.
+
+### Paso 1: Instalar Nginx
+
+Si aún no lo tienes, instálalo:
+```bash
+sudo apt update
+sudo apt install nginx -y
+```
+
+### Paso 2: Crear el Archivo de Configuración de Nginx
+
+Crea un nuevo archivo de configuración para tu panel:
+```bash
+sudo nano /etc/nginx/sites-available/zivpn-panel.conf
+```
+Pega el siguiente contenido en el archivo. **Recuerda cambiar `panel.tudominio.com` por tu subdominio real.**
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name panel.tudominio.com;
+
+    location / {
+        proxy_pass http://localhost:9002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+Guarda y cierra el archivo (`Ctrl+X`, `Y`, `Enter` en `nano`).
+
+### Paso 3: Activar la Configuración
+
+Crea un enlace simbólico desde `sites-available` a `sites-enabled` para que Nginx cargue tu configuración:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/zivpn-panel.conf /etc/nginx/sites-enabled/
+```
+
+Verifica que la sintaxis de Nginx es correcta:
+```bash
+sudo nginx -t
+```
+Si todo está bien, verás un mensaje de "syntax is ok" y "test is successful".
+
+Reinicia Nginx para aplicar los cambios:
+```bash
+sudo systemctl restart nginx
+```
+En este punto, ya deberías poder acceder a tu panel a través de `http://panel.tudominio.com`.
+
+### Paso 4: Configurar HTTPS con Let's Encrypt
+
+Para añadir la capa de seguridad SSL:
+
+1.  **Instala Certbot**, la herramienta de Let's Encrypt.
+    ```bash
+    sudo apt install certbot python3-certbot-nginx -y
+    ```
+2.  **Obtén y configura el certificado SSL.** Certbot leerá tu archivo de configuración de Nginx y lo ajustará automáticamente para usar HTTPS.
+    ```bash
+    # Reemplaza panel.tudominio.com por tu subdominio
+    sudo certbot --nginx -d panel.tudominio.com
+    ```
+    Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los términos de servicio. Cuando te pregunte sobre la redirección de HTTP a HTTPS, es muy recomendable elegir la opción de redirigir.
+
+¡Listo! Certbot configurará la renovación automática. Ahora podrás acceder de forma segura a tu panel en `https://panel.tudominio.com`.
+
 
 ## Mantenimiento y Actualizaciones
 
@@ -258,5 +342,3 @@ pm2 save
 ```bash
 sudo systemctl status zivpn
 ```
-
-    
