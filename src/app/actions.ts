@@ -34,7 +34,9 @@ const defaultConfig = {
  */
 async function ensureDirExists() {
     try {
-        await fs.mkdir(basePath, { recursive: true });
+        if (!isProduction) {
+            await fs.mkdir(basePath, { recursive: true });
+        }
     } catch (error: any) {
         console.error(`CRITICAL: Could not create directory at ${basePath}:`, error);
         // This is a critical failure, we should not proceed.
@@ -139,8 +141,10 @@ export async function readConfig(): Promise<any> {
 }
 
 
-export async function addUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
+export async function addUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string; message?: string; }> {
+    const username = formData.get('username') as string;
     const managerUsername = await getLoggedInUser();
+
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -176,7 +180,7 @@ export async function addUser(username: string): Promise<{ success: boolean; use
     }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-    return { success: true, users: managerUsers };
+    return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
 export async function deleteUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
@@ -211,7 +215,10 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
     return { success: true, users: managerUsers };
 }
 
-export async function editUser(oldUsername: string, newUsername: string): Promise<{ success: boolean; users?: any[], error?: string }> {
+export async function editUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string, message?: string }> {
+    const oldUsername = formData.get('oldUsername') as string;
+    const newUsername = formData.get('newUsername') as string;
+
     const managerUsername = await getLoggedInUser();
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
@@ -248,7 +255,7 @@ export async function editUser(oldUsername: string, newUsername: string): Promis
     }
 
     const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
-    return { success: true, users: managerUsers };
+    return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
 export async function renewUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
@@ -455,5 +462,3 @@ export async function deleteManager(username: string): Promise<{ success: boolea
       return { success: false, error: result.error, managers: await readManagersFile() };
     }
 }
-
-    

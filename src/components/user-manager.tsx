@@ -1,13 +1,15 @@
+
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react';
+import { useActionState } from 'react';
 import { addUser, deleteUser, editUser, renewUser } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, ShieldAlert, Pencil, RefreshCw } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +19,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -56,43 +57,57 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
     return { label: 'Active', daysLeft, variant: 'default' };
 };
 
+const initialActionState = { success: false, error: undefined, message: undefined, users: [] as User[] };
 
 export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   const [users, setUsers] = useState<User[]>(initialUsers);
-  const [newUser, setNewUser] = useState('');
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [newUsername, setNewUsername] = useState('');
+  
   const [filter, setFilter] = useState<Status>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [isPending, startTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
+  const [isRenewing, startRenewTransition] = useTransition();
+  
   const { toast } = useToast();
+  const addUserFormRef = useRef<HTMLFormElement>(null);
+  const editUserFormRef = useRef<HTMLFormElement>(null);
   
   const USERS_PER_PAGE = 10;
+  
+  // States for actions
+  const [addUserState, addUserAction, isAddingPending] = useActionState(addUser, initialActionState);
+  const [editUserState, editUserAction, isEditingPending] = useActionState(editUser, initialActionState);
 
   // When initialUsers changes, we update our state
   useEffect(() => {
     setUsers(initialUsers);
   }, [initialUsers]);
 
-  const handleAddUser = () => {
-    if (!newUser.trim()) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: 'Username cannot be empty.' });
-      return;
+  // Effect for Add User action
+  useEffect(() => {
+    if (addUserState.success) {
+      if(addUserState.users) setUsers(addUserState.users);
+      toast({ title: 'Success', description: addUserState.message, className: 'bg-green-500 text-white' });
+      addUserFormRef.current?.reset();
+    } else if (addUserState.error) {
+      toast({ variant: 'destructive', title: 'Error Adding User', description: addUserState.error });
     }
-    startTransition(async () => {
-      const result = await addUser(newUser.trim());
-      if (result.success && result.users) {
-        setUsers(result.users);
-        setNewUser('');
-        toast({ title: 'Success', description: `User "${newUser.trim()}" has been added.`, className: 'bg-green-500 text-white' });
-      } else {
-        toast({ variant: 'destructive', title: 'Error Adding User', description: result.error });
-      }
-    });
-  };
+  }, [addUserState, toast]);
+
+  // Effect for Edit User action
+  useEffect(() => {
+    if (editUserState.success) {
+      if(editUserState.users) setUsers(editUserState.users);
+      toast({ title: 'Success', description: editUserState.message });
+      setEditingUser(null);
+    } else if (editUserState.error) {
+      toast({ variant: 'destructive', title: 'Error Editing User', description: editUserState.error });
+    }
+  }, [editUserState, toast]);
+
 
   const handleDeleteUser = (username: string) => {
-    startTransition(async () => {
+    startDeleteTransition(async () => {
       const result = await deleteUser(username);
       if (result.success && result.users) {
         setUsers(result.users);
@@ -103,26 +118,8 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     });
   };
 
-  const handleEditUser = () => {
-    if (!editingUser || !newUsername.trim()) {
-       toast({ variant: 'destructive', title: 'Validation Error', description: 'New username cannot be empty.' });
-      return;
-    }
-    startTransition(async () => {
-      const result = await editUser(editingUser.username, newUsername.trim());
-      if (result.success && result.users) {
-        setUsers(result.users);
-        setEditingUser(null);
-        setNewUsername('');
-        toast({ title: 'Success', description: `User "${editingUser.username}" updated to "${newUsername.trim()}".` });
-      } else {
-        toast({ variant: 'destructive', title: 'Error Editing User', description: result.error });
-      }
-    });
-  }
-
   const handleRenewUser = (username: string) => {
-    startTransition(async () => {
+    startRenewTransition(async () => {
       const result = await renewUser(username);
       if (result.success && result.users) {
         setUsers(result.users);
@@ -133,10 +130,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
     });
   }
 
-  const openEditDialog = (user: User) => {
-    setEditingUser(user);
-    setNewUsername(user.username);
-  }
+  const isPending = isAddingPending || isEditingPending || isDeleting || isRenewing;
 
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return users;
@@ -176,20 +170,19 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-2 mb-4">
+        <form ref={addUserFormRef} action={addUserAction} className="flex gap-2 mb-4">
           <Input
+            name="username"
             placeholder="New username"
-            value={newUser}
-            onChange={(e) => setNewUser(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
             disabled={isPending}
             className="text-base"
+            required
           />
-          <Button onClick={handleAddUser} disabled={isPending}>
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          <Button type="submit" disabled={isPending}>
+            {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>Add User</span>
           </Button>
-        </div>
+        </form>
         
         <div className="flex items-center gap-2 mb-4">
             <h3 className="text-lg font-medium text-foreground/80">Current Users</h3>
@@ -242,9 +235,9 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                           </TableCell>
                           <TableCell className="text-right space-x-1">
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending} onClick={() => handleRenewUser(user.username)}>
-                                <RefreshCw className="h-4 w-4" />
+                                {isRenewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                             </Button>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => openEditDialog(user)}>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
                                 <Pencil className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
@@ -262,8 +255,8 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteUser(user.username)} className="bg-destructive hover:bg-destructive/90">
-                                        Delete
+                                    <AlertDialogAction onClick={() => handleDeleteUser(user.username)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
+                                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
                                     </AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -311,6 +304,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
 
     <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
         <DialogContent>
+          <form ref={editUserFormRef} action={editUserAction}>
             <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
@@ -319,28 +313,31 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="new-username" className="text-right">
+                    <Label htmlFor="newUsername" className="text-right">
                     Username
                     </Label>
                     <Input
-                    id="new-username"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    className="col-span-3"
-                    disabled={isPending}
+                      id="newUsername"
+                      name="newUsername"
+                      defaultValue={editingUser?.username}
+                      className="col-span-3"
+                      disabled={isEditingPending}
+                      required
                     />
+                    <input type="hidden" name="oldUsername" value={editingUser?.username} />
                 </div>
             </div>
             <DialogFooter>
                 <DialogClose asChild>
-                    <Button type="button" variant="secondary" disabled={isPending}>
+                    <Button type="button" variant="secondary" disabled={isEditingPending}>
                         Cancel
                     </Button>
                 </DialogClose>
-                <Button onClick={handleEditUser} disabled={isPending}>
-                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+                <Button type="submit" disabled={isEditingPending}>
+                    {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
                 </Button>
             </DialogFooter>
+          </form>
         </DialogContent>
     </Dialog>
     </>
