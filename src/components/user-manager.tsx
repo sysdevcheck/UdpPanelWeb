@@ -67,7 +67,7 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
 
 const initialActionState = { success: false, error: undefined, message: undefined, users: undefined };
 
-export function UserManager({ initialUsers }: { initialUsers: User[] }) {
+export function UserManager({ initialUsers, managerUsername }: { initialUsers: User[], managerUsername: string }) {
   const [users, setUsers] = useState<UserWithStatus[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   
@@ -90,21 +90,21 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
   }, [initialUsers]);
 
   useEffect(() => {
-    if (addUserState && addUserState.success) {
+    if (addUserState?.success) {
       if(addUserState.users) setUsers(addUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: addUserState.message, className: 'bg-green-500 text-white' });
       addUserFormRef.current?.reset();
-    } else if (addUserState && addUserState.error) {
+    } else if (addUserState?.error) {
       toast({ variant: 'destructive', title: 'Error Adding User', description: addUserState.error });
     }
   }, [addUserState, toast]);
 
   useEffect(() => {
-    if (editUserState && editUserState.success) {
+    if (editUserState?.success) {
       if(editUserState.users) setUsers(editUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
       toast({ title: 'Success', description: editUserState.message });
       setEditingUser(null);
-    } else if (editUserState && editUserState.error) {
+    } else if (editUserState?.error) {
       toast({ variant: 'destructive', title: 'Error Editing User', description: editUserState.error });
     }
   }, [editUserState, toast]);
@@ -112,7 +112,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
 
   const handleDeleteUser = (username: string) => {
     startDeleteTransition(async () => {
-      const result = await deleteUser(username);
+      const result = await deleteUser(username, managerUsername);
       if (result.success && result.users) {
         setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
         toast({ title: 'Success', description: `User "${username}" has been deleted.` });
@@ -124,7 +124,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
 
   const handleRenewUser = (username: string) => {
     startRenewTransition(async () => {
-      const result = await renewUser(username);
+      const result = await renewUser(username, managerUsername);
       if (result.success && result.users) {
         setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
         toast({ title: 'Success', description: `User "${username}" has been renewed for 30 days.` });
@@ -175,6 +175,7 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
       </CardHeader>
       <CardContent>
         <form ref={addUserFormRef} action={addUserAction} className="flex gap-2 mb-4">
+          <input type="hidden" name="managerUsername" value={managerUsername} />
           <Input
             name="username"
             placeholder="New username"
@@ -328,7 +329,8 @@ export function UserManager({ initialUsers }: { initialUsers: User[] }) {
                       disabled={isEditingPending}
                       required
                     />
-                    <input type="hidden" name="oldUsername" value={editingUser?.username} />
+                    <input type="hidden" name="oldUsername" value={editingUser?.username || ''} />
+                    <input type="hidden" name="managerUsername" value={managerUsername} />
                 </div>
             </div>
             <DialogFooter>

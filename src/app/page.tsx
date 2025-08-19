@@ -1,3 +1,4 @@
+
 import { readConfig, getLoggedInUser, logout, readManagersFile } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
@@ -75,7 +76,7 @@ export default async function Home() {
             )}
           </TabsList>
           <TabsContent value="vpn-users">
-            <UserManager initialUsers={vpnUsers} />
+            <UserManager initialUsers={vpnUsers} managerUsername={loggedInUser} />
           </TabsContent>
           {isOwner && (
             <TabsContent value="managers">
@@ -87,5 +88,3 @@ export default async function Home() {
     </div>
   );
 }
-
-    

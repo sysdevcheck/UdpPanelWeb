@@ -153,7 +153,7 @@ export async function readConfig(): Promise<any> {
 
 export async function addUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string; message?: string; }> {
     const username = formData.get('username') as string;
-    const managerUsername = await getLoggedInUser();
+    const managerUsername = formData.get('managerUsername') as string;
 
     if (!managerUsername) {
         return { success: false, error: "Authentication required. Please log in again." };
@@ -193,8 +193,7 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
-export async function deleteUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
-    const managerUsername = await getLoggedInUser();
+export async function deleteUser(username: string, managerUsername: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -228,8 +227,8 @@ export async function deleteUser(username: string): Promise<{ success: boolean; 
 export async function editUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string, message?: string }> {
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
+    const managerUsername = formData.get('managerUsername') as string;
 
-    const managerUsername = await getLoggedInUser();
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -268,8 +267,7 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
-export async function renewUser(username: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
-    const managerUsername = await getLoggedInUser();
+export async function renewUser(username: string, managerUsername: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
