@@ -70,11 +70,11 @@ const initialActionState = { success: false, error: undefined, message: undefine
 export function UserManager({ initialUsers, managerUsername }: { initialUsers: User[], managerUsername: string }) {
   const [users, setUsers] = useState<UserWithStatus[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [renewingUser, setRenewingUser] = useState<User | null>(null);
   
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [isDeleting, startDeleteTransition] = useTransition();
-  const [isRenewing, startRenewTransition] = useTransition();
   
   const { toast } = useToast();
   const addUserFormRef = useRef<HTMLFormElement>(null);
@@ -84,6 +84,8 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   
   const [addUserState, addUserAction, isAddingPending] = useActionState(addUser, initialActionState);
   const [editUserState, editUserAction, isEditingPending] = useActionState(editUser, initialActionState);
+  const [deleteUserState, deleteUserAction, isDeletingPending] = useActionState(deleteUser, initialActionState);
+  const [renewUserState, renewUserAction, isRenewingPending] = useActionState(renewUser, initialActionState);
 
   useEffect(() => {
     setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
@@ -109,32 +111,28 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     }
   }, [editUserState, toast]);
 
+  useEffect(() => {
+    if (deleteUserState?.success) {
+      if(deleteUserState.users) setUsers(deleteUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+      toast({ title: 'Success', description: `User has been deleted.` });
+      setDeletingUser(null);
+    } else if (deleteUserState?.error) {
+      toast({ variant: 'destructive', title: 'Error Deleting User', description: deleteUserState.error });
+    }
+  }, [deleteUserState, toast]);
+  
+  useEffect(() => {
+    if (renewUserState?.success) {
+      if(renewUserState.users) setUsers(renewUserState.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+      toast({ title: 'Success', description: `User has been renewed.` });
+      setRenewingUser(null);
+    } else if (renewUserState?.error) {
+      toast({ variant: 'destructive', title: 'Error Renewing User', description: renewUserState.error });
+    }
+  }, [renewUserState, toast]);
 
-  const handleDeleteUser = (username: string) => {
-    startDeleteTransition(async () => {
-      const result = await deleteUser(username, managerUsername);
-      if (result.success && result.users) {
-        setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
-        toast({ title: 'Success', description: `User "${username}" has been deleted.` });
-      } else {
-        toast({ variant: 'destructive', title: 'Error Deleting User', description: result.error });
-      }
-    });
-  };
 
-  const handleRenewUser = (username: string) => {
-    startRenewTransition(async () => {
-      const result = await renewUser(username, managerUsername);
-      if (result.success && result.users) {
-        setUsers(result.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
-        toast({ title: 'Success', description: `User "${username}" has been renewed for 30 days.` });
-      } else {
-        toast({ variant: 'destructive', title: 'Error Renewing User', description: result.error });
-      }
-    });
-  }
-
-  const isPending = isAddingPending || isEditingPending || isDeleting || isRenewing;
+  const isPending = isAddingPending || isEditingPending || isDeletingPending || isRenewingPending;
 
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return users;
@@ -239,9 +237,13 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                              </div>
                           </TableCell>
                           <TableCell className="text-right space-x-1">
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending} onClick={() => handleRenewUser(user.username)}>
-                                {isRenewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                            </Button>
+                             <form action={renewUserAction} className='inline-flex'>
+                                <input type="hidden" name="username" value={user.username} />
+                                <input type="hidden" name="managerUsername" value={managerUsername} />
+                                <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
+                                    {isRenewingPending && renewingUser?.username === user.username ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                </Button>
+                             </form>
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
                                 <Pencil className="h-4 w-4" />
                             </Button>
@@ -252,18 +254,22 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                     </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteUser(user.username)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                    </AlertDialogAction>
-                                    </AlertDialogFooter>
+                                    <form action={deleteUserAction}>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <input type="hidden" name="username" value={user.username} />
+                                            <input type="hidden" name="managerUsername" value={managerUsername} />
+                                            <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </form>
                                 </AlertDialogContent>
                             </AlertDialog>
                           </TableCell>

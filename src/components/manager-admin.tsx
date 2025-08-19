@@ -76,21 +76,21 @@ const initialActionState = {
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
   const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
-  const [isDeleting, startDeleteTransition] = useTransition();
   const { toast } = useToast();
   const addFormRef = useRef<HTMLFormElement>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
 
   const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, initialActionState);
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
+  const [deleteManagerState, deleteManagerAction, isDeletingPending] = useActionState(deleteManager, initialActionState);
   
   useEffect(() => {
     setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
   }, [initialManagers]);
   
   useEffect(() => {
-    if (addManagerState && addManagerState.success && addManagerState.managers) {
-        setManagers(addManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+    if (addManagerState && addManagerState.success) {
+        if(addManagerState.managers) setManagers(addManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: addManagerState.message, className: 'bg-green-500 text-white' });
         addFormRef.current?.reset();
     } else if (addManagerState && addManagerState.error) {
@@ -99,8 +99,8 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    if (editManagerState && editManagerState.success && editManagerState.managers) {
-        setManagers(editManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+    if (editManagerState && editManagerState.success) {
+        if (editManagerState.managers) setManagers(editManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         toast({ title: 'Success', description: editManagerState.message });
         setEditingManager(null);
     } else if (editManagerState && editManagerState.error) {
@@ -108,19 +108,16 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     }
   }, [editManagerState, toast]);
 
-  const handleDeleteManager = (username: string) => {
-    startDeleteTransition(async () => {
-      const result = await deleteManager(username);
-      if (result.success && result.managers) {
-        setManagers(result.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: `Manager "${username}" has been deleted.` });
-      } else {
-        toast({ variant: 'destructive', title: 'Error Deleting Manager', description: result.error });
-      }
-    });
-  };
+  useEffect(() => {
+    if (deleteManagerState && deleteManagerState.success) {
+        if (deleteManagerState.managers) setManagers(deleteManagerState.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        toast({ title: 'Success', description: `Manager has been deleted.` });
+    } else if (deleteManagerState && deleteManagerState.error) {
+        toast({ variant: 'destructive', title: 'Error Deleting Manager', description: deleteManagerState.error });
+    }
+  }, [deleteManagerState, toast]);
 
-  const isPending = isAddingPending || isEditingPending || isDeleting;
+  const isPending = isAddingPending || isEditingPending || isDeletingPending;
 
   return (
     <div className="space-y-6">
@@ -222,19 +219,22 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                         </Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This will permanently delete the manager <strong className="font-mono">{manager.username}</strong> and revoke their access. This does not delete the VPN users they created.
-                                        </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteManager(manager.username)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                            Delete Manager
-                                        </AlertDialogAction>
-                                        </AlertDialogFooter>
+                                        <form action={deleteManagerAction}>
+                                            <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This will permanently delete the manager <strong className="font-mono">{manager.username}</strong> and revoke their access. This does not delete the VPN users they created.
+                                            </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <input type="hidden" name="username" value={manager.username} />
+                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                                    Delete Manager
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </form>
                                     </AlertDialogContent>
                                 </AlertDialog>
                               </>

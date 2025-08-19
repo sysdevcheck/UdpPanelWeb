@@ -193,7 +193,10 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
-export async function deleteUser(username: string, managerUsername: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
+export async function deleteUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string }> {
+    const username = formData.get('username') as string;
+    const managerUsername = formData.get('managerUsername') as string;
+    
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -267,7 +270,10 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
-export async function renewUser(username: string, managerUsername: string): Promise<{ success: boolean; users?: any[]; error?: string }> {
+export async function renewUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string }> {
+    const username = formData.get('username') as string;
+    const managerUsername = formData.get('managerUsername') as string;
+
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -472,7 +478,8 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
     }
 }
 
-export async function deleteManager(username: string): Promise<{ success: boolean; managers?: any[], error?: string }> {
+export async function deleteManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
+    const username = formData.get('username') as string;
     const loggedInUser = await getLoggedInUser();
     if (!loggedInUser) {
         return { success: false, error: "Authentication required." };
