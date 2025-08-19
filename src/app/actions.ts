@@ -292,16 +292,7 @@ export async function login(prevState: any, formData: FormData) {
         console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         await saveManagersFile([defaultManager]);
-        managers.push(defaultManager); // Add to the list to continue login flow
-        
-        // Authenticate with the newly created default user and redirect
-        if (username === defaultManager.username && password === defaultManager.password) {
-             cookies().set('session', defaultManager.username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-             redirect('/');
-        } else {
-            // This case happens if the user tries other credentials on the very first attempt
-             return { error: 'Invalid credentials. A default user (admin/password) was created.' };
-        }
+        managers = await readManagersFile(); // Re-read the file after creation
     }
     
     const manager = managers.find((m: any) => m.username === username && m.password === password);
@@ -310,6 +301,10 @@ export async function login(prevState: any, formData: FormData) {
       cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
       redirect('/');
     } else {
+      // Specific message if the default user was just created.
+      if (managers.length === 1 && managers[0].username === 'admin') {
+         return { error: 'Invalid credentials. A default user (admin/password) was created.' };
+      }
       return { error: 'Invalid credentials.' };
     }
   } catch (error: any) {
@@ -404,4 +399,6 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
+    
+
     
