@@ -292,6 +292,7 @@ export async function login(prevState: any, formData: FormData) {
         console.log('No managers file found. Creating a default admin user.');
         const defaultManager = { username: 'admin', password: 'password' };
         await saveManagersFile([defaultManager]);
+        managers.push(defaultManager); // Add to the list to continue login flow
         
         // Authenticate with the newly created default user and redirect
         if (username === defaultManager.username && password === defaultManager.password) {
@@ -403,6 +404,4 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
-    
-
     
