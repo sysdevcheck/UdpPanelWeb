@@ -255,18 +255,18 @@ export async function renewUser(username: string): Promise<{ success: boolean; u
 
 // --- Authentication and Manager Actions ---
 
-async function readManagersFile(): Promise<any[]> {
+export async function readManagersFile(): Promise<any[]> {
     try {
         await fs.access(managersConfigPath);
         const data = await fs.readFile(managersConfigPath, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        // This is not a warning, it's an expected case for the first run.
+        // File doesn't exist, which is a valid state before first run.
         return [];
     }
 }
 
-async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
+export async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
     try {
         const dir = path.dirname(managersConfigPath);
         await fs.mkdir(dir, { recursive: true });
@@ -279,7 +279,7 @@ async function saveManagersFile(managers: any[]): Promise<{success: boolean, err
 }
 
 /**
- * Attempts to log in a manager.
+ * Attempts to log in a manager. This function NO LONGER creates the default user.
  */
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get('username') as string;
@@ -290,21 +290,19 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   try {
-    let managers = await readManagersFile();
+    // This now assumes the managers file might not exist.
+    // The creation is handled by the main page load.
+    const managers = await readManagersFile();
     
-    // First run scenario: create default admin and ask user to try again.
+    // If no managers exist yet, even the default admin won't be there.
+    // The main page load will create it.
     if (managers.length === 0) {
-        console.log('No managers file found. Creating a default admin user.');
-        const defaultManager = { username: 'admin', password: 'password' };
-        const result = await saveManagersFile([defaultManager]);
-        
-        if (!result.success) {
-            // Return specific file write error if saving fails
-            return { error: result.error };
+        // Special case for the very first login attempt ever.
+        if (username === 'admin' && password === 'password') {
+            cookies().set('session', username, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+            redirect('/');
         }
-        
-        // Inform the user that the default account was created and they should log in.
-        return { error: 'A default user (admin/password) was created. Please sign in.' };
+        return { error: 'No managers configured. Try reloading the main page or contact support.' };
     }
     
     // Normal login scenario
@@ -414,6 +412,8 @@ export async function deleteManager(username: string): Promise<{ success: boolea
         return { success: false, error: error.message || 'Failed to delete manager.' };
     }
 }
+    
+
     
 
     

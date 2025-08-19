@@ -1,4 +1,4 @@
-import { readConfig, getLoggedInUser, logout, readManagers } from './actions';
+import { readConfig, getLoggedInUser, logout, readManagers, readManagersFile, saveManagersFile } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { Users, LogOut, UserCog } from 'lucide-react';
@@ -12,20 +12,36 @@ import {
 } from "@/components/ui/tabs";
 import { Card, CardContent } from '@/components/ui/card';
 
+async function initializeManagers() {
+    let managers = await readManagersFile();
+    if (managers.length === 0) {
+        console.log('No managers file found on page load. Creating a default admin user.');
+        const defaultManager = { username: 'admin', password: 'password' };
+        const result = await saveManagersFile([defaultManager]);
+        if (!result.success) {
+            // This will be caught by the error boundary
+            throw new Error(`CRITICAL: Could not create default manager file. ${result.error}`);
+        }
+        // Return the newly created list of managers
+        return [defaultManager];
+    }
+    return managers;
+}
+
+
 export default async function Home() {
   const loggedInUser = await getLoggedInUser();
   if (!loggedInUser) {
     redirect('/login');
   }
 
+  // Ensure manager file exists before proceeding
+  const allManagers = await initializeManagers();
+
   // Fetch initial data in parallel
-  const [initialVpnUsersData, managersData] = await Promise.all([
-    readConfig(),
-    readManagers()
-  ]);
+  const initialVpnUsersData = await readConfig();
 
   const vpnUsers = initialVpnUsersData.auth?.config || [];
-  const allManagers = managersData.managers || [];
   
   // The first manager in the list is the owner/superadmin
   const ownerUsername = allManagers.length > 0 ? allManagers[0].username : '';
@@ -81,3 +97,5 @@ export default async function Home() {
     </div>
   );
 }
+
+    
