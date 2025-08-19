@@ -304,8 +304,6 @@ export async function login(prevState: any, formData: FormData) {
   }
   
   if (managers.length === 0) {
-      // This case should be handled by the main page creating a default user.
-      // If we get here, it means something is wrong with the initial page load.
       return { error: 'No managers configured. Please load the main page first or contact support.' };
   }
 
@@ -341,13 +339,18 @@ export async function readManagers(): Promise<{ managers?: any[], error?: string
 
 export async function addManager(formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
     const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser || !await isOwner(loggedInUser)) {
+    if (!loggedInUser) {
+        return { success: false, error: "Authentication required." };
+    }
+    if(!await isOwner(loggedInUser)) {
         return { success: false, error: "Permission denied. Only the owner can add managers." };
     }
     
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
-    if (!username || !password) return { success: false, error: "Username and password are required." };
+    if (!username || !password) {
+        return { success: false, error: "Username and password are required." };
+    }
 
     const managers = await readManagersFile();
     if (managers.some(m => m.username === username)) {
@@ -366,7 +369,10 @@ export async function addManager(formData: FormData): Promise<{ success: boolean
 
 export async function deleteManager(username: string): Promise<{ success: boolean; managers?: any[], error?: string }> {
     const loggedInUser = await getLoggedInUser();
-    if (!loggedInUser || !await isOwner(loggedInUser)) {
+    if (!loggedInUser) {
+        return { success: false, error: "Authentication required." };
+    }
+    if(!await isOwner(loggedInUser)) {
         return { success: false, error: "Permission denied. Only the owner can delete managers." };
     }
 
@@ -389,5 +395,3 @@ export async function deleteManager(username: string): Promise<{ success: boolea
       return { success: false, error: result.error, managers: updatedManagers };
     }
 }
-
-    
