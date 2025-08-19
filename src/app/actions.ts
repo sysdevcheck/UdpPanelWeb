@@ -358,7 +358,7 @@ export async function saveManagersFile(managers: any[]): Promise<{success: boole
  * Retrieves the currently logged-in user from the session cookie.
  */
 export async function getLoggedInUser() {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   return cookieStore.get('session')?.value;
 }
 
