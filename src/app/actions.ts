@@ -37,13 +37,11 @@ async function ensureDirExists() {
     try {
         await fs.mkdir(basePath, { recursive: true });
     } catch (error: any) {
-        // If the error is that the directory already exists, we can ignore it.
-        if (error.code === 'EEXIST') {
-            return;
+        if (error.code !== 'EEXIST') {
+            console.error(`CRITICAL: Could not create directory at ${basePath}:`, error);
+            // This is a critical failure, we should not proceed.
+            throw new Error(`Could not create base directory. Please check permissions. Path: ${basePath}`);
         }
-        console.error(`CRITICAL: Could not create directory at ${basePath}:`, error);
-        // This is a critical failure, we should not proceed.
-        throw new Error(`Could not create base directory. Please check permissions. Path: ${basePath}`);
     }
 }
 
@@ -66,7 +64,7 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
       if (error) {
         const errorMessage = `Error restarting zivpn service: ${stderr || error.message}`;
         console.error(errorMessage);
-        resolve({ success: false, error: `Failed to restart VPN service: ${stderr || error.message}` });
+        resolve({ success: false, error: `Failed to restart VPN service. Is 'sudo systemctl' configured correctly in sudoers? Details: ${stderr || error.message}` });
         return;
       }
       if (stderr) {
@@ -85,16 +83,14 @@ async function readRawConfig(): Promise<any> {
     await ensureDirExists();
     try {
         const data = await fs.readFile(configPath, 'utf8');
-        // Handle case where file is empty or just whitespace
         return data.trim() ? JSON.parse(data) : { ...defaultConfig };
     } catch (error: any) {
-        if (error.code === 'ENOENT') { // File does not exist
+        if (error.code === 'ENOENT') {
             console.log(`Config file not found at ${configPath}. Creating default config.`);
             await saveConfig({ ...defaultConfig });
             return { ...defaultConfig };
         }
         console.error(`CRITICAL: Error reading config file at ${configPath}:`, error);
-        // For other errors (like permission errors), we throw to avoid returning corrupt data.
         throw new Error(`Could not read config file: ${error.message}`);
     }
 }
@@ -109,7 +105,7 @@ async function saveConfig(data: any): Promise<{ success: boolean; error?: string
     return { success: true };
   } catch (error: any) {
     console.error(`CRITICAL: Error writing config file at ${configPath}:`, error);
-    return { success: false, error: `Failed to write to ${configPath}. Check permissions. The user running the app must own this directory.` };
+    return { success: false, error: `Failed to write config.json. Check permissions for ${configPath}. Details: ${error.message}` };
   }
 }
 
@@ -154,7 +150,7 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     const managerUsername = await getLoggedInUser();
 
     if (!managerUsername) {
-        return { success: false, error: "Authentication required." };
+        return { success: false, error: "Authentication required. Please log in again." };
     }
     if (!username) {
         return { success: false, error: "Username cannot be empty." };
@@ -315,7 +311,6 @@ export async function readManagersFile(): Promise<any[]> {
         const data = await fs.readFile(managersConfigPath, 'utf8');
         const managers = data.trim() ? JSON.parse(data) : [];
         
-        // Clean up expired managers, except the owner (first one)
         const now = new Date();
         if (managers.length > 0) {
             const owner = managers[0];
@@ -331,10 +326,9 @@ export async function readManagersFile(): Promise<any[]> {
         }
         return managers;
     } catch (error: any) {
-        if (error.code === 'ENOENT') { // File does not exist
-            return []; // Return empty array, which is a valid state
+        if (error.code === 'ENOENT') {
+            return []; 
         }
-        // For other errors, we rethrow because it's an unexpected state.
         console.error(`CRITICAL: Could not read managers file:`, error);
         throw new Error(`Failed to read managers file: ${error.message}`);
     }
@@ -350,7 +344,7 @@ export async function saveManagersFile(managers: any[]): Promise<{success: boole
         return { success: true };
     } catch (error: any) {
         console.error(`CRITICAL: Could not write to managers file:`, error);
-        return { success: false, error: `Failed to write to ${managersConfigPath}. The user running this app MUST be the owner of this directory.` };
+        return { success: false, error: `Failed to write managers.json. Check permissions for ${managersConfigPath}. Details: ${error.message}` };
     }
 }
 
@@ -392,12 +386,10 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
           username: 'admin', 
           password: 'password',
           createdAt: now.toISOString(),
-          // Owner does not expire, so no expiresAt field
       };
       const result = await saveManagersFile([defaultManager]);
       
       if (!result.success) {
-          // This is a critical failure, e.g., can't write to the filesystem.
           return { error: result.error };
       }
       managers = [defaultManager];
@@ -406,7 +398,7 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
   const manager = managers.find((m) => m.username === username && m.password === password);
 
   if (manager) {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     cookieStore.set('session', username, { httpOnly: true, secure: isProduction });
     redirect('/');
   } else {
@@ -531,14 +523,12 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
         return { success: false, error: `Manager "${oldUsername}" not found.` };
     }
 
-    // Check if new username already exists (and it's not the same manager)
     if (newUsername !== oldUsername && managers.some(m => m.username === newUsername)) {
         return { success: false, error: `Manager username "${newUsername}" already exists.` };
     }
     
-    // Update fields
     managers[managerIndex].username = newUsername;
-    if (newPassword) { // Only update password if a new one is provided
+    if (newPassword) { 
         managers[managerIndex].password = newPassword;
     }
 
@@ -549,3 +539,5 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
 
     return { success: true, managers, message: `Manager "${newUsername}" has been updated.` };
 }
+
+    
