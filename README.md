@@ -182,6 +182,8 @@ pm2 save
 
 **¡Instalación completa! 🎉** Ahora deberías poder acceder a tu panel visitando `http://[IP_DE_TU_VPS]:9002`.
 
+> **Nota sobre los puertos:** La aplicación se ejecuta en el puerto **9002**. Este puerto solo es para acceso directo o para que el reverse proxy (Nginx) se comunique con él. Para un acceso público, sigue el siguiente paso para configurar un subdominio.
+
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
@@ -215,6 +217,8 @@ server {
     server_name panel.tudominio.com;
 
     location / {
+        # La magia ocurre aquí:
+        # Nginx redirige el tráfico a la aplicación Node.js que corre en el puerto 9002.
         proxy_pass http://localhost:9002;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -339,7 +343,7 @@ Esto significa que la aplicación no tiene permisos para leer o escribir en el d
     Fíjate en la columna `user`.
 2.  **Asigna la propiedad del directorio a ese usuario.**
     ```bash
-    # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list'
+    # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list' (normalmente 'root')
     sudo chown -R usuario_correcto:usuario_correcto /etc/zivpn
     ```
     Luego, reinicia la aplicación: `pm2 restart zivpn-panel`.
@@ -352,7 +356,7 @@ Si los logs de PM2 muestran un error relacionado con `sudo` o `systemctl`, el pr
     ```bash
     sudo visudo
     ```
-2.  **Comprueba la línea que añadiste.** Asegúrate de que no tiene errores de tipeo y que usa el nombre de usuario correcto (el mismo que aparece en `pm2 list`).
+2.  **Comprueba la línea que añadiste.** Asegúrate de que no tiene errores de tipeo y que usa el nombre de usuario correcto (el mismo que aparece en `pm2 list`, normalmente `root`).
     ```
     # La línea debe ser exactamente así (cambiando 'root' si usas otro usuario)
     root ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
