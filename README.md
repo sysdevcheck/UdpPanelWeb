@@ -1,26 +1,29 @@
-# Panel de Gestión de Usuarios para ZiVPN - Multi-Manager
 
-Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar usuarios de un servicio ZiVPN. En lugar de editar manualmente el archivo de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios.
+# 🛡️ Panel de Gestión para ZiVPN - Multi-Manager
 
-## Características
+Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core). En lugar de editar manualmente archivos de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios de forma aislada.
 
-- **Sistema de Login**: Los administradores (managers) deben iniciar sesión para acceder al panel.
-- **Gestión de Usuarios por Propietario**: Cada manager solo puede ver, agregar, editar, eliminar y renovar los usuarios que él mismo ha creado.
-- **Expiración Automática**: Los usuarios se crean con una vida útil de 30 días. Los usuarios vencidos se eliminan automáticamente del archivo de configuración.
-- **Renovación de Usuarios**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
-- **Indicadores de Estado**: Los usuarios se etiquetan visualmente como "Activo", "Por Vencer" (dentro de 7 días) o "Vencido".
-- **Reinicio Automático del Servicio**: Después de cada acción (agregar, editar, eliminar, renovar), la aplicación reinicia automáticamente el servicio `zivpn` para aplicar los cambios de inmediato.
-- **Filtrado y Paginación**: Filtra y navega fácilmente por la lista de usuarios.
-- **Gestión de Managers (Superadmin)**: El primer usuario (dueño) puede crear y eliminar otras cuentas de manager directamente desde el panel.
+## ✨ Características Principales
 
-## Cómo Funciona
+- **🔑 Sistema de Login**: Los administradores (managers) deben iniciar sesión para acceder al panel.
+- **👤 Gestión de Usuarios por Propietario**: Cada manager solo puede ver, agregar, editar, eliminar y renovar los usuarios que él mismo ha creado.
+- **🗓️ Expiración Automática**: Los usuarios se crean con una vida útil de 30 días. Los usuarios vencidos se eliminan automáticamente del archivo de configuración para mantener el sistema limpio.
+- **🔄 Renovación Fácil**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
+- **🚦 Indicadores de Estado**: Los usuarios se etiquetan visualmente como **Activo**, **Por Vencer** (dentro de 7 días) o **Vencido**.
+- **⚡ Reinicio Automático del Servicio**: Después de cada acción que afecte a los usuarios activos (agregar, editar, eliminar), la aplicación reinicia automáticamente el servicio `zivpn` para aplicar los cambios de inmediato.
+- **🔎 Filtrado y Paginación**: Filtra y navega fácilmente por la lista de usuarios.
+- **👑 Gestión de Managers (Superadmin)**: El primer usuario (dueño) puede crear y eliminar otras cuentas de manager directamente desde el panel.
+- **📱 Interfaz Responsiva**: Totalmente funcional en dispositivos móviles y de escritorio.
+
+## ⚙️ Cómo Funciona
 
 La aplicación interactúa con dos archivos de configuración principales en el servidor donde se despliega.
 
-**Importante:** Estos archivos **no están en el proyecto**. La aplicación los crea y gestiona por ti directamente en el directorio `/etc/zivpn/` de tu VPS. No necesitas crearlos manualmente.
+> **Importante:** Estos archivos **no están en el proyecto**. La aplicación los crea y gestiona por ti directamente en el directorio `/etc/zivpn/` de tu VPS. No necesitas crearlos manualmente.
 
-1.  `/etc/zivpn/managers.json`: Almacena las credenciales (usuario y contraseña) de los managers que pueden iniciar sesión en este panel. **La aplicación gestiona este archivo automáticamente.**
-2.  `/etc/zivpn/config.json`: Almacena la configuración de los usuarios finales de la VPN. La aplicación gestiona este archivo automáticamente.
+1.  **`/etc/zivpn/managers.json`**: Almacena las credenciales (usuario y contraseña) de los managers que pueden iniciar sesión en este panel. La aplicación gestiona este archivo automáticamente.
+2.  **`/etc/zivpn/users-metadata.json`**: Almacena los metadatos de los usuarios VPN (quién lo creó, cuándo expira, etc.).
+3.  **`/etc/zivpn/config.json`**: Almacena la configuración de los usuarios finales de la VPN en un formato simple que `zivpn` entiende. La aplicación mantiene este archivo sincronizado.
 
 ### Estructura de `managers.json`
 
@@ -34,37 +37,42 @@ El primer manager en este archivo es considerado el "dueño" o superadministrado
 [
   {
     "username": "admin",
-    "password": "password"
+    "password": "password",
+    "createdAt": "2023-10-27T10:00:00.000Z"
   },
   {
     "username": "otro_manager",
-    "password": "otra_contraseña_fuerte"
+    "password": "otra_contraseña_fuerte",
+    "createdAt": "2023-10-28T11:00:00.000Z",
+    "expiresAt": "2023-11-27T11:00:00.000Z"
   }
 ]
 ```
 
-### Estructura de los Usuarios en `config.json`
+### Estructura de los Usuarios en `users-metadata.json`
 
 Cada usuario de la VPN tiene un campo `createdBy` para asociarlo a un manager.
 
 ```json
-{
-  "username": "testuser",
-  "createdAt": "2023-10-27T10:00:00.000Z",
-  "expiresAt": "2023-11-26T10:00:00.000Z",
-  "createdBy": "manager1"
-}
+[
+  {
+    "username": "testuser",
+    "createdAt": "2023-10-27T10:00:00.000Z",
+    "expiresAt": "2023-11-26T10:00:00.000Z",
+    "createdBy": "admin"
+  }
+]
 ```
 
-## Instalación y Despliegue en tu VPS (Ubuntu)
+## 🚀 Instalación y Despliegue en tu VPS (Ubuntu)
 
 Sigue estos pasos en la terminal de tu servidor VPS para instalar y ejecutar el panel.
 
 ### 1. Prerrequisitos
 
-Primero, actualiza tu sistema e instala las herramientas necesarias.
+> **Nota Importante:** Este panel sirve para **gestionar una instalación existente de `zivpn`**. Debes asegurarte de que `zivpn` ya esté instalado y funcionando como un servicio `systemd` en tu servidor.
 
-**Nota Importante:** Este panel sirve para **gestionar una instalación existente de `zivpn`**. Debes asegurarte de que `zivpn` ya esté instalado y funcionando como un servicio `systemd` en tu servidor.
+Primero, actualiza tu sistema e instala las herramientas necesarias.
 
 ```bash
 # Actualiza la lista de paquetes de tu servidor
@@ -83,7 +91,7 @@ node -v
 # Si no lo tienes o la versión es antigua, instala nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
-# Carga nvm en tu sesión actual de terminal
+# Carga nvm en tu sesión actual de terminal (o cierra y abre la terminal)
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
@@ -91,7 +99,6 @@ export NVM_DIR="$HOME/.nvm"
 nvm install 20
 nvm use 20
 ```
-**Importante:** Después de instalar `nvm`, cierra y vuelve a abrir tu terminal SSH para asegurarte de que `nvm` esté disponible.
 
 ### 2. Clona el Proyecto
 
@@ -108,7 +115,7 @@ cd UdpPanelWeb
 npm install
 ```
 
-### 4. Configura los Permisos de Archivos (Paso Crítico)
+### 4. Configura los Permisos (Paso Crítico ⚠️)
 
 La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`. El usuario que ejecute la aplicación (`pm2` lo hará por ti) debe ser el propietario de este directorio.
 
@@ -122,7 +129,7 @@ sudo mkdir -p /etc/zivpn
 sudo chown -R $USER:$USER /etc/zivpn
 ```
 
-### 5. Permisos de Sudo para Reiniciar el Servicio (Paso Crítico)
+### 5. Permisos de `sudo` para Reiniciar el Servicio (Paso Crítico ⚠️)
 
 Para que la aplicación pueda reiniciar `zivpn`, el usuario que ejecuta la aplicación necesita permisos para ejecutar `systemctl` sin contraseña.
 
@@ -130,15 +137,15 @@ Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usaste en el paso anterior y con el que te conectas por SSH, ej. `ubuntu`).
+Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usaste en el paso anterior, ej. `ubuntu`).
 
 ```
 # Reemplaza 'tu_usuario' por el nombre de usuario de tu VPS (ej. ubuntu)
 tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 ```
-Para guardar y salir en `visudo` (que usa un editor como `nano` o `vim`):
-*   Si es `nano`: `Ctrl+X`, luego `Y`, luego `Enter`.
-*   Si es `vim`: presiona `Esc`, escribe `:wq` y presiona `Enter`.
+> **¿Cómo guardar y salir en `visudo`?**
+> *   Si es `nano`: `Ctrl+X`, luego `Y`, luego `Enter`.
+> *   Si es `vim`: presiona `Esc`, escribe `:wq` y presiona `Enter`.
 
 ### 6. Construye y Ejecuta la Aplicación
 
@@ -162,20 +169,20 @@ pm2 start npm --name "zivpn-panel" -- start
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
 pm2 startup
 
-# El comando anterior te dará un comando para copiar y pegar. Cópialo y pégalo como root (con sudo).
-# Generalmente se ve así:
-# sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin /home/tu_usuario/.nvm/versions/node/v20.x.x/lib/node_modules/pm2/bin/pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
+# El comando anterior te dará un comando para copiar y pegar. Cópialo y pégalo.
+# Generalmente se ve así (¡el tuyo puede ser diferente!):
+# sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
 
 # Guarda la configuración actual de pm2
 pm2 save
 ```
 
-**¡Instalación completa!** Ahora deberías poder acceder a tu panel visitando `http://[IP_DE_TU_VPS]:9002`.
-El login por defecto será:
+**¡Instalación completa! 🎉** Ahora deberías poder acceder a tu panel visitando `http://[IP_DE_TU_VPS]:9002`.
+
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
-## Opcional y Recomendado: Usar un Subdominio con HTTPS
+## 🔒 Opcional y Recomendado: Usar un Subdominio con HTTPS
 
 Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), puedes usar **Nginx** como reverse proxy y **Let's Encrypt** para obtener un certificado SSL gratuito.
 
@@ -186,13 +193,12 @@ Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), pu
 
 ### Paso 1: Instalar Nginx
 
-Si aún no lo tienes, instálalo:
 ```bash
 sudo apt update
 sudo apt install nginx -y
 ```
 
-### Paso 2: Crear el Archivo de Configuración de Nginx
+### Paso 2: Crear Configuración de Nginx para el Panel
 
 Crea un nuevo archivo de configuración para tu panel:
 ```bash
@@ -203,8 +209,6 @@ Pega el siguiente contenido en el archivo. **Recuerda cambiar `panel.tudominio.c
 ```nginx
 server {
     listen 80;
-    listen [::]:80;
-
     server_name panel.tudominio.com;
 
     location / {
@@ -220,51 +224,37 @@ server {
     }
 }
 ```
-Guarda y cierra el archivo (`Ctrl+X`, `Y`, `Enter` en `nano`).
 
-### Paso 3: Activar la Configuración
-
-Crea un enlace simbólico desde `sites-available` a `sites-enabled` para que Nginx cargue tu configuración:
+### Paso 3: Activar la Configuración y Reiniciar Nginx
 
 ```bash
+# Crea un enlace simbólico para activar la configuración
 sudo ln -s /etc/nginx/sites-available/zivpn-panel.conf /etc/nginx/sites-enabled/
-```
 
-Verifica que la sintaxis de Nginx es correcta:
-```bash
+# Verifica que la sintaxis de Nginx es correcta
 sudo nginx -t
-```
-Si todo está bien, verás un mensaje de "syntax is ok" y "test is successful".
 
-Reinicia Nginx para aplicar los cambios:
-```bash
+# Reinicia Nginx para aplicar los cambios
 sudo systemctl restart nginx
 ```
-En este punto, ya deberías poder acceder a tu panel a través de `http://panel.tudominio.com`.
+Ahora deberías poder acceder a tu panel a través de `http://panel.tudominio.com`.
 
-### Paso 4: Configurar HTTPS con Let's Encrypt
+### Paso 4: Configurar HTTPS con Let's Encrypt (Certbot)
 
-Para añadir la capa de seguridad SSL:
+```bash
+# Instala Certbot y el plugin de Nginx
+sudo apt install certbot python3-certbot-nginx -y
 
-1.  **Instala Certbot**, la herramienta de Let's Encrypt.
-    ```bash
-    sudo apt install certbot python3-certbot-nginx -y
-    ```
-2.  **Obtén y configura el certificado SSL.** Certbot leerá tu archivo de configuración de Nginx y lo ajustará automáticamente para usar HTTPS.
-    ```bash
-    # Reemplaza panel.tudominio.com por tu subdominio
-    sudo certbot --nginx -d panel.tudominio.com
-    ```
-    Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los términos de servicio. Cuando te pregunte sobre la redirección de HTTP a HTTPS, es muy recomendable elegir la opción de redirigir.
+# Obtén y configura el certificado SSL (reemplaza con tu subdominio)
+sudo certbot --nginx -d panel.tudominio.com
+```
+Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los términos de servicio. Cuando te pregunte sobre la redirección de HTTP a HTTPS, es muy recomendable elegir la opción de redirigir.
 
-¡Listo! Certbot configurará la renovación automática. Ahora podrás acceder de forma segura a tu panel en `https://panel.tudominio.com`.
+¡Listo! Ahora puedes acceder de forma segura a `https://panel.tudominio.com`.
 
+## 🛠️ Mantenimiento y Actualizaciones
 
-## Mantenimiento y Actualizaciones
-
-### Cómo Subir Cambios a GitHub
-
-Cuando se realicen cambios en el código fuente en el entorno de desarrollo, sigue estos pasos para subirlos a tu repositorio de GitHub.
+### Cómo Subir Cambios a GitHub (desde tu PC de desarrollo)
 
 1.  **Añade todos los archivos modificados:**
     ```bash
@@ -281,64 +271,75 @@ Cuando se realicen cambios en el código fuente en el entorno de desarrollo, sig
 
 ### Cómo Actualizar la Aplicación en el VPS
 
-Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos para actualizar la aplicación en producción.
+Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
 
-1.  **Ve a la carpeta del proyecto:**
-    ```bash
-    cd UdpPanelWeb
-    ```
-2.  **Descarga la última versión desde GitHub:**
-    ```bash
-    git pull origin main
-    ```
-3.  **Instala las dependencias (importante si se añadieron nuevas librerías):**
-    ```bash
-    npm install
-    ```
-4.  **Reconstruye la aplicación con los nuevos cambios:**
-    ```bash
-    npm run build
-    ```
-5.  **Reinicia la aplicación con PM2 para que los cambios surtan efecto:**
-    ```bash
-    pm2 restart zivpn-panel
-    ```
-
-### Resolución de Problemas y Comandos Útiles
-
-**Verificar con qué usuario está corriendo la aplicación:**
-Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers` y que es dueño de `/etc/zivpn`!
 ```bash
-pm2 list
-```
+# 1. Ve a la carpeta del proyecto
+cd ~/UdpPanelWeb # o la ruta donde lo clonaste
 
-**Ver los logs del panel en tiempo real (muy útil para ver errores):**
-```bash
-pm2 logs zivpn-panel
-```
+# 2. Descarga la última versión desde GitHub
+git pull origin main
 
-**Reiniciar el panel si has hecho cambios en el código (después de un `git pull`):**
-```bash
-# Dentro de la carpeta UdpPanelWeb
+# 3. Instala las dependencias (importante si se añadieron nuevas librerías)
+npm install
+
+# 4. Reconstruye la aplicación con los nuevos cambios
+npm run build
+
+# 5. Reinicia la aplicación con PM2 para que los cambios surtan efecto
 pm2 restart zivpn-panel
 ```
 
-**Si tienes procesos duplicados en PM2:**
-A veces, al solucionar problemas, puedes iniciar el mismo proceso varias veces. Para limpiar:
-```bash
-# Detiene todos los procesos con ese nombre
-pm2 stop zivpn-panel
-# Elimina todos los procesos detenidos con ese nombre
-pm2 delete zivpn-panel
-# Guarda la lista de procesos ahora limpia
-pm2 save
-# Inicia el proceso de nuevo, una sola vez
-pm2 start npm --name "zivpn-panel" -- start
-# Guarda la configuración final
-pm2 save
-```
+## 🚑 Resolución de Problemas
 
-**Verificar el estado del servicio de la VPN (zivpn):**
-```bash
-sudo systemctl status zivpn
-```
+Aquí tienes algunos comandos útiles para diagnosticar y solucionar problemas comunes.
+
+- **Ver los logs del panel en tiempo real (muy útil para ver errores):**
+  ```bash
+  pm2 logs zivpn-panel
+  ```
+
+- **Verificar con qué usuario está corriendo la aplicación:**
+  > Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers` y que es dueño de `/etc/zivpn`!
+  ```bash
+  pm2 list
+  ```
+
+- **Verificar el estado del servicio de la VPN (`zivpn`):**
+  ```bash
+  sudo systemctl status zivpn
+  ```
+
+- **Reiniciar el panel manualmente:**
+  ```bash
+  pm2 restart zivpn-panel
+  ```
+
+- **Si tienes procesos duplicados en PM2:**
+  > A veces, al solucionar problemas, puedes iniciar el mismo proceso varias veces. Para limpiar:
+  ```bash
+  # Detiene todos los procesos con ese nombre
+  pm2 stop zivpn-panel
+  # Elimina todos los procesos detenidos con ese nombre
+  pm2 delete zivpn-panel
+  # Guarda la lista de procesos ahora limpia
+  pm2 save
+  # Inicia el proceso de nuevo, una sola vez
+  pm2 start npm --name "zivpn-panel" -- start
+  # Guarda la configuración final
+  pm2 save
+  ```
+- **Error de Permisos al guardar archivos:**
+  > Si los logs (`pm2 logs zivpn-panel`) muestran errores como `EACCES: permission denied` al intentar escribir en `/etc/zivpn/`, significa que los permisos del directorio no son correctos.
+  >
+  > **Solución**: Asegúrate de que el usuario que ejecuta `pm2` (verifícalo con `pm2 list`) es el dueño del directorio.
+  > ```bash
+  > # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list'
+  > sudo chown -R usuario_correcto:usuario_correcto /etc/zivpn
+  > ```
+
+- **Error de `sudo` al reiniciar el servicio:**
+  > Si la aplicación no puede reiniciar `zivpn` y los logs muestran un error relacionado con `sudo` o `systemctl`, el problema está en la configuración de `sudoers`.
+  >
+  > **Solución**: Abre `sudo visudo` y comprueba que la línea que añadiste es correcta, no tiene errores de tipeo y usa el nombre de usuario adecuado.
+  > `tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn`
