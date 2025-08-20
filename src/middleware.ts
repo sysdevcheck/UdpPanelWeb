@@ -3,15 +3,21 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const session = request.cookies.get('session')?.value;
+  const { pathname } = request.nextUrl;
 
-  // If user is not logged in, redirect to login page, except for the login page itself
-  if (!session && request.nextUrl.pathname !== '/login') {
-    return NextResponse.redirect(new URL('/login', request.url));
+  // Allow access to the login page
+  if (pathname === '/login') {
+    // If logged in, redirect to home
+    if (session) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // If not logged in, allow access
+    return NextResponse.next();
   }
 
-  // If user is logged in, redirect away from login page to the dashboard
-  if (session && request.nextUrl.pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+  // For all other pages, require a session
+  if (!session) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
