@@ -421,44 +421,63 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
 
-  if (!username || !password) {
-    return { error: 'Username and password are required.' };
-  }
+  let managerFound = false;
+  let errorState: { error?: string } = {};
 
-  let managers = await readManagersFile();
-  
-  if (managers.length === 0) {
-      console.log('No managers found. Creating default admin user.');
-      const now = new Date();
-      const defaultManager = { 
-          username: 'admin', 
-          password: 'password',
-          createdAt: now.toISOString(),
-      };
-      const result = await saveManagersFile([defaultManager]);
-      
-      if (!result.success) {
-          return { error: `Initial setup failed. Could not create managers file. Please check server permissions for the '/etc/zivpn' directory. Details: ${result.error}` };
+  try {
+      if (!username || !password) {
+        return { error: 'Username and password are required.' };
       }
-      managers = [defaultManager];
+
+      let managers = await readManagersFile();
+      
+      if (managers.length === 0) {
+          console.log('No managers found. Creating default admin user.');
+          const now = new Date();
+          const defaultManager = { 
+              username: 'admin', 
+              password: 'password',
+              createdAt: now.toISOString(),
+          };
+          const result = await saveManagersFile([defaultManager]);
+          
+          if (!result.success) {
+              return { error: `Initial setup failed. Could not create managers file. Please check server permissions for the '/etc/zivpn' directory. Details: ${result.error}` };
+          }
+          managers = [defaultManager];
+      }
+
+      const manager = managers.find((m) => m.username === username && m.password === password);
+      
+      if (manager) {
+        managerFound = true;
+        const cookieStore = cookies();
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        cookieStore.set('session', username, { 
+            httpOnly: true, 
+            secure: isProduction,
+            expires: Date.now() + thirtyDays,
+            sameSite: 'lax',
+            path: '/',
+        });
+      } else {
+        errorState = { error: 'Invalid username or password.' };
+      }
+  } catch (e: any) {
+    console.error("Error during login process:", e);
+    // Avoid re-throwing NEXT_REDIRECT
+    if (e.digest?.startsWith('NEXT_REDIRECT')) {
+      throw e;
+    }
+    errorState = { error: 'A server error occurred during login. Please check the logs.' }
   }
 
-  const manager = managers.find((m) => m.username === username && m.password === password);
-
-  if (manager) {
-    const cookieStore = cookies();
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    cookieStore.set('session', username, { 
-        httpOnly: true, 
-        secure: isProduction,
-        expires: Date.now() + thirtyDays,
-        sameSite: 'lax',
-        path: '/',
-    });
+  // The redirect must happen outside of the try/catch block
+  if (managerFound) {
     redirect('/');
-  } else {
-    return { error: 'Invalid username or password.' };
   }
+
+  return errorState;
 }
 
 // ====================================================================
