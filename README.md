@@ -27,7 +27,7 @@ La aplicación interactúa con dos archivos de configuración principales en el 
 
 ### Estructura de `managers.json`
 
-Este archivo es un array de objetos. **No necesitas crearlo manually**. La primera vez que accedas al panel, se creará automáticamente un usuario por defecto:
+Este archivo es un array de objetos. **No necesitas crearlo manualmente**. La primera vez que accedas al panel, se creará automáticamente un usuario por defecto:
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
@@ -131,17 +131,17 @@ sudo chown -R $USER:$USER /etc/zivpn
 
 ### 5. Permisos de `sudo` para Reiniciar el Servicio (Paso Crítico ⚠️)
 
-Para que la aplicación pueda reiniciar `zivpn`, el usuario que ejecuta la aplicación necesita permisos para ejecutar `systemctl` sin contraseña.
+Para que la aplicación pueda reiniciar `zivpn`, el usuario que la ejecuta necesita permisos para usar `systemctl` sin contraseña. Dado que la aplicación se ejecuta como `root` a través de `pm2`, la configuración debe aplicarse a `root`.
 
 Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
 sudo visudo
 ```
-Agrega la siguiente línea al **final del archivo**. Es muy importante que reemplaces `tu_usuario` por el nombre de usuario con el que vas a ejecutar la aplicación (el mismo que usaste en el paso anterior, ej. `ubuntu`).
+Agrega la siguiente línea al **final del archivo**:
 
 ```
-# Reemplaza 'tu_usuario' por el nombre de usuario de tu VPS (ej. ubuntu)
-tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
+# Permite al usuario root reiniciar el servicio zivpn sin pedir contraseña.
+root ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 ```
 > **¿Cómo guardar y salir en `visudo`?**
 > *   Si es `nano`: `Ctrl+X`, luego `Y`, luego `Enter`.
@@ -271,7 +271,7 @@ Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los térm
 
 ### Cómo Actualizar la Aplicación en el VPS
 
-Once que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
+Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
 
 ```bash
 # 1. Ve a la carpeta del proyecto
@@ -351,8 +351,8 @@ Si los logs de PM2 muestran un error relacionado con `sudo` o `systemctl`, el pr
     ```
 2.  **Comprueba la línea que añadiste.** Asegúrate de que no tiene errores de tipeo y que usa el nombre de usuario correcto (el mismo que aparece en `pm2 list`).
     ```
-    # La línea debe ser exactamente así (cambiando 'tu_usuario')
-    tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
+    # La línea debe ser exactamente así (cambiando 'root' si usas otro usuario)
+    root ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
     ```
 
 ### Comandos Generales de PM2
