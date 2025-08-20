@@ -117,16 +117,14 @@ npm install
 
 ### 4. Configura los Permisos (Paso Crítico ⚠️)
 
-La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`. El usuario que ejecute la aplicación (`pm2` lo hará por ti) debe ser el propietario de este directorio.
+La aplicación necesita permisos para escribir en el directorio `/etc/zivpn/`. El usuario que ejecute la aplicación (`pm2` lo hará por ti, normalmente como `root`) debe ser el propietario de este directorio.
 
 ```bash
 # Crea el directorio si no existe.
 sudo mkdir -p /etc/zivpn
 
-# Asigna la propiedad al usuario que usarás para ejecutar la aplicación.
-# Reemplaza 'tu_usuario' con tu nombre de usuario actual en el VPS (ej. ubuntu, root, etc.)
-# Usar la variable de entorno $USER lo hará automáticamente por el usuario actual.
-sudo chown -R $USER:$USER /etc/zivpn
+# Asigna la propiedad al usuario que usará pm2 (normalmente root).
+sudo chown -R root:root /etc/zivpn
 ```
 
 ### 5. Permisos de `sudo` para Reiniciar el Servicio (Paso Crítico ⚠️)
@@ -158,20 +156,25 @@ npm run build
 
 Para que el panel permanezca en línea incluso si cierras la terminal o reinicias el servidor, usa un gestor de procesos como `pm2`.
 
-```bash
-# Instala pm2 globalmente
-sudo npm install -g pm2
+> **⚠️ Error Común: `sudo: npm: command not found`**
+> Si al ejecutar el siguiente comando recibes este error, es porque `sudo` no sabe dónde está el `npm` instalado por `nvm`. La solución es usar la ruta completa que `nvm` proporciona.
 
+```bash
+# Instala pm2 globalmente (forma correcta para nvm)
+# Esto le pasa la ruta actual de Node a sudo.
+sudo env "PATH=$PATH" npm install -g pm2
+```
+
+Ahora, con `pm2` instalado, inicia la aplicación:
+
+```bash
 # Dentro de la carpeta del proyecto (UdpPanelWeb), inicia la aplicación con pm2
-# Asegúrate de ejecutar este comando como el usuario que configuraste en los permisos.
+# Ejecútalo como tu usuario normal, pm2 se encargará de los permisos.
 pm2 start npm --name "zivpn-panel" -- start
 
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
+# PM2 te dará un comando para copiar y pegar, ¡hazlo!
 pm2 startup
-
-# El comando anterior te dará un comando para copiar y pegar. Cópialo y pégalo.
-# Generalmente se ve así (¡el tuyo puede ser diferente!):
-# sudo env PATH=$PATH:/home/tu_usuario/.nvm/versions/node/v20.x.x/bin pm2 startup systemd -u tu_usuario --hp /home/tu_usuario
 
 # Guarda la configuración actual de pm2
 pm2 save
