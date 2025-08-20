@@ -16,7 +16,7 @@ const basePath = isProduction ? '/etc/zivpn' : path.join(process.cwd(), 'src', '
 
 const configPath = path.join(basePath, 'config.json');
 const managersConfigPath = path.join(basePath, 'managers.json');
-
+const usersMetadataPath = path.join(basePath, 'users-metadata.json');
 
 const defaultConfig = {
   "listen": ":5667",
@@ -31,7 +31,6 @@ const defaultConfig = {
 
 /**
  * Ensures that the directory for config files exists.
- * This is especially important for local development.
  */
 async function ensureDirExists() {
     try {
@@ -39,7 +38,6 @@ async function ensureDirExists() {
     } catch (error: any) {
         if (error.code !== 'EEXIST') {
             console.error(`CRITICAL: Could not create directory at ${basePath}:`, error);
-            // This is a critical failure, we should not proceed.
             throw new Error(`Could not create base directory. Please check permissions. Path: ${basePath}`);
         }
     }
@@ -52,7 +50,6 @@ async function ensureDirExists() {
 
 /**
  * Executes a shell command to restart the VPN service.
- * In development, this function will just log the action.
  */
 async function restartVpnService(): Promise<{ success: boolean; error?: string }> {
   if (!isProduction) {
@@ -60,7 +57,6 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
     return { success: true };
   }
   return new Promise((resolve) => {
-    // Using absolute paths for sudo and systemctl to avoid PATH issues in the exec environment.
     exec('/usr/bin/sudo /usr/bin/systemctl restart zivpn', (error, stdout, stderr) => {
       if (error) {
         const errorMessage = `Error restarting zivpn service: ${stderr || error.message}`;
@@ -69,7 +65,6 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
         return;
       }
       if (stderr) {
-        // Stderr might contain non-error info, so we log it as a warning.
         console.warn(`Stderr while restarting zivpn service: ${stderr}`);
       }
       resolve({ success: true });
@@ -77,37 +72,52 @@ async function restartVpnService(): Promise<{ success: boolean; error?: string }
   });
 }
 
-
 /**
- * Reads the raw VPN user configuration from the JSON file.
- * Creates a default config if the file doesn't exist.
+ * Reads the raw VPN user configuration from config.json.
  */
 async function readRawConfig(): Promise<any> {
     await ensureDirExists();
     try {
         const data = await fs.readFile(configPath, 'utf8');
-        // Handle case where file is empty or just whitespace
         return data.trim() ? JSON.parse(data) : { ...defaultConfig };
     } catch (error: any) {
-        if (error.code === 'ENOENT') { // File does not exist
-            console.log(`Config file not found at ${configPath}. Creating default config.`);
-            await saveConfig({ ...defaultConfig });
+        if (error.code === 'ENOENT') {
+            await saveConfig(defaultConfig.auth.config);
             return { ...defaultConfig };
         }
-        // For other errors, it's a critical issue.
         console.error(`CRITICAL: Error reading config file at ${configPath}:`, error);
         throw new Error(`Could not read config file: ${error.message}`);
     }
 }
 
+/**
+ * Reads the users metadata file.
+ */
+async function readUsersMetadata(): Promise<any[]> {
+    await ensureDirExists();
+    try {
+        const data = await fs.readFile(usersMetadataPath, 'utf8');
+        return data.trim() ? JSON.parse(data) : [];
+    } catch (error: any) {
+        if (error.code === 'ENOENT') {
+            await saveUsersMetadata([]);
+            return [];
+        }
+        console.error(`CRITICAL: Error reading users metadata file at ${usersMetadataPath}:`, error);
+        throw new Error(`Could not read users metadata file: ${error.message}`);
+    }
+}
+
 
 /**
- * Saves the provided data to the main zivpn JSON configuration file.
+ * Saves the provided list of usernames to the main zivpn config.json file.
  */
-async function saveConfig(data: any): Promise<{ success: boolean; error?: string }> {
+async function saveConfig(usernames: string[]): Promise<{ success: boolean; error?: string }> {
   await ensureDirExists();
   try {
-    await fs.writeFile(configPath, JSON.stringify(data, null, 2), 'utf8');
+    const configData = await readRawConfig();
+    configData.auth.config = usernames;
+    await fs.writeFile(configPath, JSON.stringify(configData, null, 2), 'utf8');
     return { success: true };
   } catch (error: any) {
     console.error(`CRITICAL: Error writing config file at ${configPath}:`, error);
@@ -115,38 +125,54 @@ async function saveConfig(data: any): Promise<{ success: boolean; error?: string
   }
 }
 
+/**
+ * Saves the provided users metadata to the users-metadata.json file.
+ */
+async function saveUsersMetadata(metadata: any[]): Promise<{ success: boolean; error?: string }> {
+  await ensureDirExists();
+  try {
+    await fs.writeFile(usersMetadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+    return { success: true };
+  } catch (error: any) {
+    console.error(`CRITICAL: Error writing metadata file at ${usersMetadataPath}:`, error);
+    return { success: false, error: `Failed to write users-metadata.json. Check permissions for ${usersMetadataPath}. Details: ${error.message}` };
+  }
+}
+
+
 // ====================================================================
 // VPN User Management
 // ====================================================================
 
 /**
- * Reads the configuration, filters out expired users, and returns users for the current manager.
+ * Reads both config and metadata, combines them, filters out expired users, and returns users for the current manager.
  */
 export async function readConfig(managerUsername: string): Promise<any> {
   if (!managerUsername) {
     redirect('/login');
   }
 
-  const config = await readRawConfig();
-
-  // Clean up expired users
+  let usersMetadata = await readUsersMetadata();
   const now = new Date();
-  const allUsers = config.auth?.config || [];
-  const validUsers = allUsers.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
 
-  if (validUsers.length < allUsers.length) {
-    console.log(`Removing ${allUsers.length - validUsers.length} expired users.`);
-    config.auth.config = validUsers;
-    const saveResult = await saveConfig(config);
+  const validMetadata = usersMetadata.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
+
+  if (validMetadata.length < usersMetadata.length) {
+    console.log(`Removing ${usersMetadata.length - validMetadata.length} expired users.`);
+    const activeUsernames = validMetadata.map((user: any) => user.username);
+    
+    await saveUsersMetadata(validMetadata);
+    const saveResult = await saveConfig(activeUsernames);
     if(saveResult.success) {
         await restartVpnService();
     }
+    usersMetadata = validMetadata;
   }
 
   // Filter users to show only those created by the logged-in manager
-  const managerUsers = config.auth.config.filter((user: any) => user.createdBy === managerUsername);
+  const managerUsers = usersMetadata.filter((user: any) => user.createdBy === managerUsername);
   
-  return { ...config, auth: { ...config.auth, config: managerUsers } };
+  return { auth: { config: managerUsers } };
 }
 
 
@@ -161,26 +187,30 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
         return { success: false, error: "Username cannot be empty." };
     }
 
-    const config = await readRawConfig();
-    const users = config.auth?.config || [];
-
-    if (users.some((user: any) => user.username === username)) {
+    let usersMetadata = await readUsersMetadata();
+    if (usersMetadata.some((user: any) => user.username === username)) {
         return { success: false, error: "User already exists." };
     }
     
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    config.auth.config.push({
+    usersMetadata.push({
         username,
         createdAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
         createdBy: managerUsername,
     });
     
-    const result = await saveConfig(config);
-    if (!result.success) {
-        return { success: false, error: result.error };
+    const metadataResult = await saveUsersMetadata(usersMetadata);
+    if (!metadataResult.success) {
+        return { success: false, error: metadataResult.error };
+    }
+
+    const activeUsernames = usersMetadata.map(u => u.username);
+    const configResult = await saveConfig(activeUsernames);
+    if (!configResult.success) {
+        return { success: false, error: configResult.error };
     }
     
     const restartResult = await restartVpnService();
@@ -188,7 +218,7 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
         return { success: false, error: restartResult.error };
     }
 
-    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
@@ -200,9 +230,8 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: "Authentication required." };
     }
 
-    const config = await readRawConfig();
-    let users = config.auth?.config || [];
-    const userToDelete = users.find((user: any) => user.username === username);
+    let usersMetadata = await readUsersMetadata();
+    const userToDelete = usersMetadata.find((user: any) => user.username === username);
 
     if (!userToDelete) {
         return { success: false, error: "User not found." };
@@ -211,10 +240,16 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: "Permission denied." };
     }
     
-    config.auth.config = users.filter((user: any) => user.username !== username);
-    const result = await saveConfig(config);
-    if (!result.success) {
-        return { success: false, error: result.error };
+    const updatedMetadata = usersMetadata.filter((user: any) => user.username !== username);
+    const metadataResult = await saveUsersMetadata(updatedMetadata);
+    if (!metadataResult.success) {
+        return { success: false, error: metadataResult.error };
+    }
+
+    const activeUsernames = updatedMetadata.map(u => u.username);
+    const configResult = await saveConfig(activeUsernames);
+    if (!configResult.success) {
+        return { success: false, error: configResult.error };
     }
     
     const restartResult = await restartVpnService();
@@ -222,7 +257,7 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: restartResult.error };
     }
 
-    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    const managerUsers = updatedMetadata.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers };
 }
 
@@ -238,26 +273,30 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
         return { success: false, error: "Usernames cannot be empty." };
     }
 
-    const config = await readRawConfig();
-    const users = config.auth?.config || [];
-    const userIndex = users.findIndex((user: any) => user.username === oldUsername);
+    let usersMetadata = await readUsersMetadata();
+    const userIndex = usersMetadata.findIndex((user: any) => user.username === oldUsername);
 
     if (userIndex === -1) {
         return { success: false, error: `User "${oldUsername}" not found.` };
     }
-    if (users[userIndex].createdBy !== managerUsername) {
+    if (usersMetadata[userIndex].createdBy !== managerUsername) {
         return { success: false, error: "Permission denied." };
     }
-    if (oldUsername !== newUsername && users.some((user: any) => user.username === newUsername)) {
+    if (oldUsername !== newUsername && usersMetadata.some((user: any) => user.username === newUsername)) {
         return { success: false, error: `User "${newUsername}" already exists.` };
     }
     
-    users[userIndex].username = newUsername;
-    config.auth.config = users;
+    usersMetadata[userIndex].username = newUsername;
 
-    const result = await saveConfig(config);
-    if (!result.success) {
-        return { success: false, error: result.error };
+    const metadataResult = await saveUsersMetadata(usersMetadata);
+    if (!metadataResult.success) {
+        return { success: false, error: metadataResult.error };
+    }
+
+    const activeUsernames = usersMetadata.map(u => u.username);
+    const configResult = await saveConfig(activeUsernames);
+    if (!configResult.success) {
+        return { success: false, error: configResult.error };
     }
     
     const restartResult = await restartVpnService();
@@ -265,7 +304,7 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
         return { success: false, error: restartResult.error };
     }
 
-    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
@@ -277,33 +316,29 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
         return { success: false, error: "Authentication required." };
     }
 
-    const config = await readRawConfig();
-    const users = config.auth?.config || [];
-    const userIndex = users.findIndex((user: any) => user.username === username);
+    let usersMetadata = await readUsersMetadata();
+    const userIndex = usersMetadata.findIndex((user: any) => user.username === username);
 
     if (userIndex === -1) {
         return { success: false, error: `User "${username}" not found.` };
     }
-    if (users[userIndex].createdBy !== managerUsername) {
+    if (usersMetadata[userIndex].createdBy !== managerUsername) {
         return { success: false, error: "Permission denied." };
     }
 
     const now = new Date();
     const newExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    users[userIndex].expiresAt = newExpiresAt.toISOString();
-    config.auth.config = users;
+    usersMetadata[userIndex].expiresAt = newExpiresAt.toISOString();
     
-    const result = await saveConfig(config);
-    if (!result.success) {
-        return { success: false, error: result.error };
+    const metadataResult = await saveUsersMetadata(usersMetadata);
+    if (!metadataResult.success) {
+        return { success: false, error: metadataResult.error };
     }
 
-    const restartResult = await restartVpnService();
-    if(!restartResult.success) {
-        return { success: false, error: restartResult.error };
-    }
+    // No need to save config or restart service, as username hasn't changed.
+    // The user is already active.
 
-    const managerUsers = config.auth.config.filter((u: any) => u.createdBy === managerUsername);
+    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     return { success: true, users: managerUsers };
 }
 
@@ -401,7 +436,6 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
       const result = await saveManagersFile([defaultManager]);
       
       if (!result.success) {
-          // Provide specific feedback if the initial file creation fails.
           return { error: `Initial setup failed. Could not create managers file. Please check server permissions for the '/etc/zivpn' directory. Details: ${result.error}` };
       }
       managers = [defaultManager];
@@ -416,6 +450,8 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
         httpOnly: true, 
         secure: isProduction,
         expires: Date.now() + thirtyDays,
+        sameSite: 'lax',
+        path: '/',
     });
     redirect('/');
   } else {
@@ -538,6 +574,11 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
         return { success: false, error: `Manager "${oldUsername}" not found.` };
     }
 
+    // When editing the owner, prevent changing the username
+    if (oldUsername === managers[0].username && oldUsername !== newUsername) {
+        return { success: false, error: "The owner's username cannot be changed." };
+    }
+
     if (newUsername !== oldUsername && managers.some(m => m.username === newUsername)) {
         return { success: false, error: `Manager username "${newUsername}" already exists.` };
     }
@@ -552,5 +593,10 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
         return { success: false, error: result.error, managers };
     }
 
+    // If the owner's password is changed, they need to log in again.
+    if (oldUsername === ownerUsername && newPassword) {
+        await logout();
+    }
+    
     return { success: true, managers, message: `Manager "${newUsername}" has been updated.` };
 }

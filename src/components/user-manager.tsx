@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,42 +89,46 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
 
   useEffect(() => {
     setIsClient(true);
-    setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+  }, []);
+
+  useEffect(() => {
+      setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
   }, [initialUsers]);
 
-  const handleStateUpdate = (state: typeof initialActionState, successMessage: string) => {
-    if (state?.success) {
-      if (state.users) {
+
+  const handleStateUpdate = (state: typeof initialActionState, actionType: string) => {
+    if (state?.success && state.users) {
         const updatedUsers = state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) }));
         setUsers(updatedUsers);
-      }
-      toast({ title: 'Success', description: state.message || successMessage, className: 'bg-green-500 text-white' });
-      return true;
+        if (state.message) {
+             toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
+        }
+        return true;
     } else if (state?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: state.error });
+      toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
     }
     return false;
   };
 
   useEffect(() => {
-    if(handleStateUpdate(addUserState, 'User has been added.')) {
+    if(handleStateUpdate(addUserState, 'Adding User')) {
         addUserFormRef.current?.reset();
     }
-  }, [addUserState, toast]);
+  }, [addUserState]);
 
   useEffect(() => {
-    if(handleStateUpdate(editUserState, 'User has been updated.')) {
+    if(handleStateUpdate(editUserState, 'Editing User')) {
         setEditingUser(null);
     }
-  }, [editUserState, toast]);
+  }, [editUserState]);
 
   useEffect(() => {
-    handleStateUpdate(deleteUserState, 'User has been deleted.');
-  }, [deleteUserState, toast]);
+    handleStateUpdate(deleteUserState, 'Deleting User');
+  }, [deleteUserState]);
   
   useEffect(() => {
-    handleStateUpdate(renewUserState, 'User has been renewed.');
-  }, [renewUserState, toast]);
+    handleStateUpdate(renewUserState, 'Renewing User');
+  }, [renewUserState]);
 
 
   const isPending = isAddingPending || isEditingPending || isDeletingPending || isRenewingPending;
@@ -147,7 +151,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
-    } else if (totalPages === 0) {
+    } else if (totalPages === 0 && currentPage !== 1) {
       setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
@@ -167,7 +171,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="h-24 text-center text-muted-foreground flex items-center justify-center">
+                <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
                     <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
             </CardContent>
@@ -225,6 +229,8 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                   {paginatedUsers.length > 0 ? (
                     paginatedUsers.map((user) => {
                       const { label, daysLeft, variant } = user.status;
+                      const isRenewingThisUser = isRenewingPending && renewUserState?.users?.some(u => u.username === user.username);
+                      const isDeletingThisUser = isDeletingPending && deleteUserState?.users?.some(u => u.username === user.username);
                       return (
                         <TableRow key={user.username}>
                           <TableCell>
@@ -254,7 +260,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 <input type="hidden" name="username" value={user.username} />
                                 <input type="hidden" name="managerUsername" value={managerUsername} />
                                 <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
-                                    {isRenewingPending && renewUserState?.users?.find(u=>u.username===user.username) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {isRenewingThisUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 </Button>
                              </form>
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
@@ -279,7 +285,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                             <input type="hidden" name="managerUsername" value={managerUsername} />
                                             <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                {isDeletingPending && deleteUserState?.users?.find(u=>u.username===user.username) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                                {isDeletingThisUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </form>
@@ -292,7 +298,10 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                   ) : (
                     <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                        You have not created any users, or no users match the current filter.
+                        <div className="flex flex-col items-center gap-2">
+                            <AlertCircle className="w-8 h-8" />
+                           <span>You have not created any users, or no users match the current filter.</span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}

@@ -92,37 +92,34 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   useEffect(() => {
     setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
   }, [initialManagers]);
+
+  const handleStateUpdate = (state: typeof initialActionState, actionType: string) => {
+    if (state?.success && state.managers) {
+        setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        if (state.message) {
+             toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
+        }
+        return true;
+    } else if (state?.error) {
+        toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
+    }
+    return false;
+  }
   
   useEffect(() => {
-    const state = addManagerState;
-    if (state?.success) {
-        if(state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
+    if(handleStateUpdate(addManagerState, 'Adding Manager')) {
         addFormRef.current?.reset();
-    } else if (state?.error) {
-        toast({ variant: 'destructive', title: 'Error Adding Manager', description: state.error });
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    const state = editManagerState;
-    if (state?.success) {
-        if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: state.message });
+    if(handleStateUpdate(editManagerState, 'Editing Manager')) {
         setEditingManager(null);
-    } else if (state?.error) {
-        toast({ variant: 'destructive', title: 'Error Editing Manager', description: state.error });
     }
   }, [editManagerState, toast]);
 
   useEffect(() => {
-    const state = deleteManagerState;
-    if (state?.success) {
-        if (state.managers) setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-        toast({ title: 'Success', description: `Manager has been deleted.` });
-    } else if (state?.error) {
-        toast({ variant: 'destructive', title: 'Error Deleting Manager', description: state.error });
-    }
+    handleStateUpdate(deleteManagerState, 'Deleting Manager');
   }, [deleteManagerState, toast]);
 
   const isPending = isAddingPending || isEditingPending || isDeletingPending;
@@ -131,8 +128,13 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     return (
         <div className="space-y-6">
             <Card className="w-full max-w-4xl mx-auto shadow-lg">
-                <CardHeader><CardTitle>Add New Manager</CardTitle></CardHeader>
-                <CardContent><div className="h-24"><Loader2 className="h-6 w-6 animate-spin" /></div></CardContent>
+                <CardHeader>
+                    <CardTitle>Add New Manager</CardTitle>
+                    <CardDescription>
+                      Create new accounts that can log in and manage their own set of VPN users.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent><div className="h-24 flex items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></CardContent>
             </Card>
             <Card className="w-full max-w-4xl mx-auto shadow-lg">
                 <CardHeader>
@@ -238,7 +240,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                              ) : 'N/A'}
                           </TableCell>
                           <TableCell className="text-right">
-                            {!isOwnerRow && (
+                            {!isOwnerRow ? (
                               <>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
                                     <Pencil className="h-4 w-4" />
@@ -270,6 +272,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                     </AlertDialogContent>
                                 </AlertDialog>
                               </>
+                            ) : (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
                             )}
                           </TableCell>
                         </TableRow>
@@ -307,7 +313,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                       name="newUsername"
                       defaultValue={editingManager?.username}
                       className="col-span-3"
-                      disabled={isEditingPending}
+                      disabled={isEditingPending || editingManager?.username === ownerUsername}
                       required
                     />
                 </div>
