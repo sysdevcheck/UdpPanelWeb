@@ -1,3 +1,4 @@
+
 # 🛡️ Panel de Gestión para ZiVPN - Multi-Manager
 
 Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core). En lugar de editar manualmente archivos de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios de forma aislada.
@@ -293,52 +294,69 @@ pm2 restart zivpn-panel
 
 Aquí tienes algunos comandos útiles para diagnosticar y solucionar problemas comunes.
 
-- **Ver los logs del panel en tiempo real (muy útil para ver errores):**
-  ```bash
-  pm2 logs zivpn-panel
-  ```
+### Error: 502 Bad Gateway
 
-- **Verificar con qué usuario está corriendo la aplicación:**
-  > Este comando te mostrará el usuario en la columna `user`. ¡Este debe ser el mismo usuario que pusiste en el archivo `sudoers` y que es dueño de `/etc/zivpn`!
-  ```bash
-  pm2 list
-  ```
+Este error significa que Nginx no puede comunicarse con tu aplicación (`zivpn-panel`). La causa más probable es que la aplicación se ha detenido o ha fallado.
 
-- **Verificar el estado del servicio de la VPN (`zivpn`):**
-  ```bash
-  sudo systemctl status zivpn
-  ```
+1.  **Revisa los logs de la aplicación en tiempo real.** Este es el comando más importante.
+    ```bash
+    pm2 logs zivpn-panel
+    ```
+    Busca cualquier mensaje de `Error`. Los logs te dirán exactamente qué está fallando en el código.
+
+2.  **Verifica el estado del proceso en PM2.**
+    ```bash
+    pm2 list
+    ```
+    Asegúrate de que `zivpn-panel` tiene el estado `online`. Si dice `errored` o `stopped`, significa que la aplicación se ha colgado. Puedes intentar reiniciarla con `pm2 restart zivpn-panel`.
+
+### Error: `EACCES: permission denied` en los logs
+
+Esto significa que la aplicación no tiene permisos para leer o escribir en el directorio `/etc/zivpn/`.
+
+1.  **Verifica con qué usuario está corriendo la aplicación.**
+    ```bash
+    pm2 list
+    ```
+    Fíjate en la columna `user`.
+2.  **Asigna la propiedad del directorio a ese usuario.**
+    ```bash
+    # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list'
+    sudo chown -R usuario_correcto:usuario_correcto /etc/zivpn
+    ```
+
+### Error de `sudo` al reiniciar el servicio `zivpn`
+
+Si los logs muestran un error relacionado con `sudo` o `systemctl`, el problema está en la configuración de `sudoers`.
+
+1.  **Edita el archivo `sudoers` de forma segura.**
+    ```bash
+    sudo visudo
+    ```
+2.  **Comprueba la línea que añadiste.** Asegúrate de que no tiene errores de tipeo y que usa el nombre de usuario correcto (el mismo que aparece en `pm2 list`).
+    ```
+    tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
+    ```
+
+### Comandos Generales de PM2
 
 - **Reiniciar el panel manualmente:**
   ```bash
   pm2 restart zivpn-panel
   ```
 
-- **Si tienes procesos duplicados en PM2:**
-  > A veces, al solucionar problemas, puedes iniciar el mismo proceso varias veces. Para limpiar:
+- **Limpiar procesos duplicados (si has iniciado el panel varias veces por error):**
   ```bash
-  # Detiene todos los procesos con ese nombre
-  pm2 stop zivpn-panel
-  # Elimina todos los procesos detenidos con ese nombre
+  # Detiene y elimina el proceso de la lista de PM2
   pm2 delete zivpn-panel
+  
   # Guarda la lista de procesos ahora limpia
   pm2 save
+  
   # Inicia el proceso de nuevo, una sola vez
+  # (Asegúrate de estar en la carpeta del proyecto)
   pm2 start npm --name "zivpn-panel" -- start
+  
   # Guarda la configuración final
   pm2 save
   ```
-- **Error de Permisos al guardar archivos:**
-  > Si los logs (`pm2 logs zivpn-panel`) muestran errores como `EACCES: permission denied` al intentar escribir en `/etc/zivpn/`, significa que los permisos del directorio no son correctos.
-  >
-  > **Solución**: Asegúrate de que el usuario que ejecuta `pm2` (verifícalo con `pm2 list`) es el dueño del directorio.
-  > ```bash
-  > # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list'
-  > sudo chown -R usuario_correcto:usuario_correcto /etc/zivpn
-  > ```
-
-- **Error de `sudo` al reiniciar el servicio:**
-  > Si la aplicación no puede reiniciar `zivpn` y los logs muestran un error relacionado con `sudo` o `systemctl`, el problema está en la configuración de `sudoers`.
-  >
-  > **Solución**: Abre `sudo visudo` y comprueba que la línea que añadiste es correcta, no tiene errores de tipeo y usa el nombre de usuario adecuado.
-  > `tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn`
