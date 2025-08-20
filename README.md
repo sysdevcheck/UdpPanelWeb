@@ -1,4 +1,3 @@
-
 # 🛡️ Panel de Gestión para ZiVPN - Multi-Manager
 
 Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core). En lugar de editar manualmente archivos de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios de forma aislada.
@@ -27,7 +26,7 @@ La aplicación interactúa con dos archivos de configuración principales en el 
 
 ### Estructura de `managers.json`
 
-Este archivo es un array de objetos. **No necesitas crearlo manualmente**. La primera vez que accedas al panel, se creará automáticamente un usuario por defecto:
+Este archivo es un array de objetos. **No necesitas crearlo manually**. La primera vez que accedas al panel, se creará automáticamente un usuario por defecto:
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
@@ -271,7 +270,7 @@ Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los térm
 
 ### Cómo Actualizar la Aplicación en el VPS
 
-Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
+Once que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
 
 ```bash
 # 1. Ve a la carpeta del proyecto
