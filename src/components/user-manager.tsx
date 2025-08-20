@@ -89,17 +89,13 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-      setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+    setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
   }, [initialUsers]);
 
 
   const handleStateUpdate = (state: typeof initialActionState, actionType: string) => {
     if (state?.success && state.users) {
-        const updatedUsers = state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) }));
-        setUsers(updatedUsers);
+        setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         }
@@ -111,23 +107,35 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   };
 
   useEffect(() => {
-    if(handleStateUpdate(addUserState, 'Adding User')) {
-        addUserFormRef.current?.reset();
+    if (addUserState.success) {
+      if(handleStateUpdate(addUserState, 'Adding User')) {
+          addUserFormRef.current?.reset();
+      }
+    } else if (addUserState.error) {
+      handleStateUpdate(addUserState, 'Adding User');
     }
   }, [addUserState]);
 
   useEffect(() => {
-    if(handleStateUpdate(editUserState, 'Editing User')) {
+    if (editUserState.success) {
+      if(handleStateUpdate(editUserState, 'Editing User')) {
         setEditingUser(null);
+      }
+    } else if (editUserState.error) {
+      handleStateUpdate(editUserState, 'Editing User');
     }
   }, [editUserState]);
 
   useEffect(() => {
-    handleStateUpdate(deleteUserState, 'Deleting User');
+    if (deleteUserState.success || deleteUserState.error) {
+      handleStateUpdate(deleteUserState, 'Deleting User');
+    }
   }, [deleteUserState]);
   
   useEffect(() => {
-    handleStateUpdate(renewUserState, 'Renewing User');
+    if (renewUserState.success || renewUserState.error) {
+      handleStateUpdate(renewUserState, 'Renewing User');
+    }
   }, [renewUserState]);
 
 
@@ -229,8 +237,6 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                   {paginatedUsers.length > 0 ? (
                     paginatedUsers.map((user) => {
                       const { label, daysLeft, variant } = user.status;
-                      const isRenewingThisUser = isRenewingPending && renewUserState?.users?.some(u => u.username === user.username);
-                      const isDeletingThisUser = isDeletingPending && deleteUserState?.users?.some(u => u.username === user.username);
                       return (
                         <TableRow key={user.username}>
                           <TableCell>
@@ -260,7 +266,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 <input type="hidden" name="username" value={user.username} />
                                 <input type="hidden" name="managerUsername" value={managerUsername} />
                                 <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
-                                    {isRenewingThisUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    <RefreshCw className="h-4 w-4" />
                                 </Button>
                              </form>
                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
@@ -285,7 +291,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                             <input type="hidden" name="managerUsername" value={managerUsername} />
                                             <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                {isDeletingThisUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                                {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </form>
