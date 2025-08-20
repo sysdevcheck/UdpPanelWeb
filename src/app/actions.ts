@@ -82,7 +82,7 @@ async function readRawConfig(): Promise<any> {
         return data.trim() ? JSON.parse(data) : { ...defaultConfig };
     } catch (error: any) {
         if (error.code === 'ENOENT') {
-            await saveConfig(defaultConfig.auth.config);
+            await saveConfig([]); // Pass empty user list
             return { ...defaultConfig };
         }
         console.error(`CRITICAL: Error reading config file at ${configPath}:`, error);
@@ -111,12 +111,13 @@ async function readUsersMetadata(): Promise<any[]> {
 
 /**
  * Saves the provided list of usernames to the main zivpn config.json file.
+ * Expects a simple array of strings.
  */
 async function saveConfig(usernames: string[]): Promise<{ success: boolean; error?: string }> {
   await ensureDirExists();
   try {
     const configData = await readRawConfig();
-    configData.auth.config = usernames;
+    configData.auth.config = usernames; // This should be an array of strings
     await fs.writeFile(configPath, JSON.stringify(configData, null, 2), 'utf8');
     return { success: true };
   } catch (error: any) {
@@ -124,6 +125,7 @@ async function saveConfig(usernames: string[]): Promise<{ success: boolean; erro
     return { success: false, error: `Failed to write config.json. Check permissions for ${configPath}. Details: ${error.message}` };
   }
 }
+
 
 /**
  * Saves the provided users metadata to the users-metadata.json file.
@@ -472,8 +474,12 @@ async function isOwner(username: string): Promise<boolean> {
 }
 
 export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
-    const managers = await readManagersFile();
-    return { managers };
+    try {
+      const managers = await readManagersFile();
+      return { managers };
+    } catch(e: any) {
+      return { error: e.message }
+    }
 }
 
 export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string, message?: string }> {
