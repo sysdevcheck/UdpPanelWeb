@@ -219,7 +219,7 @@ server {
     location / {
         # La magia ocurre aquí:
         # Nginx redirige el tráfico a la aplicación Node.js que corre en el puerto 9002.
-        proxy_pass http://localhost:9002;
+        proxy_pass http://127.0.0.1:9002;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -309,21 +309,28 @@ Este error significa que Nginx no puede comunicarse con tu aplicación (`zivpn-p
     ```bash
     pm2 logs zivpn-panel
     ```
-    Busca cualquier mensaje de `Error`. 
+    Busca cualquier mensaje de `Error`.
 
-2.  **Verifica el estado del proceso en PM2.**
+2.  **Verifica que la aplicación está escuchando en el puerto correcto.**
+    ```bash
+    sudo netstat -tulpn | grep 9002
+    ```
+    - Si este comando **muestra una línea de resultado** que dice `LISTEN`, tu aplicación está corriendo bien. El problema casi seguro está en la configuración de Nginx. Revisa `proxy_pass http://127.0.0.1:9002;` en tu archivo de configuración de Nginx.
+    - Si este comando **no muestra nada**, tu aplicación se ha detenido. La respuesta está en los logs del paso anterior.
+
+3.  **Verifica el estado del proceso en PM2.**
     ```bash
     pm2 list
     ```
     Asegúrate de que `zivpn-panel` tiene el estado `online`. Si dice `errored` o `stopped`, significa que la aplicación se ha colgado. Intenta reiniciarla con `pm2 restart zivpn-panel` y observa los logs.
 
-3.  **Revisa los logs de Nginx.** Si la aplicación parece estar corriendo (`online` en `pm2 list`), los logs de Nginx pueden darte una pista.
+4.  **Revisa los logs de Nginx.** Si la aplicación parece estar corriendo (`online` en `pm2 list`), los logs de Nginx pueden darte una pista.
     ```bash
     sudo tail -f /var/log/nginx/error.log
     ```
     Busca errores como `connect() failed (111: Connection refused)`. Esto confirma que Nginx está intentando conectar pero la aplicación no responde en el puerto `9002`.
 
-4.  **Comprueba la configuración de Nginx.** Un error de sintaxis puede ser el problema.
+5.  **Comprueba la configuración de Nginx.** Un error de sintaxis puede ser el problema.
     ```bash
     sudo nginx -t
     ```
