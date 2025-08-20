@@ -66,7 +66,7 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
     return { label: 'Active', daysLeft, variant: 'default' };
 };
 
-const initialActionState = { success: false, error: undefined, message: undefined, users: undefined };
+const initialActionState = { success: false, error: undefined, message: undefined, users: [] };
 
 export function UserManager({ initialUsers, managerUsername }: { initialUsers: User[], managerUsername: string }) {
   const [isClient, setIsClient] = useState(false);
@@ -93,36 +93,33 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   }, [initialUsers]);
 
 
-  const handleStateUpdate = (state: typeof initialActionState, actionType: string) => {
-    if (state?.success && state.users) {
-        setUsers(state.users.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+  const handleStateUpdate = (state: typeof addUserState, actionType: string) => {
+    if (!state) return false;
+    if (state.success && state.users) {
+        setUsers(state.users.map((u: User) => ({ ...u, status: getStatus(u.expiresAt) })));
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         }
         return true;
-    } else if (state?.error) {
+    } else if (state.error) {
       toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
     }
     return false;
   };
 
   useEffect(() => {
-    if (addUserState.success) {
+    if (addUserState.success || addUserState.error) {
       if(handleStateUpdate(addUserState, 'Adding User')) {
           addUserFormRef.current?.reset();
       }
-    } else if (addUserState.error) {
-      handleStateUpdate(addUserState, 'Adding User');
     }
   }, [addUserState]);
 
   useEffect(() => {
-    if (editUserState.success) {
+    if (editUserState.success || editUserState.error) {
       if(handleStateUpdate(editUserState, 'Editing User')) {
         setEditingUser(null);
       }
-    } else if (editUserState.error) {
-      handleStateUpdate(editUserState, 'Editing User');
     }
   }, [editUserState]);
 
@@ -197,7 +194,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={addUserFormRef} action={addUserAction} className="flex gap-2 mb-4">
+        <form ref={addUserFormRef} action={addUserAction} className="flex flex-col sm:flex-row gap-2 mb-4">
           <input type="hidden" name="managerUsername" value={managerUsername} />
           <Input
             name="username"
@@ -206,15 +203,15 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
             className="text-base"
             required
           />
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending} className="mt-2 sm:mt-0 w-full sm:w-auto">
             {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>Add User</span>
           </Button>
         </form>
         
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
             <h3 className="text-lg font-medium text-foreground/80">Current Users</h3>
-            <div className="flex gap-1 ml-auto">
+            <div className="flex gap-1 ml-auto flex-wrap">
                 <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>All</Button>
                 <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Active</Button>
                 <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Expiring</Button>
@@ -223,7 +220,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
         </div>
 
         <div className="space-y-3">
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -239,19 +236,19 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                       const { label, daysLeft, variant } = user.status;
                       return (
                         <TableRow key={user.username}>
-                          <TableCell>
+                          <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-3">
                               <User className="w-5 h-5 text-muted-foreground" />
                               <span className="font-mono text-base">{user.username}</span>
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Calendar className="w-4 h-4" />
                               {format(new Date(user.createdAt), 'PPP')}
                             </div>
                           </TableCell>
-                           <TableCell>
+                           <TableCell className="min-w-[150px]">
                              <div className="flex items-center gap-2 text-sm">
                                <div className="flex flex-col">
                                    <Badge variant={variant}>{label}</Badge>
@@ -261,42 +258,44 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 </div>
                              </div>
                           </TableCell>
-                          <TableCell className="text-right space-x-1">
-                             <form action={renewUserAction} className='inline-flex'>
-                                <input type="hidden" name="username" value={user.username} />
-                                <input type="hidden" name="managerUsername" value={managerUsername} />
-                                <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
-                                    <RefreshCw className="h-4 w-4" />
-                                </Button>
-                             </form>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
-                                <Pencil className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
-                                        <Trash2 className="h-4 w-4" />
+                          <TableCell className="text-right space-x-0">
+                             <div className="flex justify-end items-center">
+                                <form action={renewUserAction} className='inline-flex'>
+                                    <input type="hidden" name="username" value={user.username} />
+                                    <input type="hidden" name="managerUsername" value={managerUsername} />
+                                    <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
+                                        <RefreshCw className="h-4 w-4" />
                                     </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <form action={deleteUserAction}>
-                                        <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
-                                        </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <input type="hidden" name="username" value={user.username} />
-                                            <input type="hidden" name="managerUsername" value={managerUsername} />
-                                            <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </form>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                                </form>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <form action={deleteUserAction}>
+                                            <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
+                                            </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <input type="hidden" name="username" value={user.username} />
+                                                <input type="hidden" name="managerUsername" value={managerUsername} />
+                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </form>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                             </div>
                           </TableCell>
                         </TableRow>
                       )

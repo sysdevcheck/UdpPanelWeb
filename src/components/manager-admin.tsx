@@ -70,7 +70,7 @@ const initialActionState = {
     success: false,
     error: undefined,
     message: undefined,
-    managers: undefined,
+    managers: [],
 };
 
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
@@ -93,14 +93,15 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
   }, [initialManagers]);
 
-  const handleStateUpdate = (state: typeof initialActionState, actionType: string) => {
-    if (state?.success && state.managers) {
+  const handleStateUpdate = (state: typeof addManagerState, actionType: string) => {
+    if (!state) return;
+    if (state.success && state.managers) {
         setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         }
         return true;
-    } else if (state?.error) {
+    } else if (state.error) {
         toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
     }
     return false;
@@ -164,15 +165,15 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
           <form ref={addFormRef} action={addManagerAction} className="flex flex-col sm:flex-row gap-2">
             <input type="hidden" name="ownerUsername" value={ownerUsername} />
             <div className="grid w-full gap-1.5">
-                <Label htmlFor="username">Username</Label>
-                <Input name="username" id="username" placeholder="New manager username" required disabled={isPending} />
+                <Label htmlFor="username-manager">Username</Label>
+                <Input name="username" id="username-manager" placeholder="New manager username" required disabled={isPending} />
             </div>
              <div className="grid w-full gap-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input name="password" id="password" type="password" placeholder="Password" required disabled={isPending} />
+                <Label htmlFor="password-manager">Password</Label>
+                <Input name="password" id="password-manager" type="password" placeholder="Password" required disabled={isPending} />
             </div>
             <div className='self-end'>
-                <Button type="submit" disabled={isPending} className='w-full sm:w-auto'>
+                <Button type="submit" disabled={isPending} className='w-full sm:w-auto mt-2 sm:mt-0'>
                     {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     <span>Add Manager</span>
                 </Button>
@@ -187,7 +188,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
             <CardDescription>List of all accounts with access to this panel.</CardDescription>
         </CardHeader>
         <CardContent>
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -204,13 +205,13 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                        const isOwnerRow = manager.username === ownerUsername;
                        return (
                         <TableRow key={manager.username}>
-                          <TableCell>
+                          <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-3">
                               <User className="w-5 h-5 text-muted-foreground" />
                               <span className="font-mono text-base">{manager.username}</span>
                             </div>
                           </TableCell>
-                           <TableCell>
+                           <TableCell className="min-w-[150px]">
                              <div className="flex flex-col gap-1">
                                 {isOwnerRow ? (
                                     <Badge variant="default" className="bg-amber-500 hover:bg-amber-500/90 w-fit">
@@ -231,7 +232,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                 )}
                              </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="min-w-[150px]">
                              {manager.createdAt ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                   <Calendar className="w-4 h-4" />
@@ -241,7 +242,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                           </TableCell>
                           <TableCell className="text-right">
                             {!isOwnerRow ? (
-                              <>
+                              <div className="flex justify-end items-center">
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
                                     <Pencil className="h-4 w-4" />
                                 </Button>
@@ -271,7 +272,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                         </form>
                                     </AlertDialogContent>
                                 </AlertDialog>
-                              </>
+                              </div>
                             ) : (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
                                     <Pencil className="h-4 w-4" />

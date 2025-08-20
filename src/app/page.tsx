@@ -46,19 +46,22 @@ export default async function Home() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <UserCog className="h-7 w-7 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                ZiVPN Multi-Manager
+          <div className="flex h-16 items-center justify-between gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <UserCog className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
+                ZiVPN Manager
               </h1>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">Welcome, <strong className="font-medium text-foreground">{loggedInUser}</strong></span>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <span className="text-sm text-muted-foreground">
+                <span className="hidden sm:inline">Welcome, </span>
+                <strong className="font-medium text-foreground">{loggedInUser}</strong>
+              </span>
               <form action={logout}>
                 <Button variant="outline" size="sm">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
+                  <LogOut className="mr-0 sm:mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Logout</span>
                 </Button>
               </form>
             </div>
