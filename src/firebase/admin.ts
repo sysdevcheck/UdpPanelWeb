@@ -10,5 +10,7 @@ export function initializeAdminApp(): App {
   
   // This will use the GOOGLE_APPLICATION_CREDENTIALS environment variable
   // automatically provided by Firebase App Hosting.
-  return initializeApp();
+  return initializeApp({
+    credential: credential.applicationDefault(),
+  });
 }
