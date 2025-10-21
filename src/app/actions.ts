@@ -433,7 +433,7 @@ async function saveManagersFile(managers: any[]): Promise<{success: boolean, err
 }
 
 export async function getLoggedInUser() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   return cookieStore.get('session')?.value;
 }
 
@@ -714,3 +714,5 @@ export async function clearSshConfig(ownerUsername: string): Promise<{ success: 
     revalidatePath('/');
     return { success: true, message: "SSH configuration has been cleared." };
 }
+
+    
