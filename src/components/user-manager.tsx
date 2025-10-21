@@ -108,31 +108,39 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
   };
 
   useEffect(() => {
+    if (!addUserState) return;
     if (addUserState.success || addUserState.error) {
       if(handleStateUpdate(addUserState, 'Adding User')) {
           addUserFormRef.current?.reset();
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addUserState]);
 
   useEffect(() => {
+    if (!editUserState) return;
     if (editUserState.success || editUserState.error) {
       if(handleStateUpdate(editUserState, 'Editing User')) {
         setEditingUser(null);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editUserState]);
 
   useEffect(() => {
+    if (!deleteUserState) return;
     if (deleteUserState.success || deleteUserState.error) {
       handleStateUpdate(deleteUserState, 'Deleting User');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteUserState]);
   
   useEffect(() => {
+    if (!renewUserState) return;
     if (renewUserState.success || renewUserState.error) {
       handleStateUpdate(renewUserState, 'Renewing User');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renewUserState]);
 
 
