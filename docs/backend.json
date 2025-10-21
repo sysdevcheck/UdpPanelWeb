@@ -1,113 +1,63 @@
 {
   "entities": {
-    "VpsConfiguration": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "VpsConfiguration",
+    "UserCredential": {
+      "title": "UserCredential",
+      "description": "Represents a user account for the panel, either an owner or a manager.",
       "type": "object",
-      "description": "Represents the entire VPS configuration stored in the JSON file.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the VPS configuration. This could be a hash of the config or a generated UUID."
-        },
-        "configurationData": {
-          "type": "string",
-          "description": "A string representation of the JSON configuration data."
-        },
-        "lastUpdated": {
-          "type": "string",
-          "description": "Timestamp of the last update to the configuration.",
-          "format": "date-time"
-        },
-        "serverDetails": {
-          "type": "string",
-          "description": "Reference to ServerDetails. (Relationship: ServerDetails 1:1 VpsConfiguration)"
-        }
+        "username": { "type": "string" },
+        "password": { "type": "string", "description": "Hashed password for managers. Owner password is via env vars." },
+        "role": { "type": "string", "enum": ["owner", "manager"] },
+        "assignedServerId": { "type": "string", "description": "FK to Server document. Only for managers." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "configurationData",
-        "lastUpdated",
-        "serverDetails"
-      ]
+      "required": ["username", "role", "createdAt"]
     },
-    "ServerDetails": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ServerDetails",
+    "Server": {
+      "title": "Server",
+      "description": "Represents a remote VPS server configuration.",
       "type": "object",
-      "description": "Represents the server details where the configuration file resides.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the server details."
-        },
-        "serverName": {
-          "type": "string",
-          "description": "The name of the server (e.g., 'default', 'production')."
-        },
-        "serverAddress": {
-          "type": "string",
-          "description": "The IP address or hostname of the server.",
-          "format": "uri"
-        },
-        "filePath": {
-          "type": "string",
-          "description": "The file path to the JSON configuration file on the server (e.g., '/etc/zivpn/config.json')."
-        }
+        "name": { "type": "string" },
+        "host": { "type": "string" },
+        "port": { "type": "number" },
+        "username": { "type": "string" },
+        "password": { "type": "string", "description": "SSH password for the server." }
       },
-      "required": [
-        "id",
-        "serverName",
-        "serverAddress",
-        "filePath"
-      ]
+      "required": ["name", "host", "port", "username", "password"]
+    },
+    "VpnUser": {
+      "title": "VpnUser",
+      "description": "Represents a VPN user on a specific server.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "serverId": { "type": "string", "description": "FK to the Server document." },
+        "createdBy": { "type": "string", "description": "Username of the manager/owner who created this user." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "serverId", "createdBy", "createdAt", "expiresAt"]
     }
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "password"
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/serverDetails/{serverDetailId}",
-        "definition": {
-          "entityName": "ServerDetails",
-          "schema": {
-            "$ref": "#/backend/entities/ServerDetails"
-          },
-          "description": "Stores server details. Includes denormalized 'members' map for authorization independence. The 'members' map contains user IDs as keys and their roles (e.g., 'editor', 'viewer') as values.",
-          "params": [
-            {
-              "name": "serverDetailId",
-              "description": "Unique identifier for the server details document."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/serverDetails/{serverDetailId}/vpsConfigurations/{vpsConfigurationId}",
-        "definition": {
-          "entityName": "VpsConfiguration",
-          "schema": {
-            "$ref": "#/backend/entities/VpsConfiguration"
-          },
-          "description": "Stores VPS configurations for a specific server.  Includes denormalized 'members' map for authorization independence. The 'members' map contains user IDs as keys and their roles (e.g., 'editor', 'viewer') as values.  Also denormalizes serverDetails.id to ensure authorization independence.",
-          "params": [
-            {
-              "name": "serverDetailId",
-              "description": "Unique identifier for the server details document."
-            },
-            {
-              "name": "vpsConfigurationId",
-              "description": "Unique identifier for the VPS configuration document."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "The data structure prioritizes authorization independence and QAPs (Rules are not filters). ServerDetails and VpsConfiguration are stored as separate collections, enabling more scalable queries and simpler security rules. Since server details are crucial for determining which configurations a user can access, serverDetails are stored independently. This design eliminates the need for complex `get()` calls in security rules, enhancing atomicity and simplifying debugging.\n\nTo achieve authorization independence, access control information (e.g., a list of authorized users) would need to be stored (denormalized) directly within the `serverDetails` documents. If different users need different levels of access to different VPS configurations on the same server, the `vpsConfigurations` collection will require a `members` map to achieve authorization independence. This denormalization enables secure and efficient `list` operations, ensuring QAPs are met. Because the application requires automatic saving to a default server, the `serverDetails` collection may require additional access controls to restrict writes to authorized users. Alternatively, the 'default' server can be hardcoded and checked in a rule using `allow write: if request.resource.data.serverName == 'default'`, but this approach does not scale well if more 'default' server names are to be added in the future."
+    "/credentials/{credentialId}": {
+      "schema": { "$ref": "#/entities/UserCredential" },
+      "description": "Stores user credentials for panel access (owners and managers)."
+    },
+    "/servers/{serverId}": {
+      "schema": { "$ref": "#/entities/Server" },
+      "description": "Stores remote VPS server configurations."
+    },
+    "/vpn-users/{vpnUserId}": {
+      "schema": { "$ref": "#/entities/VpnUser" },
+      "description": "Stores individual VPN user accounts tied to a server."
+    }
   }
 }

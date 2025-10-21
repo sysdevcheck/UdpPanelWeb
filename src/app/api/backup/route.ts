@@ -1,35 +1,22 @@
-
 import { type NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { collection, getDocs, writeBatch } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
 
-const SERVERS_PATH = path.join(process.cwd(), 'data', 'servers.json');
-const MANAGERS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
-const VPN_USERS_PATH = path.join(process.cwd(), 'data', 'vpn-users.json');
-
-const readData = async (filePath: string) => {
-    try {
-        const data = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(data);
-    } catch (e: any) {
-        if (e.code === 'ENOENT') return []; // File not found, return empty array
-        throw e;
-    }
-};
-
-const writeData = async (filePath: string, data: any) => {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-};
+const { firestore } = getSdks();
 
 export async function GET(request: NextRequest) {
     try {
-        const allCredentials = await readData(MANAGERS_PATH);
+        const credentialsSnap = await getDocs(collection(firestore, 'credentials'));
+        const serversSnap = await getDocs(collection(firestore, 'servers'));
+        const vpnUsersSnap = await getDocs(collection(firestore, 'vpn-users'));
+
+        const allCredentials = credentialsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const owner = allCredentials.find((u: any) => u.role === 'owner');
         const managers = allCredentials.filter((u: any) => u.role === 'manager');
-        const servers = await readData(SERVERS_PATH);
-        const vpnUsers = await readData(VPN_USERS_PATH);
 
+        const servers = serversSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const vpnUsers = vpnUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
         const vpnUsersByServer: { [key: string]: any[] } = {};
         vpnUsers.forEach((user: any) => {
             if (!vpnUsersByServer[user.serverId]) {
@@ -54,39 +41,49 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const batch = writeBatch(firestore);
+
     try {
         const backup = await request.json();
 
+        // Clear existing data
+        const collections = ['servers', 'credentials', 'vpn-users'];
+        for (const coll of collections) {
+            const snap = await getDocs(collection(firestore, coll));
+            snap.docs.forEach(doc => batch.delete(doc.ref));
+        }
+
         // Restore servers
         if (backup.servers) {
-            await writeData(SERVERS_PATH, backup.servers);
-        } else {
-            await writeData(SERVERS_PATH, []);
+            backup.servers.forEach((server: any) => {
+                const { id, ...data } = server;
+                batch.set(doc(collection(firestore, 'servers'), id), data);
+            });
         }
 
-        // Restore users (owner and managers)
-        const allCredentials = [];
+        // Restore credentials
         if (backup.owner) {
-            allCredentials.push({ ...backup.owner, role: 'owner' });
+             const { id, ...data } = backup.owner;
+             batch.set(doc(collection(firestore, 'credentials'), id), data);
         }
         if (backup.managers) {
-            allCredentials.push(...backup.managers.map((m: any) => ({...m, role: 'manager'})));
+            backup.managers.forEach((manager: any) => {
+                const { id, ...data } = manager;
+                batch.set(doc(collection(firestore, 'credentials'), id), data);
+            });
         }
-        await writeData(MANAGERS_PATH, allCredentials);
-
 
         // Restore vpnUsers
-        let allVpnUsers: any[] = [];
         if (backup.vpnUsers) {
             for (const serverId in backup.vpnUsers) {
-                const users = backup.vpnUsers[serverId].map((user: any) => ({
-                    ...user,
-                    serverId,
-                }));
-                allVpnUsers = allVpnUsers.concat(users);
+                backup.vpnUsers[serverId].forEach((user: any) => {
+                    const { id, ...data } = user;
+                    batch.set(doc(collection(firestore, 'vpn-users'), id), { ...data, serverId });
+                });
             }
         }
-        await writeData(VPN_USERS_PATH, allVpnUsers);
+        
+        await batch.commit();
         
         return NextResponse.json({ success: true, message: 'Backup importado exitosamente.' });
 

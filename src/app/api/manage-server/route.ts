@@ -1,40 +1,24 @@
-
 import { type NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
 
-const SERVERS_PATH = path.join(process.cwd(), 'data', 'servers.json');
-const MANAGERS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
-const VPN_USERS_PATH = path.join(process.cwd(), 'data', 'vpn-users.json');
-
-const readData = async (filePath: string) => {
-    try {
-        const data = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(data);
-    } catch (e: any) {
-        if (e.code === 'ENOENT') return []; // File not found, return empty array
-        throw e;
-    }
-};
-
-const writeData = async (filePath: string, data: any) => {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-};
+const { firestore } = getSdks();
+const serversCollection = collection(firestore, 'servers');
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const serverId = searchParams.get('serverId');
 
     try {
-        const servers = await readData(SERVERS_PATH);
         if (serverId) {
-            const server = servers.find((s: any) => s.id === serverId);
-            if (!server) {
+            const serverDoc = await getDoc(doc(firestore, 'servers', serverId));
+            if (!serverDoc.exists()) {
                 return NextResponse.json({ error: 'Server not found' }, { status: 404 });
             }
-            return NextResponse.json(server);
+            return NextResponse.json({ id: serverDoc.id, ...serverDoc.data() });
         } else {
+            const querySnapshot = await getDocs(serversCollection);
+            const servers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             return NextResponse.json(servers);
         }
     } catch (error: any) {
@@ -47,38 +31,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { serverId, name, host, port, username, password } = body;
     
-    let servers = await readData(SERVERS_PATH);
-    
-    if (serverId) { // Editing existing server
-        const serverIndex = servers.findIndex((s: any) => s.id === serverId);
-        if (serverIndex === -1) {
-            return NextResponse.json({ error: 'Server not found for update' }, { status: 404 });
-        }
-        servers[serverIndex] = {
-            ...servers[serverIndex],
-            name,
-            host,
-            port,
-            username,
-        };
-        // Only update password if a new one is provided
-        if (password) {
-            servers[serverIndex].password = password;
-        }
+    const serverData = { name, host, port, username, password };
 
-    } else { // Creating new server
-        const newServer = {
-            id: `server_${Date.now()}`,
-            name,
-            host,
-            port,
-            username,
-            password,
-        };
-        servers.push(newServer);
+    if (serverId) {
+        const serverDocRef = doc(firestore, 'servers', serverId);
+        // Do not update password if it's not provided
+        const updateData: Partial<typeof serverData> = { name, host, port, username };
+        if (password) {
+            updateData.password = password;
+        }
+        await updateDoc(serverDocRef, updateData);
+    } else {
+        await addDoc(serversCollection, serverData);
     }
-    
-    await writeData(SERVERS_PATH, servers);
     
     return NextResponse.json({ success: true, message: `Servidor "${name}" guardado exitosamente.` });
 
@@ -95,29 +60,30 @@ export async function DELETE(request: NextRequest) {
     if (!serverId) {
         return NextResponse.json({ error: 'Server ID is required.' }, { status: 400 });
     }
+    
+    const batch = writeBatch(firestore);
 
-    let servers = await readData(SERVERS_PATH);
-    let managers = await readData(MANAGERS_PATH);
-    let vpnUsers = await readData(VPN_USERS_PATH);
+    // 1. Delete the server
+    const serverDocRef = doc(firestore, 'servers', serverId);
+    batch.delete(serverDocRef);
 
-    // Filter out the server to delete
-    const updatedServers = servers.filter((s: any) => s.id !== serverId);
-
-    // Unassign managers from the deleted server
-    const updatedManagers = managers.map((m: any) => {
-        if (m.assignedServerId === serverId) {
-            return { ...m, assignedServerId: null };
+    // 2. Unassign managers
+    const credentialsSnap = await getDocs(collection(firestore, 'credentials'));
+    credentialsSnap.forEach(docSnap => {
+        if (docSnap.data().assignedServerId === serverId) {
+            batch.update(docSnap.ref, { assignedServerId: null });
         }
-        return m;
     });
 
-    // Delete VPN users associated with the server
-    const updatedVpnUsers = vpnUsers.filter((u: any) => u.serverId !== serverId);
+    // 3. Delete associated VPN users
+    const vpnUsersSnap = await getDocs(collection(firestore, 'vpn-users'));
+    vpnUsersSnap.forEach(docSnap => {
+        if (docSnap.data().serverId === serverId) {
+            batch.delete(docSnap.ref);
+        }
+    });
 
-    // Write all changes back to files
-    await writeData(SERVERS_PATH, updatedServers);
-    await writeData(MANAGERS_PATH, updatedManagers);
-    await writeData(VPN_USERS_PATH, updatedVpnUsers);
+    await batch.commit();
     
     return NextResponse.json({ success: true, message: 'Server deleted successfully.' });
 

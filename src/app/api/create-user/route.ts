@@ -1,36 +1,21 @@
-
 import { type NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
 
-const CREDENTIALS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
-
-const readCredentials = async () => {
-    try {
-        const data = await fs.readFile(CREDENTIALS_PATH, 'utf-8');
-        return JSON.parse(data);
-    } catch (e: any) {
-        if (e.code === 'ENOENT') return [];
-        throw e;
-    }
-};
-
-const writeCredentials = async (data: any) => {
-    await fs.mkdir(path.dirname(CREDENTIALS_PATH), { recursive: true });
-    await fs.writeFile(CREDENTIALS_PATH, JSON.stringify(data, null, 2), 'utf-8');
-};
+const { firestore } = getSdks();
+const credentialsCollection = collection(firestore, 'credentials');
 
 export async function GET(request: NextRequest) {
     try {
-        const credentials = await readCredentials();
-        const managers = credentials.filter((u: any) => u.role === 'manager');
+        const q = query(credentialsCollection, where('role', '==', 'manager'));
+        const querySnapshot = await getDocs(q);
+        const managers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         return NextResponse.json(managers);
     } catch (error: any) {
         console.error('Get Managers API error:', error);
         return NextResponse.json({ error: 'Failed to fetch managers', details: error.message }, { status: 500 });
     }
 }
-
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,9 +29,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'A server must be assigned to a manager.' }, { status: 400 });
     }
     
-    const credentials = await readCredentials();
-    const existingUser = credentials.find((u: any) => u.username === username);
-    if (existingUser) {
+    const q = query(credentialsCollection, where('username', '==', username));
+    const existingUser = await getDocs(q);
+
+    if (!existingUser.empty) {
       return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
     }
 
@@ -54,7 +40,6 @@ export async function POST(request: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + 30);
     
     const newUser = {
-        id: `user_${Date.now()}`,
         username,
         password, 
         role,
@@ -63,10 +48,9 @@ export async function POST(request: NextRequest) {
         expiresAt: expiresAt.toISOString(),
     };
     
-    credentials.push(newUser);
-    await writeCredentials(credentials);
+    const docRef = await addDoc(credentialsCollection, newUser);
 
-    return NextResponse.json({ success: true, user: newUser });
+    return NextResponse.json({ success: true, user: { id: docRef.id, ...newUser } });
 
   } catch (error: any) {
     console.error('Create User API error:', error);

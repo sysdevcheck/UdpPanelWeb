@@ -1,25 +1,19 @@
+import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
 
-import fs from 'fs/promises';
-import path from 'path';
-
-const CREDENTIALS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
+// This script should be run via tsx from the command line.
+// It is not part of the application's runtime.
 
 async function main() {
     try {
-        await fs.mkdir(path.dirname(CREDENTIALS_PATH), { recursive: true });
-        
-        let credentials = [];
-        try {
-            const data = await fs.readFile(CREDENTIALS_PATH, 'utf-8');
-            credentials = JSON.parse(data);
-        } catch (e: any) {
-            if (e.code !== 'ENOENT') throw e;
-        }
+        const { firestore } = getSdks();
+        const credentialsCollection = collection(firestore, 'credentials');
 
-        const ownerExists = credentials.some((u: any) => u.role === 'owner');
+        const q = query(credentialsCollection, where('role', '==', 'owner'));
+        const ownerQuerySnap = await getDocs(q);
 
-        if (ownerExists) {
-            console.log("An owner account already exists in data/credentials.json. No action taken.");
+        if (!ownerQuerySnap.empty) {
+            console.log("An owner account already exists in Firestore. No action taken.");
             return;
         }
 
@@ -35,19 +29,28 @@ async function main() {
         
         const defaultOwner = {
             username: ownerUsername,
-            password: ownerPassword, // This password will be checked against env vars
+            // The actual password check is against env variables during login.
+            // Storing a dummy value or the actual one here doesn't impact security for the owner.
+            password: ownerPassword,
             role: 'owner',
             createdAt: new Date().toISOString(),
         };
 
-        credentials.push(defaultOwner);
-        await fs.writeFile(CREDENTIALS_PATH, JSON.stringify(credentials, null, 2), 'utf-8');
+        await addDoc(credentialsCollection, defaultOwner);
         
-        console.log(`Default owner account ("${ownerUsername}") created successfully in data/credentials.json`);
+        console.log(`Default owner account ("${ownerUsername}") created successfully in Firestore.`);
 
     } catch (error) {
         console.error("Failed to create owner:", error);
+        // Ensure the process exits with an error code if it fails
+        process.exit(1);
     }
 }
 
-main();
+main().then(() => {
+    // Manually exit the process if everything is successful
+    process.exit(0);
+}).catch((e) => {
+    console.error(e);
+    process.exit(1);
+});
