@@ -71,7 +71,7 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any) {
  * Executes a shell command to restart the VPN service.
  */
 async function restartVpnService(sshConfig: any): Promise<{ success: boolean; error?: string }> {
-    if (!isProduction) {
+    if (!sshConfig) {
         console.log("DEV-MODE: Simulated service restart.");
         return { success: true };
     }
@@ -79,7 +79,7 @@ async function restartVpnService(sshConfig: any): Promise<{ success: boolean; er
 }
 
 async function ensureDirExists(sshConfig: any) {
-    if (!isProduction) {
+    if (!sshConfig) {
         try {
             await fs.mkdir(localBasePath, { recursive: true });
         } catch (e) {
@@ -91,7 +91,7 @@ async function ensureDirExists(sshConfig: any) {
 }
 
 async function readFile(filePath: string, sshConfig: any): Promise<string> {
-    if (!isProduction) {
+    if (!sshConfig) {
         try {
             return await fs.readFile(filePath, 'utf8');
         } catch (e: any) {
@@ -105,7 +105,7 @@ async function readFile(filePath: string, sshConfig: any): Promise<string> {
 }
 
 async function writeFile(filePath: string, data: string, sshConfig: any): Promise<{ success: boolean, error?: string }> {
-    if (!isProduction) {
+    if (!sshConfig) {
         await fs.writeFile(filePath, data, 'utf8');
         return { success: true };
     }
@@ -117,13 +117,13 @@ async function writeFile(filePath: string, data: string, sshConfig: any): Promis
 
 async function readRawConfig(sshConfig: any): Promise<any> {
     await ensureDirExists(sshConfig);
-    const configData = await readFile(isProduction ? remoteConfigPath : localConfigPath, sshConfig);
+    const configData = await readFile(sshConfig ? remoteConfigPath : localConfigPath, sshConfig);
     return configData.trim() ? JSON.parse(configData) : { ...defaultConfig };
 }
 
 async function readUsersMetadata(sshConfig: any): Promise<any[]> {
     await ensureDirExists(sshConfig);
-    const metadataStr = await readFile(isProduction ? remoteUsersMetadataPath : localUsersMetadataPath, sshConfig);
+    const metadataStr = await readFile(sshConfig ? remoteUsersMetadataPath : localUsersMetadataPath, sshConfig);
     if (!metadataStr.trim()) {
         await saveUsersMetadata([], sshConfig);
         return [];
@@ -135,12 +135,12 @@ async function saveConfig(usernames: string[], sshConfig: any): Promise<{ succes
     await ensureDirExists(sshConfig);
     const configData = await readRawConfig(sshConfig);
     configData.auth.config = usernames;
-    return writeFile(isProduction ? remoteConfigPath : localConfigPath, JSON.stringify(configData, null, 2), sshConfig);
+    return writeFile(sshConfig ? remoteConfigPath : localConfigPath, JSON.stringify(configData, null, 2), sshConfig);
 }
 
 async function saveUsersMetadata(metadata: any[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
     await ensureDirExists(sshConfig);
-    return writeFile(isProduction ? remoteUsersMetadataPath : localUsersMetadataPath, JSON.stringify(metadata, null, 2), sshConfig);
+    return writeFile(sshConfig ? remoteUsersMetadataPath : localUsersMetadataPath, JSON.stringify(metadata, null, 2), sshConfig);
 }
 
 
@@ -154,7 +154,8 @@ export async function readConfig(managerUsername: string): Promise<any> {
   }
 
   const manager = await getManager(managerUsername);
-  const sshConfig = manager?.ssh;
+  const owner = await getOwnerManager();
+  const sshConfig = owner?.ssh;
 
   let usersMetadata = await readUsersMetadata(sshConfig);
   const now = new Date();
@@ -184,8 +185,8 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     if (!managerUsername) {
         return { success: false, error: "Authentication required. Please log in again." };
     }
-    const manager = await getManager(managerUsername);
-    const sshConfig = manager?.ssh;
+    const owner = await getOwnerManager();
+    const sshConfig = owner?.ssh;
 
     const username = formData.get('username') as string;
     if (!username) {
@@ -232,8 +233,8 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const manager = await getManager(managerUsername);
-    const sshConfig = manager?.ssh;
+    const owner = await getOwnerManager();
+    const sshConfig = owner?.ssh;
 
     const username = formData.get('username') as string;
 
@@ -273,8 +274,8 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const manager = await getManager(managerUsername);
-    const sshConfig = manager?.ssh;
+    const owner = await getOwnerManager();
+    const sshConfig = owner?.ssh;
     
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
@@ -322,8 +323,8 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const manager = await getManager(managerUsername);
-    const sshConfig = manager?.ssh;
+    const owner = await getOwnerManager();
+    const sshConfig = owner?.ssh;
     
     const username = formData.get('username') as string;
 
@@ -355,11 +356,11 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 // ====================================================================
 
 async function readManagersFile(): Promise<any[]> {
-    const managersData = await readFile(isProduction ? remoteManagersConfigPath : localManagersConfigPath, null); // Reads local file system
+    const managersData = await readFile(localManagersConfigPath, null); // Always reads local file system
     const managers = managersData.trim() ? JSON.parse(managersData) : [];
     
-    if (managers.length === 0 && !isProduction) {
-        console.log('DEV-MODE: No managers found. Creating default admin user.');
+    if (managers.length === 0) {
+        console.log('No managers found. Creating default admin user.');
         const defaultManager = { username: 'admin', password: 'password', createdAt: new Date().toISOString() };
         await saveManagersFile([defaultManager]);
         return [defaultManager];
@@ -373,8 +374,14 @@ async function getManager(username: string): Promise<any | undefined> {
     return managers.find(m => m.username === username);
 }
 
+async function getOwnerManager(): Promise<any | undefined> {
+    const managers = await readManagersFile();
+    return managers.length > 0 ? managers[0] : undefined;
+}
+
+
 async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
-     return writeFile(isProduction ? remoteManagersConfigPath : localManagersConfigPath, JSON.stringify(managers, null, 2), null); // Writes to local file system
+     return writeFile(localManagersConfigPath, JSON.stringify(managers, null, 2), null); // Always writes to local file system
 }
 
 export async function getLoggedInUser() {

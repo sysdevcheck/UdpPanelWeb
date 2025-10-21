@@ -174,47 +174,45 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   return (
     <div className="space-y-6">
-        { process.env.NODE_ENV === 'production' && (
-            <Card className="w-full max-w-4xl mx-auto shadow-lg">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server SSH Config</CardTitle>
-                    <CardDescription>
-                        Enter the credentials for the remote VPS where ZiVPN is installed. This is only required for remote management.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <form ref={sshFormRef} action={sshAction} className="space-y-4">
-                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                        <div className="grid sm:grid-cols-2 gap-4">
-                             <div className="grid gap-1.5">
-                                <Label htmlFor="host">Server IP / Hostname</Label>
-                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
-                            </div>
-                             <div className="grid gap-1.5">
-                                <Label htmlFor="port">SSH Port</Label>
-                                <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port} disabled={isPending} />
-                            </div>
+        <Card className="w-full max-w-4xl mx-auto shadow-lg">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server SSH Config</CardTitle>
+                <CardDescription>
+                    Enter the credentials for the remote VPS where ZiVPN is installed. This enables remote management. Leave this blank to manage users on the same server where this panel is running.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form ref={sshFormRef} action={sshAction} className="space-y-4">
+                    <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                    <div className="grid sm:grid-cols-2 gap-4">
+                         <div className="grid gap-1.5">
+                            <Label htmlFor="host">Server IP / Hostname</Label>
+                            <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
                         </div>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                             <div className="grid gap-1.5">
-                                <Label htmlFor="ssh-username">SSH Username</Label>
-                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
-                            </div>
-                             <div className="grid gap-1.5">
-                                <Label htmlFor="ssh-password">SSH Password</Label>
-                                <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
-                            </div>
+                         <div className="grid gap-1.5">
+                            <Label htmlFor="port">SSH Port</Label>
+                            <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port} disabled={isPending} />
                         </div>
-                        <div className='flex justify-end'>
-                            <Button type="submit" disabled={isPending}>
-                                {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                                Save SSH Config
-                            </Button>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                         <div className="grid gap-1.5">
+                            <Label htmlFor="ssh-username">SSH Username</Label>
+                            <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
                         </div>
-                    </form>
-                </CardContent>
-            </Card>
-        )}
+                         <div className="grid gap-1.5">
+                            <Label htmlFor="ssh-password">SSH Password</Label>
+                            <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
+                        </div>
+                    </div>
+                    <div className='flex justify-end'>
+                        <Button type="submit" disabled={isPending}>
+                            {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Save SSH Config
+                        </Button>
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
       <Card className="w-full max-w-4xl mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>Add New Manager</CardTitle>
@@ -408,5 +406,3 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     </div>
   );
 }
-
-    
