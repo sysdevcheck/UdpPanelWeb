@@ -264,7 +264,6 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     try {
         const response = await fetch(`/api/vpn-users?docId=${userId}`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Failed to delete user');
