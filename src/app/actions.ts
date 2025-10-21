@@ -61,8 +61,27 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             cache: 'no-store',
         });
 
+        // Check if the response is ok, otherwise try to parse the error body
+        if (!response.ok) {
+            let errorBody;
+            try {
+                errorBody = await response.json();
+            } catch (e) {
+                // If the body isn't JSON, use the status text.
+                return {
+                    success: false,
+                    error: `API request failed with status ${response.status}: ${response.statusText}`,
+                    log: [{ level: 'ERROR', message: `API request failed with status ${response.status}: ${response.statusText}` }]
+                };
+            }
+            return {
+                success: false,
+                error: errorBody.error || 'An unknown API error occurred',
+                log: errorBody.log || [{ level: 'ERROR', message: errorBody.error || 'An unknown API error occurred' }]
+            };
+        }
+
         const responseBody: SshApiResponse = await response.json();
-        
         return responseBody;
 
     } catch (e: any) {
@@ -494,7 +513,7 @@ export async function getLoggedInUser() {
 }
 
 export async function logout() {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   cookieStore.delete('session');
   redirect('/login');
 }
@@ -756,4 +775,26 @@ export async function deleteServer(prevState: any, formData: FormData): Promise<
     }
 
     return { success: false, error: result.error || "Failed to delete server." };
+}
+
+export async function resetServerConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+    
+    const serverId = formData.get('serverId') as string;
+    if (!serverId) return { success: false, error: "Server ID is missing." };
+
+    const sshConfig = await getSshConfig(ownerUsername, serverId);
+    if (!sshConfig) {
+        return { success: false, error: "Could not find SSH configuration for this server." };
+    }
+    
+    const result = await sshApiRequest('resetConfig', { host: sshConfig.host }, sshConfig);
+
+    if (result.success) {
+        revalidatePath('/');
+        return { success: true, message: `Server ${sshConfig.name} has been reset successfully.` };
+    }
+
+    return { success: false, error: result.error || "An unknown error occurred during server reset." };
 }

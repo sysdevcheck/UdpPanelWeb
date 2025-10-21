@@ -40,6 +40,32 @@ function getSftp(ssh: Client): Promise<SFTPWrapper> {
     });
 }
 
+async function readFileSftp(sftp: SFTPWrapper, path: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        sftp.readFile(path, 'utf8', (err: any, data: string) => {
+            if (err) {
+                 if (err.code === 2) { // SFTP_STATUS_CODE.NO_SUCH_FILE
+                    resolve(''); // Return empty string if file doesn't exist
+                } else {
+                    reject(err);
+                }
+            } else {
+                resolve(data);
+            }
+        });
+    });
+}
+
+async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        sftp.writeFile(path, data, 'utf8', (err: any) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
+
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
     let ssh: Client | null = null;
@@ -82,37 +108,18 @@ export async function POST(request: Request) {
         switch (action) {
             case 'readFile': {
                 const { path } = payload;
-                return new Promise((resolve) => {
-                    sftp.readFile(path, 'utf8', (err: any, data: string) => {
-                        if (err) {
-                            if (err.code === 2) { // SFTP_STATUS_CODE.NO_SUCH_FILE
-                                resolve(NextResponse.json({ success: true, data: '' }));
-                            } else {
-                                resolve(NextResponse.json({ success: false, error: err.message }, { status: 500 }));
-                            }
-                        } else {
-                            resolve(NextResponse.json({ success: true, data }));
-                        }
-                    });
-                });
+                const data = await readFileSftp(sftp, path);
+                return NextResponse.json({ success: true, data });
             }
             
             case 'writeFile': {
                 const { path, data } = payload;
-                 return new Promise((resolve) => {
-                    sftp.writeFile(path, data, 'utf8', (err) => {
-                         if (err) {
-                            resolve(NextResponse.json({ success: false, error: err.message }, { status: 500 }));
-                        } else {
-                            resolve(NextResponse.json({ success: true }));
-                        }
-                    });
-                });
+                await writeFileSftp(sftp, path, data);
+                return NextResponse.json({ success: true });
             }
 
             case 'ensureDir': {
                  const { path } = payload;
-                 // sftp.mkdir doesn't have a recursive option, so we use `mkdir -p` via exec.
                  await execCommand(ssh, `mkdir -p ${path}`);
                  return NextResponse.json({ success: true });
             }
@@ -123,6 +130,41 @@ export async function POST(request: Request) {
                      return NextResponse.json({ success: false, error: stderr }, { status: 500 });
                  }
                  return NextResponse.json({ success: true, data: stdout });
+            }
+            
+            case 'resetConfig': {
+                const { host } = payload;
+                const metadataPath = `/etc/zivpn/users-metadata.${host}.json`;
+                const configPath = `/etc/zivpn/config.json`;
+
+                // 1. Backup
+                const metadataBackup = await readFileSftp(sftp, metadataPath);
+                const configBackup = await readFileSftp(sftp, configPath);
+                
+                // 2. Execute script
+                const scriptCommand = 'wget -O zi.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi.sh && sudo chmod +x zi.sh && sudo ./zi.sh';
+                const { stderr: scriptErr } = await execCommand(ssh, scriptCommand);
+                if (scriptErr) {
+                    // Even if there's an error, we might want to continue to restore.
+                    // Depending on what the script does, this might be desirable.
+                    console.warn("Error during script execution:", scriptErr);
+                }
+
+                // 3. Restore
+                if (metadataBackup) {
+                    await writeFileSftp(sftp, metadataPath, metadataBackup);
+                }
+                if (configBackup) {
+                    await writeFileSftp(sftp, configPath, configBackup);
+                }
+
+                // 4. Restart service
+                const { stderr: restartErr } = await execCommand(ssh, 'sudo /usr/bin/systemctl restart zivpn');
+                if (restartErr) {
+                     return NextResponse.json({ success: false, error: `Failed to restart service: ${restartErr}` }, { status: 500 });
+                }
+
+                return NextResponse.json({ success: true });
             }
 
             default:

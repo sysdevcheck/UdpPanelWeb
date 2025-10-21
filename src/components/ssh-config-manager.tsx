@@ -1,13 +1,14 @@
+
 'use client';
 
 import { useEffect, useActionState, useState, useRef } from 'react';
-import { saveServerConfig, deleteServer, testServerConnection } from '@/app/actions';
+import { saveServerConfig, deleteServer, testServerConnection, resetServerConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw } from 'lucide-react';
+import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +71,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     
     const [saveState, saveAction, isSavingPending] = useActionState(saveServerConfig, initialActionState);
     const [deleteState, deleteAction, isDeletingPending] = useActionState(deleteServer, {success: false});
+    const [resetState, resetAction, isResettingPending] = useActionState(resetServerConfig, {success: false});
 
     const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
 
@@ -126,8 +128,18 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deleteState]);
+
+    useEffect(() => {
+        if (!resetState) return;
+        if(resetState.success && resetState.message) {
+            toast({ title: 'Success', description: resetState.message, className: 'bg-green-500 text-white' });
+        } else if (resetState.error) {
+             toast({ variant: 'destructive', title: 'Reset Failed', description: resetState.error });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resetState]);
     
-    const isPending = isSavingPending || isDeletingPending;
+    const isPending = isSavingPending || isDeletingPending || isResettingPending;
 
     return (
     <>
@@ -176,6 +188,32 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                                   <TableCell className="font-medium">{server.name}</TableCell>
                                   <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
                                   <TableCell className="text-right">
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500" disabled={isPending}>
+                                                <Settings2 className="h-4 w-4" />
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <form action={resetAction}>
+                                                <input type="hidden" name="serverId" value={server.id} />
+                                                <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure you want to reset?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will execute the reset script on <strong className='font-mono'>{server.name}</strong>. It will attempt to back up and restore your users, but this is a destructive operation. Please be certain.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel disabled={isResettingPending}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction type="submit" variant="destructive" disabled={isResettingPending}>
+                                                        {isResettingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                                        Yes, Reset Server
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </form>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)}>
                                         <Pencil className="h-4 w-4" />
                                     </Button>
