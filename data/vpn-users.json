@@ -1,16 +1,1 @@
-[
-  {
-    "username": "zivpnmanager",
-    "createdAt": "2025-10-21T15:51:40.826Z",
-    "expiresAt": "2025-11-20T15:51:40.826Z",
-    "createdBy": "admin",
-    "serverId": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d"
-  },
-  {
-    "username": "test",
-    "createdAt": "2025-10-21T15:55:19.879Z",
-    "expiresAt": "2025-11-20T15:55:19.879Z",
-    "createdBy": "neri",
-    "serverId": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d"
-  }
 ]
