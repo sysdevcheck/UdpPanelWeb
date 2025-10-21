@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
 import { addManager, deleteManager, editManager } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -20,7 +20,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -31,20 +30,26 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 
-type SshConfig = {
-    host: string;
-    port: number;
-    username: string;
+type Server = {
+    id: string;
+    name: string;
 }
 
 type Manager = {
   username: string;
   createdAt?: string;
   expiresAt?: string;
-  ssh?: SshConfig;
+  assignedServerId?: string | null;
 }
 
 type ManagerWithStatus = Manager & {
@@ -77,10 +82,10 @@ const initialActionState = {
     success: false,
     error: undefined,
     message: undefined,
-    managers: [],
+    managersData: { managers: [], owner: {}, servers: [] },
 };
 
-export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
+export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { initialManagers: Manager[], ownerUsername: string, allServers: Server[] }) {
   const [isClient, setIsClient] = useState(false);
   const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
@@ -105,8 +110,8 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const handleStateUpdate = (state: typeof addManagerState, actionType: string) => {
     if (!state) return false;
     if (state.success) {
-        if(state.managers) {
-             setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        if(state.managersData?.managers) {
+             setManagers(state.managersData.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         }
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
@@ -147,11 +152,12 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [deleteManagerState]);
 
   const isPending = isAddingPending || isEditingPending || isDeletingPending;
+  const ownerData = { username: ownerUsername, createdAt: undefined, expiresAt: undefined };
 
   if (!isClient) {
     return (
         <div className="space-y-6">
-             <Card className="w-full max-w-4xl mx-auto shadow-lg">
+             <Card className="w-full max-w-5xl mx-auto shadow-lg">
                 <CardHeader><div className="h-24 flex items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></CardHeader>
              </Card>
         </div>
@@ -160,15 +166,15 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   return (
     <div className="space-y-6">
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
+      <Card className="w-full max-w-5xl mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>Add New Manager</CardTitle>
           <CardDescription>
-            Create new accounts that can log in and manage their own set of VPN users.
+            Create accounts that can manage users on a specific server.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form ref={addFormRef} action={addManagerAction} className="flex flex-col sm:flex-row gap-2">
+          <form ref={addFormRef} action={addManagerAction} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
             <input type="hidden" name="ownerUsername" value={ownerUsername} />
             <div className="grid w-full gap-1.5">
                 <Label htmlFor="username-manager">Username</Label>
@@ -178,8 +184,21 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                 <Label htmlFor="password-manager">Password</Label>
                 <Input name="password" id="password-manager" type="password" placeholder="Password" required disabled={isPending} />
             </div>
-            <div className='self-end'>
-                <Button type="submit" disabled={isPending} className='w-full sm:w-auto mt-2 sm:mt-0'>
+             <div className="grid w-full gap-1.5">
+                <Label htmlFor="server-select-add">Assign to Server</Label>
+                <Select name="assignedServerId" required disabled={isPending || allServers.length === 0}>
+                  <SelectTrigger id="server-select-add">
+                    <SelectValue placeholder={allServers.length === 0 ? "No servers available" : "Select a server"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allServers.map((server) => (
+                      <SelectItem key={server.id} value={server.id}>{server.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+            </div>
+            <div className='sm:col-span-3 flex justify-end'>
+                <Button type="submit" disabled={isPending || allServers.length === 0} className='w-full sm:w-auto'>
                     {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     <span>Add Manager</span>
                 </Button>
@@ -188,10 +207,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
         </CardContent>
       </Card>
       
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
+      <Card className="w-full max-w-5xl mx-auto shadow-lg">
         <CardHeader>
-            <CardTitle>Current Managers</CardTitle>
-            <CardDescription>List of all accounts with access to this panel.</CardDescription>
+            <CardTitle>Current Accounts</CardTitle>
+            <CardDescription>List of all owner and manager accounts with access to this panel.</CardDescription>
         </CardHeader>
         <CardContent>
             <div className="border rounded-md overflow-x-auto">
@@ -200,15 +219,16 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                   <TableRow>
                     <TableHead>Username</TableHead>
                     <TableHead>Role & Status</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Assigned Server</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {managers.length > 0 ? (
-                    managers.map((manager) => {
-                       const { label, daysLeft, variant } = manager.status;
+                 {[ownerData, ...managers].map((manager) => {
+                       const { label, daysLeft, variant } = getStatus(manager.expiresAt);
                        const isOwnerRow = manager.username === ownerUsername;
+                       const assignedServer = isOwnerRow ? null : allServers.find(s => s.id === manager.assignedServerId);
+
                        return (
                         <TableRow key={manager.username}>
                           <TableCell className="min-w-[150px]">
@@ -238,20 +258,26 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                 )}
                              </div>
                           </TableCell>
-                          <TableCell className="min-w-[150px]">
-                             {manager.createdAt ? (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Calendar className="w-4 h-4" />
-                                  {format(new Date(manager.createdAt), 'PPP')}
+                          <TableCell>
+                             {isOwnerRow ? (
+                                <span className="text-sm text-muted-foreground italic">All Servers</span>
+                             ) : assignedServer ? (
+                                <div className='flex items-center gap-2'>
+                                  <Server className='w-4 h-4 text-muted-foreground'/>
+                                  <span className='font-medium'>{assignedServer.name}</span>
                                 </div>
-                             ) : 'N/A'}
+                             ) : (
+                                <div className='flex items-center gap-2 text-destructive'>
+                                  <AlertCircle className='w-4 h-4'/>
+                                  <span className='font-medium'>Unassigned</span>
+                                </div>
+                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {!isOwnerRow ? (
-                              <div className="flex justify-end items-center">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
+                                <Pencil className="h-4 w-4" />
+                            </Button>
+                            {!isOwnerRow && (
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
@@ -278,23 +304,11 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
                                         </form>
                                     </AlertDialogContent>
                                 </AlertDialog>
-                              </div>
-                            ) : (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingManager(manager)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
                             )}
                           </TableCell>
                         </TableRow>
                        )
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                        No managers found.
-                      </TableCell>
-                    </TableRow>
-                  )}
+                    })}
                 </TableBody>
               </Table>
             </div>
@@ -305,25 +319,44 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
         <DialogContent>
           <form ref={editFormRef} action={editManagerAction}>
             <DialogHeader>
-              <DialogTitle>Edit Manager</DialogTitle>
+              <DialogTitle>Edit Account: <span className='font-mono'>{editingManager?.username}</span></DialogTitle>
               <DialogDescription>
-                  Change the details for <strong className="font-mono">{editingManager?.username}</strong>.
+                  Change the details for this account.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <input type="hidden" name="oldUsername" value={editingManager?.username || ''} />
                 <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="newUsername" className="text-right">Username</Label>
-                    <Input
-                      id="newUsername"
-                      name="newUsername"
-                      defaultValue={editingManager?.username}
-                      className="col-span-3"
-                      disabled={isEditingPending || editingManager?.username === ownerUsername}
-                      required
-                    />
-                </div>
+                
+                {editingManager?.username !== ownerUsername && (
+                    <>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="newUsername" className="text-right">Username</Label>
+                            <Input
+                            id="newUsername"
+                            name="newUsername"
+                            defaultValue={editingManager?.username}
+                            className="col-span-3"
+                            disabled={isEditingPending}
+                            required
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="server-select-edit" className="text-right">Server</Label>
+                            <Select name="assignedServerId" defaultValue={editingManager?.assignedServerId || ""} required disabled={isPending || allServers.length === 0}>
+                                <SelectTrigger id="server-select-edit" className="col-span-3">
+                                    <SelectValue placeholder={allServers.length === 0 ? "No servers available" : "Select a server"}/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {allServers.map((server) => (
+                                    <SelectItem key={server.id} value={server.id}>{server.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </>
+                )}
+                
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="newPassword" className="text-right">New Password</Label>
                     <Input
@@ -353,5 +386,3 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     </div>
   );
 }
-
-    

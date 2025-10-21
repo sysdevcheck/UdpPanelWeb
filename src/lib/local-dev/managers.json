@@ -1,19 +1,26 @@
-[
-  {
+{
+  "owner": {
     "username": "admin",
     "password": "password",
-    "createdAt": "2025-10-21T14:30:45.745Z",
-    "ssh": {
+    "createdAt": "2025-10-21T14:30:45.745Z"
+  },
+  "servers": [
+    {
+      "id": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d",
+      "name": "VPS-Principal",
       "host": "192.171.18.128",
       "port": 22,
       "username": "root",
       "password": "Admin505"
     }
-  },
-  {
-    "username": "neri",
-    "password": "neri",
-    "createdAt": "2025-10-21T15:22:59.810Z",
-    "expiresAt": "2025-11-20T15:22:59.810Z"
-  }
-]
+  ],
+  "managers": [
+    {
+      "username": "neri",
+      "password": "neri",
+      "createdAt": "2025-10-21T15:22:59.810Z",
+      "expiresAt": "2025-11-20T15:22:59.810Z",
+      "assignedServerId": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d"
+    }
+  ]
+}

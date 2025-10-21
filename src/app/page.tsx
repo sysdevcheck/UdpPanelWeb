@@ -1,5 +1,5 @@
 
-import { readConfig, getLoggedInUser, logout, readManagers, saveSshConfig } from './actions';
+import { readConfig, getLoggedInUser, logout, readFullConfig } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
@@ -12,6 +12,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 
 export default async function Home() {
@@ -20,29 +22,24 @@ export default async function Home() {
     redirect('/login');
   }
 
-  const managersData = await readManagers();
-  if (managersData.error || !managersData.managers) {
-    console.error("Critical State: Could not read managers file.", managersData.error);
-    // Optional: Redirect to an error page or show a message
-    return <div>Error loading manager data. Please try again later.</div>;
+  const configData = await readFullConfig();
+  if (configData.error || !configData.managersData) {
+    console.error("Critical State: Could not read managers file.", configData.error);
+    return <div>Error loading configuration data: {configData.error}. Please check file permissions or login again.</div>;
   }
-  const allManagers = managersData.managers;
+  const { owner, servers, managers } = configData.managersData;
 
-  if (allManagers.length === 0) {
-    // This case should theoretically not be hit if login is successful,
-    // but as a safeguard, we redirect to login to re-trigger the creation logic.
-    console.error("Critical State: Logged in, but no managers found. Redirecting to login.");
-    redirect('/login');
-  }
+  const isOwner = loggedInUser === owner.username;
+  const managerInfo = !isOwner ? managers.find(m => m.username === loggedInUser) : null;
+  const assignedServer = managerInfo ? servers.find(s => s.id === managerInfo.assignedServerId) : null;
 
   // Fetch initial data for the logged-in user
+  // For managers, this loads users from their assigned server.
+  // For owners, it starts empty; they must select a server to manage.
   const initialVpnUsersData = await readConfig(loggedInUser);
   const vpnUsers = initialVpnUsersData.auth?.config || [];
-  
-  // The first manager in the list is the owner/superadmin
-  const owner = allManagers.length > 0 ? allManagers[0] : null;
-  const ownerUsername = owner?.username || '';
-  const isOwner = loggedInUser === ownerUsername;
+
+  const defaultTab = isOwner ? "servers" : "vpn-users";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -52,13 +49,15 @@ export default async function Home() {
             <div className="flex items-center gap-2 sm:gap-3">
               <UserCog className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
               <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
-                ZiVPN Manager
+                ZiVPN Multi-Manager
               </h1>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-sm text-muted-foreground">
                 <span className="hidden sm:inline">Welcome, </span>
                 <strong className="font-medium text-foreground">{loggedInUser}</strong>
+                 {isOwner && <span className="text-amber-500 ml-1">(Owner)</span>}
+                 {!isOwner && assignedServer && <span className="text-muted-foreground ml-1 hidden sm:inline">({assignedServer.name})</span>}
               </span>
               <form action={logout}>
                 <Button variant="outline" size="sm">
@@ -71,12 +70,12 @@ export default async function Home() {
         </div>
       </header>
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-         <Tabs defaultValue="vpn-users" className="w-full">
+         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-1'} max-w-lg mx-auto`}>
             {isOwner && (
-                <TabsTrigger value="ssh-config">
+                <TabsTrigger value="servers">
                     <Server className="mr-2 h-4 w-4" />
-                    Remote Server
+                    Servers
                 </TabsTrigger>
             )}
             <TabsTrigger value="vpn-users">
@@ -91,16 +90,41 @@ export default async function Home() {
             )}
           </TabsList>
            {isOwner && (
-            <TabsContent value="ssh-config">
-               <SshConfigManager owner={owner} ownerUsername={ownerUsername} />
+            <TabsContent value="servers">
+               <SshConfigManager ownerUsername={owner.username} initialServers={servers} />
             </TabsContent>
           )}
           <TabsContent value="vpn-users">
-            <UserManager initialUsers={vpnUsers} managerUsername={loggedInUser} />
+            {!isOwner && !assignedServer && (
+                 <Alert variant="destructive" className="max-w-xl mx-auto">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Not Assigned to a Server</AlertTitle>
+                  <AlertDescription>
+                    You are not currently assigned to a server. Please contact the owner to have your account assigned to a VPS.
+                  </AlertDescription>
+                </Alert>
+            )}
+            {isOwner && (
+                <Alert className="max-w-xl mx-auto mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Owner View</AlertTitle>
+                  <AlertDescription>
+                    As the owner, you can manage users on any server. Go to the <strong className='font-bold'>Servers</strong> tab, select a server, and click "Manage Users".
+                  </AlertDescription>
+                </Alert>
+            )}
+            {((!isOwner && assignedServer) || isOwner) && (
+              <UserManager 
+                initialUsers={vpnUsers} 
+                managerUsername={loggedInUser} 
+                isOwner={isOwner}
+                servers={servers}
+              />
+            )}
           </TabsContent>
           {isOwner && (
             <TabsContent value="managers">
-               <ManagerAdmin initialManagers={allManagers} ownerUsername={ownerUsername} />
+               <ManagerAdmin ownerUsername={owner.username} initialManagers={managers} allServers={servers} />
             </TabsContent>
           )}
         </Tabs>

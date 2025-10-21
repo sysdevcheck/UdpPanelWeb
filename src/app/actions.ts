@@ -6,6 +6,7 @@ import path from 'path';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { Client } from 'ssh2';
 
 // ====================================================================
 // Constants & Environment Configuration
@@ -15,13 +16,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const localBasePath = path.join(process.cwd(), 'src', 'lib', 'local-dev');
 const remoteBasePath = '/etc/zivpn';
 
-const localConfigPath = path.join(localBasePath, 'config.json');
 const localManagersConfigPath = path.join(localBasePath, 'managers.json');
-const localUsersMetadataPath = path.join(localBasePath, 'users-metadata.json');
-
+const remoteUsersMetadataPath = (host: string) => path.join(remoteBasePath, `users-metadata.${host}.json`);
 const remoteConfigPath = path.join(remoteBasePath, 'config.json');
-const remoteManagersConfigPath = path.join(remoteBasePath, 'managers.json');
-const remoteUsersMetadataPath = path.join(remoteBasePath, 'users-metadata.json');
 
 const defaultConfig = {
   "listen": ":5667",
@@ -33,6 +30,13 @@ const defaultConfig = {
     "config": []
   }
 };
+
+const defaultManagersFile = {
+  owner: { username: 'admin', password: 'password', createdAt: new Date().toISOString() },
+  servers: [],
+  managers: [],
+};
+
 
 // ====================================================================
 // SSH API Wrapper Functions
@@ -47,8 +51,6 @@ type SshApiResponse = {
 }
 
 async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
-    // This function will run on the Next.js server, not the browser.
-    // We can get the base URL for the fetch request.
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
     
     try {
@@ -56,27 +58,16 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, payload, sshConfig }),
-            cache: 'no-store', // Ensure fresh data for every request
+            cache: 'no-store',
         });
 
         const responseBody: SshApiResponse = await response.json();
 
-        // If the fetch itself was OK, but the API reports failure (e.g. bad password)
-        // the response body will contain the useful log. We must return it.
-        if (!response.ok) {
-            return {
+        if (!response.ok || !responseBody.success) {
+             return {
                 success: false,
                 error: responseBody.error || `API request failed with status ${response.status}`,
                 log: responseBody.log || [{ level: 'ERROR', message: `API request failed with status ${response.status}` }]
-            };
-        }
-        
-        // Also handle the case where the API call is successful but the operation inside failed
-        if (!responseBody.success) {
-            return {
-                success: false,
-                error: responseBody.error,
-                log: responseBody.log,
             };
         }
 
@@ -93,13 +84,10 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 
 
 // ====================================================================
-// Core Service Functions
+// Core Service Functions (Low-level file IO)
 // ====================================================================
 
-/**
- * Executes a shell command to restart the VPN service.
- */
-async function restartVpnService(sshConfig: any): Promise<{ success: boolean; error?: string }> {
+async function restartVpnService(sshConfig: any | null): Promise<{ success: boolean; error?: string }> {
     if (!sshConfig) {
         console.log("DEV-MODE: Simulated service restart.");
         return { success: true };
@@ -108,7 +96,7 @@ async function restartVpnService(sshConfig: any): Promise<{ success: boolean; er
     return { success: result.success, error: result.error };
 }
 
-async function ensureDirExists(sshConfig: any) {
+async function ensureDirExists(sshConfig: any | null, remotePath: string) {
     if (!sshConfig) {
         try {
             await fs.mkdir(localBasePath, { recursive: true });
@@ -117,10 +105,10 @@ async function ensureDirExists(sshConfig: any) {
         }
         return;
     }
-    await sshApiRequest('ensureDir', { path: remoteBasePath }, sshConfig);
+    await sshApiRequest('ensureDir', { path: remotePath }, sshConfig);
 }
 
-async function readFile(filePath: string, sshConfig: any): Promise<string> {
+async function readFile(filePath: string, sshConfig: any | null): Promise<string> {
     if (!sshConfig) {
         try {
             return await fs.readFile(filePath, 'utf8');
@@ -134,7 +122,7 @@ async function readFile(filePath: string, sshConfig: any): Promise<string> {
     return result.data;
 }
 
-async function writeFile(filePath: string, data: string, sshConfig: any): Promise<{ success: boolean, error?: string }> {
+async function writeFile(filePath: string, data: string, sshConfig: any | null): Promise<{ success: boolean, error?: string }> {
     if (!sshConfig) {
         await fs.writeFile(filePath, data, 'utf8');
         return { success: true };
@@ -144,10 +132,33 @@ async function writeFile(filePath: string, data: string, sshConfig: any): Promis
     return { success: true };
 }
 
+// ====================================================================
+// Data Access Layer (Reading/Writing JSON files)
+// ====================================================================
+
+async function getSshConfigForManager(managerUsername: string): Promise<any | null> {
+    const managersData = await readManagersFile();
+    
+    // If the logged-in user is the owner, they don't have a direct SSH config.
+    // They manage servers, so we return null.
+    if (managerUsername === managersData.owner.username) {
+        return null; 
+    }
+
+    const manager = managersData.managers.find(m => m.username === managerUsername);
+    if (!manager || !manager.assignedServerId) {
+        return null; // Manager not found or not assigned to a server
+    }
+
+    const server = managersData.servers.find(s => s.id === manager.assignedServerId);
+    return server || null;
+}
 
 async function readRawConfig(sshConfig: any): Promise<any> {
-    await ensureDirExists(sshConfig);
-    const configData = await readFile(sshConfig ? remoteConfigPath : localConfigPath, sshConfig);
+    await ensureDirExists(sshConfig, remoteBasePath);
+    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, 'config.json');
+    const configData = await readFile(configPath, sshConfig);
+
     if (!configData || !configData.trim()) {
         return { ...defaultConfig };
     }
@@ -160,25 +171,33 @@ async function readRawConfig(sshConfig: any): Promise<any> {
 }
 
 async function readUsersMetadata(sshConfig: any): Promise<any[]> {
-    await ensureDirExists(sshConfig);
-    const metadataStr = await readFile(sshConfig ? remoteUsersMetadataPath : localUsersMetadataPath, sshConfig);
+    const hostIdentifier = sshConfig ? sshConfig.host : 'local';
+    const metadataPath = sshConfig ? remoteUsersMetadataPath(sshConfig.host) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
+
+    await ensureDirExists(sshConfig, remoteBasePath);
+    const metadataStr = await readFile(metadataPath, sshConfig);
+    
     if (!metadataStr.trim()) {
-        await saveUsersMetadata([], sshConfig);
+        await saveUsersMetadata([], sshConfig); // Create the file if it doesn't exist
         return [];
     }
     return JSON.parse(metadataStr);
 }
 
 async function saveConfig(usernames: string[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
-    await ensureDirExists(sshConfig);
+    await ensureDirExists(sshConfig, remoteBasePath);
     const configData = await readRawConfig(sshConfig);
     configData.auth.config = usernames;
-    return writeFile(sshConfig ? remoteConfigPath : localConfigPath, JSON.stringify(configData, null, 2), sshConfig);
+    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, 'config.json');
+    return writeFile(configPath, JSON.stringify(configData, null, 2), sshConfig);
 }
 
 async function saveUsersMetadata(metadata: any[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
-    await ensureDirExists(sshConfig);
-    return writeFile(sshConfig ? remoteUsersMetadataPath : localUsersMetadataPath, JSON.stringify(metadata, null, 2), sshConfig);
+    const hostIdentifier = sshConfig ? sshConfig.host : 'local';
+    const metadataPath = sshConfig ? remoteUsersMetadataPath(sshConfig.host) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
+    
+    await ensureDirExists(sshConfig, remoteBasePath);
+    return writeFile(metadataPath, JSON.stringify(metadata, null, 2), sshConfig);
 }
 
 
@@ -191,8 +210,18 @@ export async function readConfig(managerUsername: string): Promise<any> {
     redirect('/login');
   }
 
-  const owner = await getOwnerManager();
-  const sshConfig = owner?.ssh;
+  const sshConfig = await getSshConfigForManager(managerUsername);
+
+  // For owner, we don't load users by default. They need to select a server.
+  const isOwner = await isOwnerCheck(managerUsername);
+  if (isOwner) {
+    return { auth: { config: [] }, isOwner: true };
+  }
+  
+  if (!sshConfig) {
+      console.log(`Manager ${managerUsername} is not assigned to a valid server. No users will be loaded.`);
+      return { auth: { config: [] }, error: "You are not assigned to a server. Please contact the owner." };
+  }
 
   let usersMetadata = await readUsersMetadata(sshConfig);
   const now = new Date();
@@ -200,7 +229,7 @@ export async function readConfig(managerUsername: string): Promise<any> {
   const validMetadata = usersMetadata.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
 
   if (validMetadata.length < usersMetadata.length) {
-    console.log(`Removing ${usersMetadata.length - validMetadata.length} expired users.`);
+    console.log(`Removing ${usersMetadata.length - validMetadata.length} expired users from server ${sshConfig.host}.`);
     const activeUsernames = validMetadata.map((user: any) => user.username);
     
     await saveUsersMetadata(validMetadata, sshConfig);
@@ -222,8 +251,10 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     if (!managerUsername) {
         return { success: false, error: "Authentication required. Please log in again." };
     }
-    const owner = await getOwnerManager();
-    const sshConfig = owner?.ssh;
+    const sshConfig = await getSshConfigForManager(managerUsername);
+    if (!sshConfig) {
+      return { success: false, error: "You are not assigned to a server or the server is misconfigured." };
+    }
 
     const username = formData.get('username') as string;
     if (!username) {
@@ -271,8 +302,10 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const owner = await getOwnerManager();
-    const sshConfig = owner?.ssh;
+    const sshConfig = await getSshConfigForManager(managerUsername);
+    if (!sshConfig) {
+      return { success: false, error: "Cannot perform action: not assigned to a server." };
+    }
 
     const username = formData.get('username') as string;
 
@@ -313,8 +346,10 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const owner = await getOwnerManager();
-    const sshConfig = owner?.ssh;
+    const sshConfig = await getSshConfigForManager(managerUsername);
+    if (!sshConfig) {
+      return { success: false, error: "Cannot perform action: not assigned to a server." };
+    }
     
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
@@ -363,8 +398,10 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const owner = await getOwnerManager();
-    const sshConfig = owner?.ssh;
+    const sshConfig = await getSshConfigForManager(managerUsername);
+    if (!sshConfig) {
+      return { success: false, error: "Cannot perform action: not assigned to a server." };
+    }
     
     const username = formData.get('username') as string;
 
@@ -393,43 +430,43 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 }
 
 // ====================================================================
-// Authentication & Manager Management
+// Authentication & Manager/Server Management
 // ====================================================================
 
-async function readManagersFile(): Promise<any[]> {
-    await ensureDirExists(null); // Ensure local-dev dir exists
-    const managersData = await readFile(localManagersConfigPath, null); // Always reads local file system
+async function readManagersFile(): Promise<any> {
+    await ensureDirExists(null, localBasePath);
+    const managersData = await readFile(localManagersConfigPath, null);
     if (!managersData.trim()) {
-        console.log('No managers found. Creating default admin user.');
-        const defaultManager = { username: 'admin', password: 'password', createdAt: new Date().toISOString() };
-        await saveManagersFile([defaultManager]);
-        return [defaultManager];
+        console.log('No managers file found. Creating default.');
+        await saveManagersFile(defaultManagersFile);
+        return defaultManagersFile;
     }
     
-    const managers = JSON.parse(managersData);
-    if (managers.length === 0) {
-        console.log('Managers file is empty. Creating default admin user.');
-        const defaultManager = { username: 'admin', password: 'password', createdAt: new Date().toISOString() };
-        await saveManagersFile([defaultManager]);
-        return [defaultManager];
+    try {
+      const data = JSON.parse(managersData);
+      // Basic validation for new structure
+      if (!data.owner || !data.servers || !data.managers) {
+        console.log('Old data structure detected. Migrating...');
+        const owner = data.find((m:any) => m.ssh);
+        const otherManagers = data.filter((m:any) => !m.ssh);
+        const newStructure = {
+          owner: { username: owner?.username || 'admin', password: owner?.password || 'password' },
+          servers: owner?.ssh ? [{ id: 'default-server', name: 'Default Server', ...owner.ssh }] : [],
+          managers: otherManagers.map((m: any) => ({...m, assignedServerId: owner?.ssh ? 'default-server' : null }))
+        };
+        await saveManagersFile(newStructure);
+        return newStructure;
+      }
+      return data;
+    } catch(e) {
+      console.error("Failed to parse managers.json, creating default. Error:", e);
+      await saveManagersFile(defaultManagersFile);
+      return defaultManagersFile;
     }
-    
-    return managers;
 }
 
-async function getManager(username: string): Promise<any | undefined> {
-    const managers = await readManagersFile();
-    return managers.find(m => m.username === username);
-}
-
-async function getOwnerManager(): Promise<any | undefined> {
-    const managers = await readManagersFile();
-    return managers.length > 0 ? managers[0] : undefined;
-}
-
-
-async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
-     return writeFile(localManagersConfigPath, JSON.stringify(managers, null, 2), null); // Always writes to local file system
+async function saveManagersFile(data: any): Promise<{success: boolean, error?: string}> {
+     return writeFile(localManagersConfigPath, JSON.stringify(data, null, 2), null);
 }
 
 export async function getLoggedInUser() {
@@ -451,10 +488,11 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
     return { error: 'Username and password are required.' };
   }
   
-  const managers = await readManagersFile();
-  const manager = managers.find((m) => m.username === username && m.password === password);
+  const managersData = await readManagersFile();
+  const isOwner = managersData.owner.username === username && managersData.owner.password === password;
+  const manager = managersData.managers.find((m: any) => m.username === username && m.password === password);
   
-  if (manager) {
+  if (isOwner || manager) {
     const cookieStore = cookies();
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     cookieStore.set('session', username, { 
@@ -471,248 +509,227 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
 }
 
 // ====================================================================
-// Superadmin Actions for Manager Management
+// Owner Actions for Manager & Server Management
 // ====================================================================
 
-async function isOwner(username: string): Promise<boolean> {
-    const managers = await readManagersFile();
-    return managers.length > 0 && managers[0].username === username;
+async function isOwnerCheck(username: string): Promise<boolean> {
+    const data = await readManagersFile();
+    return data.owner.username === username;
 }
 
-export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
+export async function readFullConfig(): Promise<{ managersData?: any, error?: string }> {
     try {
-      let managers = await readManagersFile();
-      const owner = await getOwnerManager();
-      const sshConfig = owner?.ssh;
+      let data = await readManagersFile();
 
-      // Expiry logic only applies to non-owner managers
+      // Expiry logic for managers
       const now = new Date();
-      if (managers.length > 1) {
-          const owner = managers[0];
-          const otherManagers = managers.slice(1);
-          const validManagers = otherManagers.filter((m: any) => !m.expiresAt || new Date(m.expiresAt) > now);
-          const updatedManagers = [owner, ...validManagers];
+      const validManagers = data.managers.filter((m: any) => !m.expiresAt || new Date(m.expiresAt) > now);
 
-          if (updatedManagers.length < managers.length) {
-              console.log(`Removing ${managers.length - updatedManagers.length} expired managers.`);
-              await saveManagersFile(updatedManagers);
-              managers = updatedManagers;
-          }
+      if (validManagers.length < data.managers.length) {
+          console.log(`Removing ${data.managers.length - validManagers.length} expired managers.`);
+          data.managers = validManagers;
+          await saveManagersFile(data);
       }
-      return { managers };
+      return { managersData: data };
     } catch(e: any) {
       return { error: e.message }
     }
 }
 
-export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string, message?: string }> {
+export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managersData?: any, error?: string, message?: string }> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!ownerUsername) {
-        return { success: false, error: "Authentication required." };
-    }
-    const isOwnerCheck = await isOwner(ownerUsername);
-    if(!isOwnerCheck) {
-        return { success: false, error: "Permission denied. Only the owner can add managers." };
-    }
+    const isOwner = await isOwnerCheck(ownerUsername);
+    if(!isOwner) return { success: false, error: "Permission denied." };
     
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
-    if (!username || !password) {
-        return { success: false, error: "Username and password are required." };
-    }
+    const assignedServerId = formData.get('assignedServerId') as string;
 
-    const managers = await readManagersFile();
-    if (managers.some(m => m.username === username)) {
+    if (!username || !password) return { success: false, error: "Username and password are required." };
+    if (!assignedServerId) return { success: false, error: "A server must be assigned to the manager." };
+
+    const data = await readManagersFile();
+    if (data.managers.some((m:any) => m.username === username) || data.owner.username === username) {
         return { success: false, error: "Manager username already exists." };
     }
     
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    managers.push({ 
+    data.managers.push({ 
         username, 
         password,
+        assignedServerId,
         createdAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
     });
-    const result = await saveManagersFile(managers);
+    const result = await saveManagersFile(data);
     
     if (result.success) {
       revalidatePath('/');
-      return { success: true, managers, message: `Manager "${username}" has been added.` };
+      return { success: true, managersData: data, message: `Manager "${username}" has been added.` };
     } else {
-      return { success: false, error: result.error, managers };
+      return { success: false, error: result.error, managersData: data };
     }
 }
 
-export async function deleteManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string }> {
+export async function deleteManager(prevState: any, formData: FormData): Promise<{ success: boolean; managersData?: any, error?: string }> {
     const usernameToDelete = formData.get('username') as string;
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!ownerUsername) {
-        return { success: false, error: "Authentication required." };
-    }
-
-    const isOwnerCheck = await isOwner(ownerUsername);
-    if(!isOwnerCheck) {
-        return { success: false, error: "Permission denied. Only the owner can delete managers." };
-    }
+    const isOwner = await isOwnerCheck(ownerUsername);
+    if(!isOwner) return { success: false, error: "Permission denied." };
 
     if (usernameToDelete === ownerUsername) {
         return { success: false, error: "The owner account cannot be deleted." };
     }
     
-    let managers = await readManagersFile();
-    const updatedManagers = managers.filter(m => m.username !== usernameToDelete);
+    let data = await readManagersFile();
+    const initialCount = data.managers.length;
+    data.managers = data.managers.filter((m:any) => m.username !== usernameToDelete);
 
-    if (updatedManagers.length === managers.length) {
+    if (data.managers.length === initialCount) {
         return { success: false, error: "Manager not found." };
     }
 
-    const result = await saveManagersFile(updatedManagers);
+    const result = await saveManagersFile(data);
     revalidatePath('/');
     if (result.success) {
-      return { success: true, managers: updatedManagers };
+      return { success: true, managersData: data };
     } else {
-      return { success: false, error: result.error, managers };
+      return { success: false, error: result.error, managersData: data };
     }
 }
 
-
-export async function editManager(prevState: any, formData: FormData): Promise<{ success: boolean; managers?: any[], error?: string; message?: string; }> {
+export async function editManager(prevState: any, formData: FormData): Promise<{ success: boolean; managersData?: any, error?: string; message?: string; }> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!ownerUsername) {
-        return { success: false, error: "Authentication required." };
-    }
-
-    const isOwnerCheck = await isOwner(ownerUsername);
-    if (!isOwnerCheck) {
-        return { success: false, error: "Permission denied. Only the owner can edit managers." };
-    }
+    const isOwner = await isOwnerCheck(ownerUsername);
+    if (!isOwner) return { success: false, error: "Permission denied." };
 
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
     const newPassword = formData.get('newPassword') as string;
+    const assignedServerId = formData.get('assignedServerId') as string;
 
-    if (!oldUsername) {
-        return { success: false, error: "Old username is missing." };
-    }
+    if (!oldUsername) return { success: false, error: "Old username is missing." };
 
-    const managers = await readManagersFile();
-    const managerIndex = managers.findIndex(m => m.username === oldUsername);
+    const data = await readManagersFile();
+    const managerIndex = data.managers.findIndex((m:any) => m.username === oldUsername);
 
     if (managerIndex === -1) {
-        return { success: false, error: `Manager "${oldUsername}" not found.` };
-    }
-    
-    if (newUsername) {
-        if (oldUsername === managers[0].username && oldUsername !== newUsername) {
-            return { success: false, error: "The owner's username cannot be changed." };
+        const isOwnerAccount = oldUsername === data.owner.username;
+        if (!isOwnerAccount) return { success: false, error: `Manager "${oldUsername}" not found.` };
+        
+        // Editing owner account
+        if(newPassword) data.owner.password = newPassword;
+
+    } else {
+        // Editing a regular manager
+        if (newUsername) {
+            if (newUsername !== oldUsername && (data.managers.some((m:any) => m.username === newUsername) || data.owner.username === newUsername)) {
+                return { success: false, error: `Manager username "${newUsername}" already exists.` };
+            }
+            data.managers[managerIndex].username = newUsername;
         }
-        if (newUsername !== oldUsername && managers.some(m => m.username === newUsername)) {
-            return { success: false, error: `Manager username "${newUsername}" already exists.` };
-        }
-        managers[managerIndex].username = newUsername;
-    }
-    
-    if (newPassword) { 
-        managers[managerIndex].password = newPassword;
+        if (newPassword) data.managers[managerIndex].password = newPassword;
+        if (assignedServerId) data.managers[managerIndex].assignedServerId = assignedServerId;
     }
 
-    const result = await saveManagersFile(managers);
-    if (!result.success) {
-        return { success: false, error: result.error, managers };
-    }
+    const result = await saveManagersFile(data);
+    if (!result.success) return { success: false, error: result.error, managersData: data };
     
     revalidatePath('/');
 
+    // If owner changed their own password, log them out
     if (oldUsername === ownerUsername && newPassword) {
         await logout();
     }
     
-    return { success: true, managers, message: `Manager "${newUsername || oldUsername}" has been updated.` };
+    return { success: true, managersData: data, message: `Account for "${newUsername || oldUsername}" has been updated.` };
 }
 
-export async function saveSshConfig(prevState: any, formData: FormData): Promise<SshApiResponse> {
-    const ownerUsername = formData.get('ownerUsername') as string;
-    if (!ownerUsername) return { success: false, error: "Authentication required.", log: [] };
 
-    const isOwnerCheck = await isOwner(ownerUsername);
-    if (!isOwnerCheck) return { success: false, error: "Permission denied.", log: [] };
-    
+// --- Server Management Actions by Owner ---
+
+export async function saveServerConfig(prevState: any, formData: FormData): Promise<SshApiResponse> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied.", log: [] };
+
+    const serverId = formData.get('serverId') as string | null; // Will be null for new servers
+    const name = formData.get('name') as string;
     const host = formData.get('host') as string;
     const port = formData.get('port') as string;
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
 
-    if (!host || !username || !password) {
-        return { success: false, error: "Host, username, and password are required.", log: [] };
+    if (!name || !host || !username || !password) {
+        return { success: false, error: "Name, host, username, and password are required.", log: [] };
     }
 
     const newSshConfig = {
+        name,
         host,
         port: port ? parseInt(port, 10) : 22,
         username,
         password
     };
 
-    // Test the new configuration first
     const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
     if (!testResult.success) {
         return { success: false, error: testResult.error || 'Connection failed', log: testResult.log };
     }
 
-    const managers = await readManagersFile();
-    const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
+    const data = await readManagersFile();
 
-    if (ownerIndex === -1) {
-        const log = testResult.log || [];
-        log.push({ level: 'ERROR', message: "Owner account not found after successful SSH test."});
-        return { success: false, error: "Owner account not found.", log };
+    if (serverId) { // Editing existing server
+        const serverIndex = data.servers.findIndex((s:any) => s.id === serverId);
+        if (serverIndex > -1) {
+            data.servers[serverIndex] = { ...data.servers[serverIndex], ...newSshConfig };
+        }
+    } else { // Adding new server
+        const newServer = { id: crypto.randomUUID(), ...newSshConfig };
+        data.servers.push(newServer);
     }
-
-    managers[ownerIndex].ssh = newSshConfig;
     
-    const result = await saveManagersFile(managers);
+    const result = await saveManagersFile(data);
     if(result.success) {
         revalidatePath('/');
-        return { success: true, message: "SSH Connection Verified & Saved!", log: testResult.log };
+        return { success: true, message: "Server Connection Verified & Saved!", log: testResult.log };
     }
 
     const finalLog = testResult.log || [];
     finalLog.push({ level: 'ERROR', message: `Failed to save configuration file: ${result.error}` });
-    return { success: false, error: result.error || "Failed to save SSH configuration.", log: finalLog };
+    return { success: false, error: result.error || "Failed to save server configuration.", log: finalLog };
 }
 
-export async function clearSshConfig(ownerUsername: string): Promise<{ success: boolean; error?: string; message?: string }> {
-    if (!ownerUsername) {
-        return { success: false, error: "Authentication required." };
-    }
 
-    const isOwnerCheck = await isOwner(ownerUsername);
-    if (!isOwnerCheck) {
-        return { success: false, error: "Permission denied. Only the owner can clear the SSH configuration." };
-    }
+export async function deleteServer(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
     
-    const managers = await readManagersFile();
-    const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
+    const serverId = formData.get('serverId') as string;
+    if (!serverId) return { success: false, error: "Server ID is missing." };
 
-    if (ownerIndex === -1) {
-        return { success: false, error: "Owner account not found." };
-    }
-
-    // Delete the ssh property from the owner object
-    if (managers[ownerIndex].ssh) {
-        delete managers[ownerIndex].ssh;
-    }
-
-    const result = await saveManagersFile(managers);
-
-    if (!result.success) {
-        return { success: false, error: result.error };
-    }
+    const data = await readManagersFile();
     
-    revalidatePath('/');
-    return { success: true, message: "SSH configuration has been cleared." };
+    const initialServerCount = data.servers.length;
+    data.servers = data.servers.filter((s: any) => s.id !== serverId);
+    if(data.servers.length === initialServerCount) {
+        return { success: false, error: "Server not found." };
+    }
+
+    // Un-assign any managers that were assigned to this server
+    data.managers = data.managers.map((m: any) => {
+        if (m.assignedServerId === serverId) {
+            return { ...m, assignedServerId: null };
+        }
+        return m;
+    });
+
+    const result = await saveManagersFile(data);
+    if (result.success) {
+        revalidatePath('/');
+        return { success: true, message: "Server has been deleted." };
+    }
+
+    return { success: false, error: result.error || "Failed to delete server." };
 }
-
-    

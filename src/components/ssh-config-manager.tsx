@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useActionState, useTransition, useState } from 'react';
-import { saveSshConfig, clearSshConfig } from '@/app/actions';
+import { useEffect, useActionState, useState, useRef } from 'react';
+import { saveServerConfig, deleteServer } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, LogOut, CheckCircle, Terminal } from 'lucide-react';
+import { Loader2, Server, LogOut, CheckCircle, Terminal, Trash2, Pencil, Plus, ServerCrash, Users } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,18 +19,26 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-
+import { Badge } from './ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type SshConfig = {
+    id: string;
+    name: string;
     host: string;
     port: number;
     username: string;
-}
-
-type Manager = {
-  username: string;
-  ssh?: SshConfig;
+    password?: string; // Password is write-only, not read
 }
 
 type LogEntry = {
@@ -52,143 +60,197 @@ const initialActionState: SshActionState = {
     log: [],
 }
 
-export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | null, ownerUsername: string }) {
+export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsername: string, initialServers: SshConfig[] }) {
     const { toast } = useToast();
-    const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialActionState);
+    const formRef = useRef<HTMLFormElement>(null);
+    const [editingServer, setEditingServer] = useState<SshConfig | null>(null);
     const [log, setLog] = useState<LogEntry[]>([]);
     
-    // For the clear action, we'll handle it with useTransition as it's not a form action
-    const [isClearingPending, startTransition] = useTransition();
-
-    const handleClearConfig = () => {
-        startTransition(async () => {
-            const result = await clearSshConfig(ownerUsername);
-            if (result.success) {
-                toast({ title: 'Success', description: result.message });
-                setLog([]); // Clear log on disconnect
-            } else if (result.error) {
-                toast({ variant: 'destructive', title: 'Error Clearing Config', description: result.error });
-            }
-        });
-    };
+    const [saveState, saveAction, isSavingPending] = useActionState(saveServerConfig, initialActionState);
+    const [deleteState, deleteAction, isDeletingPending] = useActionState(deleteServer, {success: false});
 
     useEffect(() => {
-        if (!sshState) return;
+        if (!saveState) return;
+        if (saveState.log && saveState.log.length > 0) setLog(saveState.log);
 
-        if (sshState.log && sshState.log.length > 0) {
-            setLog(sshState.log);
+        if(saveState.success && saveState.message) {
+            toast({ title: 'Success', description: saveState.message, className: 'bg-green-500 text-white' });
+            setEditingServer(null);
+            formRef.current?.reset();
+        } else if (saveState.error) {
+             toast({ variant: 'destructive', title: 'Action Failed', description: saveState.error });
         }
-
-        if(sshState.success && sshState.message) {
-            toast({ title: 'Success', description: sshState.message, className: 'bg-green-500 text-white' });
-        } else if (sshState.error) {
-             toast({ variant: 'destructive', title: 'Connection Failed', description: sshState.error });
-        }
-        
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sshState]);
+    }, [saveState]);
 
-    const isPending = isSshPending || isClearingPending;
-    const isConnected = owner?.ssh && owner.ssh.host;
+     useEffect(() => {
+        if (!deleteState) return;
+        if(deleteState.success && deleteState.message) {
+            toast({ title: 'Success', description: deleteState.message });
+        } else if (deleteState.error) {
+             toast({ variant: 'destructive', title: 'Delete Failed', description: deleteState.error });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [deleteState]);
+    
+    const isPending = isSavingPending || isDeletingPending;
 
     return (
+    <>
         <Card className="w-full max-w-4xl mx-auto shadow-lg mt-6">
              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server</CardTitle>
-                <CardDescription>
-                    {isConnected 
-                        ? 'You are connected to a remote server. All user management actions will be performed on this server.'
-                        : 'Configure a remote VPS to manage users. Leave blank to manage users on the server where this panel is running.'
-                    }
-                </CardDescription>
+                <div className='flex justify-between items-start'>
+                    <div>
+                        <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Server Management</CardTitle>
+                        <CardDescription>
+                            Add, edit, or remove your remote VPS configurations. Managers can be assigned to these servers.
+                        </CardDescription>
+                    </div>
+                     <Button onClick={() => setEditingServer({} as SshConfig)} disabled={isPending}>
+                        <Plus className='mr-2 h-4 w-4'/> Add Server
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
-                {isConnected ? (
-                    <div className="flex flex-col items-start gap-4 rounded-lg border p-4">
-                        <div className="flex items-center gap-3">
-                            <CheckCircle className="h-6 w-6 text-green-500" />
-                            <div>
-                                <p className="font-semibold">Connected to:</p>
-                                <p className="text-muted-foreground font-mono">{owner.ssh?.host}</p>
-                            </div>
-                        </div>
-                         <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="outline" disabled={isPending} className="gap-2">
-                                     {isClearingPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <LogOut className="h-4 w-4" />}
-                                    Disconnect
+                <div className="border rounded-md overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Connection Details</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {initialServers.length > 0 ? (
+                        initialServers.map((server) => (
+                            <TableRow key={server.id}>
+                              <TableCell className="font-medium">{server.name}</TableCell>
+                              <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)}>
+                                    <Pencil className="h-4 w-4" />
                                 </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                <AlertDialogTitle>Are you sure you want to disconnect?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This will clear your saved SSH credentials. You will need to enter them again to manage the remote server.
-                                </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleClearConfig} variant="destructive" disabled={isPending}>
-                                        {isClearingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                        Disconnect
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
-                ) : (
-                    <form action={sshAction} className="space-y-4">
-                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <form action={deleteAction}>
+                                            <input type="hidden" name="serverId" value={server.id} />
+                                            <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    This will permanently delete the server <strong className='font-mono'>{server.name}</strong>. Managers assigned to this server will lose access. This action cannot be undone.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                                    Delete Server
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </form>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                            <div className='flex flex-col items-center gap-2'>
+                                <ServerCrash className='w-8 h-8'/>
+                                <span>No servers configured. Add one to get started.</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+            </CardContent>
+        </Card>
+
+        <Dialog open={!!editingServer} onOpenChange={(isOpen) => { if (!isOpen) { setEditingServer(null); setLog([])} }}>
+            <DialogContent className="sm:max-w-2xl">
+                <form ref={formRef} action={saveAction}>
+                     <DialogHeader>
+                        <DialogTitle>{editingServer?.id ? 'Edit Server' : 'Add New Server'}</DialogTitle>
+                        <DialogDescription>
+                            Enter the SSH credentials for the server. The connection will be tested before saving.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                    <input type="hidden" name="serverId" value={editingServer?.id || ''} />
+
+                    <div className="space-y-4 py-4">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="name">Server Name</Label>
+                            <Input name="name" id="name" placeholder="e.g., VPS-Miami" defaultValue={editingServer?.name} required disabled={isPending} />
+                        </div>
                         <div className="grid sm:grid-cols-2 gap-4">
                             <div className="grid gap-1.5">
                                 <Label htmlFor="host">Server IP / Hostname</Label>
-                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
+                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={editingServer?.host} required disabled={isPending} />
                             </div>
                             <div className="grid gap-1.5">
                                 <Label htmlFor="port">SSH Port</Label>
-                                <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port || 22} disabled={isPending} />
+                                <Input name="port" id="port" type="number" placeholder="22" defaultValue={editingServer?.port || 22} disabled={isPending} />
                             </div>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-4">
                             <div className="grid gap-1.5">
                                 <Label htmlFor="ssh-username">SSH Username</Label>
-                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
+                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={editingServer?.username} required disabled={isPending} />
                             </div>
                             <div className="grid gap-1.5">
                                 <Label htmlFor="ssh-password">SSH Password</Label>
-                                <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
+                                <Input name="password" id="ssh-password" type="password" placeholder={editingServer?.id ? 'Leave blank to keep unchanged' : 'Enter SSH password'} required={!editingServer?.id} disabled={isPending} />
                             </div>
                         </div>
-                        <div className='flex justify-end'>
-                            <Button type="submit" disabled={isPending} className="gap-2">
-                                {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                                Test & Save Connection
-                            </Button>
-                        </div>
-                    </form>
-                )}
 
-                {log.length > 0 && (
-                    <div className="mt-4 p-4 bg-black rounded-md font-mono text-sm text-white space-y-2">
-                         <div className="flex items-center gap-2 border-b border-gray-700 pb-2 mb-2">
-                            <Terminal className="w-5 h-5 text-gray-400" />
-                            <h3 className="font-semibold">Connection Log</h3>
-                        </div>
-                        {log.map((entry, index) => (
-                            <div key={index} className="flex items-start">
-                                <span className={cn('mr-2 font-bold', {
-                                    'text-cyan-400': entry.level === 'INFO',
-                                    'text-green-400': entry.level === 'SUCCESS',
-                                    'text-red-400': entry.level === 'ERROR',
-                                })}>
-                                    [{entry.level}]
-                                </span>
-                                <span className="flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
+                         {log.length > 0 && (
+                            <div className="mt-4 p-4 bg-black rounded-md font-mono text-sm text-white space-y-2 max-h-48 overflow-y-auto">
+                                <div className="flex items-center gap-2 border-b border-gray-700 pb-2 mb-2">
+                                    <Terminal className="w-5 h-5 text-gray-400" />
+                                    <h3 className="font-semibold">Connection Log</h3>
+                                </div>
+                                {log.map((entry, index) => (
+                                    <div key={index} className="flex items-start">
+                                        <span className={cn('mr-2 font-bold', {
+                                            'text-cyan-400': entry.level === 'INFO',
+                                            'text-green-400': entry.level === 'SUCCESS',
+                                            'text-red-400': entry.level === 'ERROR',
+                                        })}>
+                                            [{entry.level}]
+                                        </span>
+                                        <span className="flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
+                        )}
                     </div>
-                )}
-            </CardContent>
-        </Card>
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary" disabled={isPending}>
+                                Cancel
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={isPending} className="gap-2">
+                            {isSavingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Test & Save
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    </>
     )
 }

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +19,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -39,6 +38,12 @@ type User = {
   createdAt: string;
   expiresAt: string;
   createdBy: string;
+}
+
+type Server = {
+    id: string;
+    name: string;
+    host: string;
 }
 
 type UserWithStatus = User & {
@@ -68,14 +73,15 @@ const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired
 
 const initialActionState = { success: false, error: undefined, message: undefined, users: [] };
 
-export function UserManager({ initialUsers, managerUsername }: { initialUsers: User[], managerUsername: string }) {
+export function UserManager({ initialUsers, managerUsername, isOwner, servers = [] }: { initialUsers: User[], managerUsername: string, isOwner: boolean, servers: Server[] }) {
   const [isClient, setIsClient] = useState(false);
   const [users, setUsers] = useState<UserWithStatus[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  
+  const [selectedServer, setSelectedServer] = useState<Server | null>(null);
+
   const { toast } = useToast();
   const addUserFormRef = useRef<HTMLFormElement>(null);
   const editUserFormRef = useRef<HTMLFormElement>(null);
@@ -89,8 +95,14 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
 
   useEffect(() => {
     setIsClient(true);
-    setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
-  }, [initialUsers]);
+  }, []);
+
+  useEffect(() => {
+    // This effect is for managers, who get their users on initial load
+    if(!isOwner) {
+      setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
+    }
+  }, [initialUsers, isOwner]);
 
 
   const handleStateUpdate = (state: typeof addUserState, actionType: string) => {
@@ -178,10 +190,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                <CardTitle className="text-xl">Your VPN Users</CardTitle>
-                <CardDescription>
-                Add, edit, renew, or remove users. Users will automatically expire and be removed after 30 days.
-                </CardDescription>
+                 <CardTitle className="text-xl">VPN Users</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
@@ -192,14 +201,53 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
     )
   }
 
+  // Owner view when no server is selected
+  if (isOwner && !selectedServer) {
+    return (
+        <Card className="w-full max-w-5xl mx-auto shadow-lg">
+            <CardHeader>
+                <CardTitle className="text-xl">Manage VPN Users</CardTitle>
+                <CardDescription>Select a server to view and manage its users.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+                    {servers.map(server => (
+                        <Button key={server.id} variant="outline" className='p-6 flex flex-col items-start h-auto gap-2' onClick={() => setSelectedServer(server)}>
+                           <div className='flex items-center gap-2'>
+                             <Server className='w-5 h-5 text-primary'/>
+                             <span className='text-lg font-bold'>{server.name}</span>
+                           </div>
+                           <span className='font-mono text-sm text-muted-foreground'>{server.host}</span>
+                        </Button>
+                    ))}
+                    {servers.length === 0 && (
+                        <p className='text-muted-foreground col-span-full text-center'>No servers configured. Please add a server in the 'Servers' tab.</p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    )
+  }
+  
   return (
     <>
     <Card className="w-full max-w-5xl mx-auto shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Your VPN Users</CardTitle>
-        <CardDescription>
-          Add, edit, renew, or remove users. Users will automatically expire and be removed after 30 days.
-        </CardDescription>
+        <div className='flex justify-between items-start'>
+            <div>
+                 <CardTitle className="text-xl">
+                    {isOwner ? `Users on: ${selectedServer?.name}` : 'Your VPN Users'}
+                 </CardTitle>
+                <CardDescription>
+                Add, edit, renew, or remove users. Users expire after 30 days.
+                </CardDescription>
+            </div>
+            {isOwner && (
+                <Button variant="outline" onClick={() => setSelectedServer(null)}>
+                    Change Server
+                </Button>
+            )}
+        </div>
       </CardHeader>
       <CardContent>
         <form ref={addUserFormRef} action={addUserAction} className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -218,8 +266,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
         </form>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
-            <h3 className="text-lg font-medium text-foreground/80">Current Users</h3>
-            <div className="flex gap-1 ml-auto flex-wrap">
+            <div className="flex gap-1 flex-wrap">
                 <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>All</Button>
                 <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Active</Button>
                 <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Expiring</Button>
@@ -235,6 +282,7 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                     <TableHead>Username</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
+                    {isOwner && <TableHead>Created By</TableHead>}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -266,6 +314,11 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                                 </div>
                              </div>
                           </TableCell>
+                          {isOwner && (
+                            <TableCell className="min-w-[150px]">
+                                 <span className="font-mono text-sm">{user.createdBy}</span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-right space-x-0">
                              <div className="flex justify-end items-center">
                                 <form action={renewUserAction} className='inline-flex'>
@@ -310,10 +363,10 @@ export function UserManager({ initialUsers, managerUsername }: { initialUsers: U
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={isOwner ? 5 : 4} className="h-24 text-center text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                             <AlertCircle className="w-8 h-8" />
-                           <span>You have not created any users, or no users match the current filter.</span>
+                           <span>No users to display for this server or filter.</span>
                         </div>
                       </TableCell>
                     </TableRow>
