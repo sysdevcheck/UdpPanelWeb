@@ -70,32 +70,38 @@ export function ConsoleManager() {
                 })
             });
 
-            const result = await response.json();
-            if (!response.ok) {
-                 throw new Error(result.error || 'Fallo al ejecutar el comando.');
-            }
-
-            const output: LogEntry[] = [];
-            if(result.data.stdout) {
-                output.push({ level: 'SUCCESS', message: result.data.stdout.trim() });
-            }
-            if(result.data.stderr) {
-                // Filter out common harmless warnings that pollute the output
-                const filteredStderr = result.data.stderr.split('\n').filter((line: string) => 
-                    line.trim() !== '' && 
-                    !line.toLowerCase().includes('stty: not a tty') &&
-                    !line.toLowerCase().includes('term environment variable not set')
-                ).join('\n');
-
-                if (filteredStderr) {
-                    output.push({ level: 'ERROR', message: filteredStderr.trim() });
+            // Check if the response is JSON before parsing
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.indexOf('application/json') !== -1) {
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Fallo al ejecutar el comando.');
                 }
-            }
-            if(output.length === 0 && !result.data.stdout && !result.data.stderr) {
-                // Don't show a message if there's no output, it's common for some commands
-            }
+                
+                const output: LogEntry[] = [];
+                if(result.data.stdout) {
+                    output.push({ level: 'SUCCESS', message: result.data.stdout.trim() });
+                }
+                if(result.data.stderr) {
+                    const filteredStderr = result.data.stderr.split('\n').filter((line: string) => 
+                        line.trim() !== '' && 
+                        !line.toLowerCase().includes('stty: not a tty') &&
+                        !line.toLowerCase().includes('term environment variable not set')
+                    ).join('\n');
 
-            setOutputLog(prev => [...prev, ...output]);
+                    if (filteredStderr) {
+                        output.push({ level: 'ERROR', message: filteredStderr.trim() });
+                    }
+                }
+                if(output.length === 0 && !result.data.stdout && !result.data.stderr) {
+                    // Don't show a message if there's no output
+                }
+                setOutputLog(prev => [...prev, ...output]);
+
+            } else {
+                 const textResponse = await response.text();
+                 throw new Error(`Error del servidor. La respuesta no es un JSON válido. Status: ${response.status}.`);
+            }
 
         } catch (e: any) {
             setOutputLog(prev => [...prev, { level: 'ERROR', message: e.message }]);
@@ -125,7 +131,6 @@ export function ConsoleManager() {
             </Card>
         )
     }
-
 
     const consoleTitle = selectedServer ? `${selectedServer.username}@${selectedServer.host}` : 'Consola SSH';
     const consolePrompt = selectedServer ? `${selectedServer.username}@${selectedServer.host}:~#` : '$';

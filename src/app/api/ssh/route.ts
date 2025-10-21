@@ -31,13 +31,22 @@ async function getSshConnection(sshConfig: any): Promise<Client> {
     });
 }
 
-async function execCommand(ssh: Client, command: string): Promise<{ stdout: string; stderr: string }> {
+async function execCommand(ssh: Client, command: string, timeout = 15000): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         let stdout = '';
         let stderr = '';
+        
+        const timer = setTimeout(() => {
+            reject(new Error(`Command timed out after ${timeout / 1000}s. The command may be interactive and is not supported.`));
+        }, timeout);
+
         ssh.exec(command, (err, stream) => {
-            if (err) return reject(err);
+            if (err) {
+                clearTimeout(timer);
+                return reject(err);
+            }
             stream.on('close', (code: any, signal: any) => {
+                clearTimeout(timer);
                 resolve({ stdout, stderr });
             }).on('data', (data: Buffer) => {
                 stdout += data.toString();
@@ -75,7 +84,6 @@ async function readFileSftp(sftp: SFTPWrapper, path: string): Promise<string> {
 
 async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Promise<void> {
     return new Promise((resolve, reject) => {
-        // Ensure directory exists before writing
         const dirname = path.substring(0, path.lastIndexOf('/'));
         const ssh = sftp.getClient();
         execCommand(ssh, `mkdir -p ${dirname}`).then(() => {
@@ -182,10 +190,9 @@ export async function POST(request: Request) {
             
             case 'resetConfig': {
                 const scriptCommand = 'wget -O zi.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi.sh && sudo chmod +x zi.sh && sudo ./zi.sh';
-                const { stderr: scriptErr } = await execCommand(ssh, scriptCommand);
+                const { stderr: scriptErr } = await execCommand(ssh, scriptCommand, 60000); // Longer timeout for reset
                 if (scriptErr) {
                     console.warn("Error during script execution:", scriptErr);
-                    // Don't treat "stty: not a tty" as a fatal error for this script
                     if (!scriptErr.includes("stty: not a tty")) {
                        return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
                     }
@@ -225,5 +232,3 @@ export async function POST(request: Request) {
         }
     }
 }
-
-    
