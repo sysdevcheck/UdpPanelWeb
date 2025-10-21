@@ -9,8 +9,7 @@
     "build": "next build",
     "start": "next start -p 9002",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
@@ -48,11 +47,9 @@
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
     "object-path-immutable": "^4.1.2",
-    "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
-    "react-hook-form": "^7.54.2",
     "recharts": "^2.15.1",
     "ssh2-promise": "^1.0.0",
     "tailwind-merge": "^3.0.1",

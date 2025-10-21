@@ -19,11 +19,11 @@ const nextConfig: NextConfig = {
     ],
   },
    webpack: (config, { isServer }) => {
-    // This is a workaround for a build issue with the 'ssh2' library and its dependencies.
-    // It prevents Next.js from trying to bundle certain dynamic requires.
-    // The main fix is handled by 'patch-package'.
-    if (isServer) {
-      config.externals.push('ssh2');
+    // This is the correct and robust way to handle this issue.
+    // 'ssh2' and its problematic dependencies should only be bundled on the server.
+    if (!isServer) {
+        // Exclude 'ssh2' and its dependencies from client-side bundles
+        config.externals = [...(config.externals || []), 'ssh2'];
     }
     return config;
   },
