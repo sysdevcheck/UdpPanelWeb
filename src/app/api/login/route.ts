@@ -6,13 +6,12 @@ import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// Helper function to simulate a fetch call to verify password.
-// Firebase Admin SDK does not have a direct signInWithPassword method.
-// We must use the client SDK's REST API for this verification step.
+// Helper function to verify password using Firebase REST API.
 async function verifyPassword(email: string, password: string): Promise<{idToken: string, localId: string} | null> {
     const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     if (!apiKey) {
       console.error("Firebase API Key is not configured.");
+      // Explicitly return null if API key is missing.
       return null;
     }
     const restApiUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
@@ -28,8 +27,8 @@ async function verifyPassword(email: string, password: string): Promise<{idToken
             })
         });
 
+        // If the response is not ok (e.g., 400 for bad password), return null.
         if (!res.ok) {
-           // This is crucial. If fetch fails, return null.
            return null;
         }
 
@@ -58,6 +57,7 @@ export async function POST(request: NextRequest) {
     const usersQuery = await firestore.collection('users').where('username', '==', username).limit(1).get();
 
     if (usersQuery.empty) {
+      // User not found in our database, invalid credentials.
       return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
     }
 
@@ -66,29 +66,26 @@ export async function POST(request: NextRequest) {
     const email = userDocData.email;
 
     if (!email) {
+      // This is a server-side data integrity issue.
       return NextResponse.json({ error: 'La cuenta de usuario no tiene un email asociado.' }, { status: 500 });
     }
     
     // Step 2: Verify the user's password using the REST API with the fetched email.
     const verificationResult = await verifyPassword(email, password);
 
+    // CRITICAL: If verification fails for any reason (bad password, etc.), return 401.
     if (!verificationResult) {
-         // This is the critical change. Now it explicitly returns a JSON response.
          return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
     }
 
     const { idToken, localId: uid } = verificationResult;
 
-    // Step 3: Verify the token just to be sure, although getting it means password was correct.
-    // This is a good practice to ensure the token wasn't tampered with, though unlikely here.
+    // Step 3: Verify the token to ensure integrity.
     await adminAuth.verifyIdToken(idToken);
     
     // Step 4: Create a session cookie with the user's UID.
-    const sessionPayload = {
-        uid,
-    };
+    const sessionPayload = { uid };
     
-    // Using a 30-day session
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     cookies().set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
@@ -102,8 +99,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login API error:', error);
-    let message = 'Error de autenticación.';
-    // Return a generic 401 for any other auth errors.
-    return NextResponse.json({ error: message }, { status: 401 });
+    // Generic error for any other unexpected issues.
+    return NextResponse.json({ error: 'Ocurrió un error inesperado en el servidor.' }, { status: 500 });
   }
 }
