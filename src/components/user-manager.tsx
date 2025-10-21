@@ -19,6 +19,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -80,7 +81,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedServer, setSelectedServer] = useState<Server | null>(isOwner ? null : servers.find(s => s.id === 'implicit') || null);
+  const [selectedServer, setSelectedServer] = useState<Server | null>(isOwner ? null : servers[0] || null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
 
