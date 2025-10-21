@@ -1,89 +1,65 @@
 {
   "entities": {
-    "VpnConfiguration": {
+    "VpsConfiguration": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "VpnConfiguration",
+      "title": "VpsConfiguration",
       "type": "object",
-      "description": "Represents the overall VPN configuration stored in the config.json file.",
+      "description": "Represents the entire VPS configuration stored in the JSON file.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the VPN configuration.  (Primary Key)"
+          "description": "Unique identifier for the VPS configuration. This could be a hash of the config or a generated UUID."
         },
-        "users": {
-          "type": "array",
-          "description": "Array of user configurations.",
-          "items": {
-            "type": "string"
-          }
+        "configurationData": {
+          "type": "string",
+          "description": "A string representation of the JSON configuration data."
         },
-        "serverSettings": {
+        "lastUpdated": {
           "type": "string",
-          "description": "References ServerSetting"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "User": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "User",
-      "type": "object",
-      "description": "Represents a user with VPN access.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the user. (Primary Key)"
+          "description": "Timestamp of the last update to the configuration.",
+          "format": "date-time"
         },
-        "username": {
+        "serverDetails": {
           "type": "string",
-          "description": "The user's username."
-        },
-        "email": {
-          "type": "string",
-          "description": "The user's email address.",
-          "format": "email"
-        },
-        "vpnConfigurationId": {
-          "type": "string",
-          "description": "Reference to VpnConfiguration. (Relationship: VpnConfiguration 1:N User)"
+          "description": "Reference to ServerDetails. (Relationship: ServerDetails 1:1 VpsConfiguration)"
         }
       },
       "required": [
         "id",
-        "username",
-        "email"
+        "configurationData",
+        "lastUpdated",
+        "serverDetails"
       ]
     },
-    "ServerSetting": {
+    "ServerDetails": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ServerSetting",
+      "title": "ServerDetails",
       "type": "object",
-      "description": "Represents server settings for vpn configuration",
+      "description": "Represents the server details where the configuration file resides.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the server settings. (Primary Key)"
+          "description": "Unique identifier for the server details."
         },
-        "address": {
+        "serverName": {
           "type": "string",
-          "description": "The server's address."
+          "description": "The name of the server (e.g., 'default', 'production')."
         },
-        "port": {
-          "type": "number",
-          "description": "The server's port."
-        },
-        "protocol": {
+        "serverAddress": {
           "type": "string",
-          "description": "The server's protocol."
+          "description": "The IP address or hostname of the server.",
+          "format": "uri"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "The file path to the JSON configuration file on the server (e.g., '/etc/zivpn/config.json')."
         }
       },
       "required": [
         "id",
-        "address",
-        "port",
-        "protocol"
+        "serverName",
+        "serverAddress",
+        "filePath"
       ]
     }
   },
@@ -96,58 +72,42 @@
   "firestore": {
     "structure": [
       {
-        "path": "/vpn_configurations/{vpnConfigurationId}",
+        "path": "/serverDetails/{serverDetailId}",
         "definition": {
-          "entityName": "VpnConfiguration",
+          "entityName": "ServerDetails",
           "schema": {
-            "$ref": "#/backend/entities/VpnConfiguration"
+            "$ref": "#/backend/entities/ServerDetails"
           },
-          "description": "Stores VPN configuration settings. Contains a list of associated users, but their details are stored in a subcollection.",
+          "description": "Stores server details. Includes denormalized 'members' map for authorization independence. The 'members' map contains user IDs as keys and their roles (e.g., 'editor', 'viewer') as values.",
           "params": [
             {
-              "name": "vpnConfigurationId",
-              "description": "Unique identifier for the VPN configuration."
+              "name": "serverDetailId",
+              "description": "Unique identifier for the server details document."
             }
           ]
         }
       },
       {
-        "path": "/vpn_configurations/{vpnConfigurationId}/users/{userId}",
+        "path": "/serverDetails/{serverDetailId}/vpsConfigurations/{vpsConfigurationId}",
         "definition": {
-          "entityName": "User",
+          "entityName": "VpsConfiguration",
           "schema": {
-            "$ref": "#/backend/entities/User"
+            "$ref": "#/backend/entities/VpsConfiguration"
           },
-          "description": "Stores user data associated with a specific VPN configuration. Includes denormalized 'vpnConfigurationId' for authorization independence.",
+          "description": "Stores VPS configurations for a specific server.  Includes denormalized 'members' map for authorization independence. The 'members' map contains user IDs as keys and their roles (e.g., 'editor', 'viewer') as values.  Also denormalizes serverDetails.id to ensure authorization independence.",
           "params": [
             {
-              "name": "vpnConfigurationId",
-              "description": "Unique identifier for the parent VPN configuration."
+              "name": "serverDetailId",
+              "description": "Unique identifier for the server details document."
             },
             {
-              "name": "userId",
-              "description": "Unique identifier for the user."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/server_settings/{serverSettingId}",
-        "definition": {
-          "entityName": "ServerSetting",
-          "schema": {
-            "$ref": "#/backend/entities/ServerSetting"
-          },
-          "description": "Stores server settings for the VPN configuration.",
-          "params": [
-            {
-              "name": "serverSettingId",
-              "description": "Unique identifier for the server setting."
+              "name": "vpsConfigurationId",
+              "description": "Unique identifier for the VPS configuration document."
             }
           ]
         }
       }
     ],
-    "reasoning": "This design prioritizes security and scalability for managing VPN configurations and user data within Firestore. It adheres to the principles of Authorization Independence, Structural Segregation, Access Modeling, and Data Clarity.\n\n**Authorization Independence:**\n\n*   User documents within `vpn_configurations/{vpnConfigurationId}/users/{userId}` denormalize `vpnConfigurationId`. This eliminates the need for security rules to perform `get()` operations on the parent `vpn_configurations` document to verify ownership. Atomic operations are now possible when creating users within a VPN configuration.\n\n**Structural Segregation:**\n\n*   The `vpn_configurations` collection stores the overall VPN configuration settings.\n*   Users associated with a VPN configuration are stored in a subcollection `/vpn_configurations/{vpnConfigurationId}/users/{userId}`. This segregation ensures that security rules for users are specific to their parent configuration, simplifying rule management.\n\n**Access Modeling:**\n\n*   Path-based ownership is used for user data: `/vpn_configurations/{vpnConfigurationId}/users/{userId}`. This enables straightforward security rules based on `request.auth.uid`.\n\n**QAPs (Rules are not Filters):**\n\n*   The structure enables secure `list` operations. Listing users is always scoped to a specific VPN configuration via `/vpn_configurations/{vpnConfigurationId}/users`. Because the `vpnConfigurationId` is part of the path, rules can enforce that the user has access to the specified VPN configuration before listing its users.\n\n**Invariants:**\n\n*   The structure supports the integrity of ownership by enforcing that the `vpnConfigurationId` in user documents matches the path in which they are stored. Firestore rules will be used to enforce this.\n\n**Justification for choices:**\n\n*   Using subcollections for users allows for efficient querying of users associated with a specific VPN configuration.\n*   Denormalizing the `vpnConfigurationId` into user documents facilitates independent authorization, which is crucial for atomic operations and simplifies security rules.\n*   The path-based ownership model (`/vpn_configurations/{vpnConfigurationId}/users/{userId}`) makes the intent of the security rules clear and easy to debug."
+    "reasoning": "The data structure prioritizes authorization independence and QAPs (Rules are not filters). ServerDetails and VpsConfiguration are stored as separate collections, enabling more scalable queries and simpler security rules. Since server details are crucial for determining which configurations a user can access, serverDetails are stored independently. This design eliminates the need for complex `get()` calls in security rules, enhancing atomicity and simplifying debugging.\n\nTo achieve authorization independence, access control information (e.g., a list of authorized users) would need to be stored (denormalized) directly within the `serverDetails` documents. If different users need different levels of access to different VPS configurations on the same server, the `vpsConfigurations` collection will require a `members` map to achieve authorization independence. This denormalization enables secure and efficient `list` operations, ensuring QAPs are met. Because the application requires automatic saving to a default server, the `serverDetails` collection may require additional access controls to restrict writes to authorized users. Alternatively, the 'default' server can be hardcoded and checked in a rule using `allow write: if request.resource.data.serverName == 'default'`, but this approach does not scale well if more 'default' server names are to be added in the future."
   }
 }
