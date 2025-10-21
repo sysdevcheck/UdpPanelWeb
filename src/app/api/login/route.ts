@@ -2,8 +2,8 @@
 
 import { type NextRequest, NextResponse } from 'next/headers';
 import { cookies } from 'next/headers';
-import fs from 'fs';
-import path from 'path';
+// Importa el archivo JSON directamente. Next.js lo incluirá en el bundle.
+import users from '@/../data/credentials.json';
 
 // Define la estructura de un usuario en el archivo de credenciales
 interface UserCredentials {
@@ -22,15 +22,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Usuario y contraseña son requeridos.' }, { status: 400 });
     }
 
-    // Ruta al archivo de credenciales local
-    const filePath = path.join(process.cwd(), 'data', 'credentials.json');
-    
-    // Leer y parsear el archivo de credenciales
-    const fileContents = fs.readFileSync(filePath, 'utf8');
-    const users: UserCredentials[] = JSON.parse(fileContents);
+    // Los usuarios se cargan directamente desde el archivo importado
+    const typedUsers: UserCredentials[] = users;
 
     // Buscar al usuario por nombre de usuario
-    const user = users.find(u => u.username === username);
+    const user = typedUsers.find(u => u.username === username);
 
     // Validar si el usuario existe y la contraseña coincide
     if (!user || user.password !== password) {
@@ -58,12 +54,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login API error:', error);
-    if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: 'Error interno: El archivo de credenciales está mal formado.' }, { status: 500 });
-    }
-    if (error.code === 'ENOENT') {
-         return NextResponse.json({ error: 'Error interno: El archivo de credenciales no se encuentra.' }, { status: 500 });
-    }
+    // Este catch ahora manejará otros errores inesperados, como un body malformado.
     return NextResponse.json({ error: 'Ocurrió un error inesperado en el servidor.' }, { status: 500 });
   }
 }
