@@ -55,7 +55,7 @@ export function ConsoleManager() {
     const handleExecuteCommand = async (command: string) => {
         if (!selectedServer || !command) return;
 
-        const commandLog: LogEntry = { level: 'INPUT', message: `${selectedServer.username}@${selectedServer.host}:~# ${command}` };
+        const commandLog: LogEntry = { level: 'INPUT', message: command };
         setOutputLog(prev => [...prev, commandLog]);
         setIsExecuting(true);
 
@@ -127,6 +127,9 @@ export function ConsoleManager() {
     }
 
 
+    const consoleTitle = selectedServer ? `${selectedServer.username}@${selectedServer.host}` : 'Consola SSH';
+    const consolePrompt = selectedServer ? `${selectedServer.username}@${selectedServer.host}:~#` : '$';
+
     return (
         <Card className="w-full max-w-4xl mx-auto shadow-lg">
             <CardHeader>
@@ -161,7 +164,8 @@ export function ConsoleManager() {
                         <div className="space-y-4 pt-4">
                              <ConsoleOutput 
                                 logs={outputLog} 
-                                title={`${selectedServer.username}@${selectedServer.host}:~#`} 
+                                title={consoleTitle}
+                                prompt={consolePrompt}
                                 className="min-h-[400px]"
                                 onCommandSubmit={handleExecuteCommand}
                                 isExecuting={isExecuting}

@@ -13,12 +13,13 @@ export type LogEntry = {
 interface ConsoleOutputProps {
   logs: LogEntry[];
   title?: string;
+  prompt?: string;
   className?: string;
   isExecuting: boolean;
   onCommandSubmit: (command: string) => void;
 }
 
-export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bash", className, isExecuting, onCommandSubmit }) => {
+export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bash", prompt = "$", className, isExecuting, onCommandSubmit }) => {
   const [command, setCommand] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -59,10 +60,8 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bas
       <div ref={scrollAreaRef} className="p-4 font-mono text-sm text-white max-h-96 overflow-y-auto cursor-text h-full">
         {logs.map((entry, index) => (
           <div key={index} className="flex items-start whitespace-pre-wrap break-words">
-            {entry.level === 'INPUT' && <span className="text-cyan-400 mr-2 shrink-0">$</span>}
-            {entry.level === 'SUCCESS' && <span className="text-green-400 mr-2 shrink-0"></span>}
-            {entry.level === 'ERROR' && <span className="text-red-500 mr-2 shrink-0">✗</span>}
-
+            {entry.level === 'INPUT' && <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>}
+            
             <span
               className={cn({
                 "text-cyan-300": entry.level === 'INPUT',
@@ -78,7 +77,7 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bas
          <form onSubmit={handleFormSubmit} className="flex items-center">
             {!isExecuting && (
                 <>
-                    <span className="text-cyan-400 mr-2 shrink-0">$</span>
+                    <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>
                     <Input
                         ref={inputRef}
                         value={command}
