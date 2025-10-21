@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle, Mail } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +45,8 @@ type Server = {
 }
 
 type Manager = {
-  id: string;
+  id: string; // Firestore document ID
+  uid: string; // Firebase Auth UID
   username: string;
   email?: string;
   assignedServerId?: string | null;
@@ -88,7 +89,6 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
   
   const addFormRef = useRef<HTMLFormElement>(null);
 
-  // Firestore hooks
   const serversQuery = useMemoFirebase(() => collection(firestore, 'servers'), [firestore]);
   const { data: allServers, isLoading: isLoadingServers } = useCollection<Server>(serversQuery);
 
@@ -103,10 +103,11 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
     const formData = new FormData(event.currentTarget);
     const username = formData.get('username') as string;
+    const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
     
-    if (!username || !password || !assignedServerId) {
+    if (!username || !email || !password || !assignedServerId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Todos los campos son requeridos.' });
       setIsPending(false);
       return;
@@ -116,7 +117,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
         const response = await fetch('/api/create-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, role: 'manager', assignedServerId })
+            body: JSON.stringify({ username, email, password, role: 'manager', assignedServerId })
         });
         const result = await response.json();
 
@@ -133,13 +134,13 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     }
   }
 
-  const handleDeleteManager = async (managerId: string) => {
+  const handleDeleteManager = async (manager: Manager) => {
     setIsPending(true);
      try {
         const response = await fetch('/api/delete-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: managerId })
+            body: JSON.stringify({ authUid: manager.uid, docId: manager.id })
         });
         const result = await response.json();
 
@@ -159,8 +160,10 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     setIsPending(true);
 
     const formData = new FormData(event.currentTarget);
-    const uid = formData.get('uid') as string;
+    const docId = formData.get('docId') as string;
+    const authUid = formData.get('authUid') as string;
     const username = formData.get('username') as string;
+    const email = formData.get('email') as string;
     const newPassword = formData.get('newPassword') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
 
@@ -168,7 +171,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
        const response = await fetch('/api/update-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid, username, password: newPassword, assignedServerId })
+            body: JSON.stringify({ docId, authUid, username, email, password: newPassword, assignedServerId })
         });
         const result = await response.json();
 
@@ -208,16 +211,20 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             </div>
         </CardHeader>
         <CardContent>
-          <form ref={addFormRef} onSubmit={handleAddManager} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-            <div className="grid w-full gap-1.5">
+          <form ref={addFormRef} onSubmit={handleAddManager} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+            <div className="grid w-full gap-1.5 md:col-span-1">
                 <Label htmlFor="username-manager">Usuario</Label>
                 <Input name="username" id="username-manager" type="text" placeholder="nombre.usuario" required disabled={isPending} />
             </div>
-             <div className="grid w-full gap-1.5">
+            <div className="grid w-full gap-1.5 md:col-span-1">
+                <Label htmlFor="email-manager">Correo</Label>
+                <Input name="email" id="email-manager" type="email" placeholder="usuario@correo.com" required disabled={isPending} />
+            </div>
+             <div className="grid w-full gap-1.5 md:col-span-1">
                 <Label htmlFor="password-manager">Contraseña</Label>
                 <Input name="password" id="password-manager" type="password" placeholder="Contraseña" required disabled={isPending} />
             </div>
-             <div className="grid w-full gap-1.5">
+             <div className="grid w-full gap-1.5 md:col-span-1">
                 <Label htmlFor="server-select-add">Asignar a Servidor</Label>
                 <Select name="assignedServerId" required disabled={isPending || !allServers || allServers.length === 0}>
                   <SelectTrigger id="server-select-add">
@@ -230,7 +237,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                   </SelectContent>
                 </Select>
             </div>
-            <div className='flex justify-end'>
+            <div className='flex justify-end md:col-span-1'>
                 <Button type="submit" disabled={isPending || !allServers || allServers.length === 0} className='w-full sm:w-auto'>
                     {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                     <span>Añadir</span>
@@ -250,7 +257,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Usuario</TableHead>
+                    <TableHead>Usuario / Correo</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Servidor Asignado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -263,10 +270,18 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
                        return (
                         <TableRow key={manager.id}>
-                          <TableCell className="min-w-[150px]">
+                          <TableCell className="min-w-[200px]">
                             <div className="flex items-center gap-3">
-                              <User className="w-5 h-5 text-muted-foreground" />
-                              <span className="font-mono text-base">{manager.username}</span>
+                              <div className='flex flex-col'>
+                                <div className="flex items-center gap-2">
+                                  <User className="w-4 h-4 text-muted-foreground" />
+                                  <span className="font-mono text-base">{manager.username}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                   <Mail className="w-4 h-4" />
+                                  <span>{manager.email}</span>
+                                </div>
+                              </div>
                             </div>
                           </TableCell>
                            <TableCell className="min-w-[150px]">
@@ -315,12 +330,12 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                                     <AlertDialogHeader>
                                     <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        Esto eliminará permanentemente al manager <strong className="font-mono">{manager.username}</strong> y revocará su acceso.
+                                        Esto eliminará permanentemente al manager <strong className="font-mono">{manager.username}</strong> de Firebase y revocará su acceso.
                                     </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteManager(manager.id)} className="bg-destructive hover:bg-destructive/90" disabled={isPending}>
+                                        <AlertDialogAction onClick={() => handleDeleteManager(manager)} className="bg-destructive hover:bg-destructive/90" disabled={isPending}>
                                             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                             Eliminar Manager
                                         </AlertDialogAction>
@@ -350,11 +365,12 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             <DialogHeader>
               <DialogTitle>Editar Cuenta: <span className='font-mono'>{editingManager?.username}</span></DialogTitle>
               <DialogDescription>
-                  Cambia los detalles de esta cuenta.
+                  Cambia los detalles de esta cuenta de manager.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-                <input type="hidden" name="uid" value={editingManager?.id || ''} />
+                <input type="hidden" name="docId" value={editingManager?.id || ''} />
+                <input type="hidden" name="authUid" value={editingManager?.uid || ''} />
                 
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="username" className="text-right">Usuario</Label>
@@ -362,6 +378,17 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                     id="username"
                     name="username"
                     defaultValue={editingManager?.username}
+                    className="col-span-3"
+                    disabled={isPending}
+                    required
+                    />
+                </div>
+                 <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">Correo</Label>
+                    <Input
+                    id="email"
+                    name="email"
+                    defaultValue={editingManager?.email}
                     className="col-span-3"
                     disabled={isPending}
                     required

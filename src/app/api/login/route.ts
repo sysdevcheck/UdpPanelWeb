@@ -1,38 +1,49 @@
+'use server';
+
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { adminApp } from '@/firebase/admin';
 
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { username, password } = body;
-
-    if (!username || !password) {
-      return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
-    }
-
     const firestore = getFirestore(adminApp);
-    const usersRef = firestore.collection('users');
-    const userQuery = await usersRef.where('username', '==', username).limit(1).get();
+    const adminAuth = getAuth(adminApp);
+    
+    const body = await request.json();
+    const { idToken } = body;
 
-    if (userQuery.empty) {
-        return NextResponse.json({ error: 'Usuario o contraseña inválidos.' }, { status: 401 });
+    if (!idToken) {
+      return NextResponse.json({ error: 'ID Token es requerido.' }, { status: 400 });
     }
 
-    const userDoc = userQuery.docs[0];
-    const userData = userDoc.data();
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    const userRecord = await adminAuth.getUser(decodedToken.uid);
 
-    if (userData.password !== password) {
-        return NextResponse.json({ error: 'Usuario o contraseña inválidos.' }, { status: 401 });
+    const role = userRecord.customClaims?.role || 'manager';
+    
+    // Find matching user document in firestore to get assignedServerId for managers
+    const usersRef = firestore.collection('users');
+    const userQuery = await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
+
+    let assignedServerId = null;
+    let username = userRecord.email; // Default to email
+
+    if (!userQuery.empty) {
+        const userDoc = userQuery.docs[0];
+        const userData = userDoc.data();
+        assignedServerId = userData.assignedServerId || null;
+        username = userData.username || userRecord.email;
     }
 
     const sessionPayload = {
-        uid: userDoc.id,
-        username: userData.username,
-        email: userData.email || null, // Make email optional
-        role: userData.role || 'user',
-        assignedServerId: userData.assignedServerId || null,
+        uid: decodedToken.uid,
+        username: username,
+        email: userRecord.email,
+        role: role,
+        assignedServerId: assignedServerId,
     };
     
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
@@ -48,6 +59,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login API error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    let message = 'Error de autenticación.';
+    if (error.code === 'auth/id-token-expired') {
+        message = 'La sesión ha expirado, por favor inicia sesión de nuevo.';
+    } else if (error.code === 'auth/argument-error') {
+        message = 'Token de autenticación inválido.';
+    }
+    return NextResponse.json({ error: message }, { status: 401 });
   }
 }

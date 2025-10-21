@@ -1,46 +1,59 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
     const firestore = getFirestore(adminApp);
+    const auth = getAuth(adminApp);
     
     const body = await request.json();
-    const { username, password, role, assignedServerId } = body;
+    // Use email as the primary identifier now
+    const { username, email, password, role, assignedServerId } = body;
 
-    if (!username || !password || !role) {
-      return NextResponse.json({ error: 'Username, password, and role are required.' }, { status: 400 });
+    if (!username || !email || !password || !role) {
+      return NextResponse.json({ error: 'Username, email, password, and role are required.' }, { status: 400 });
     }
     if (role === 'manager' && !assignedServerId) {
         return NextResponse.json({ error: 'A server must be assigned to a manager.' }, { status: 400 });
     }
     
-    const usersRef = firestore.collection('users');
-    const existingUser = await usersRef.where('username', '==', username).get();
-    if (!existingUser.empty) {
-        return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
+    // Create user in Firebase Authentication
+    const userRecord = await auth.createUser({
+        email,
+        password,
+        displayName: username,
+    });
+    
+    // Set custom claims if it's a manager
+    if (role === 'manager') {
+        await auth.setCustomUserClaims(userRecord.uid, { role: 'manager' });
     }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    const userDocData = {
+    // Create a corresponding document in Firestore
+    const userDocRef = firestore.collection('users').doc();
+    await userDocRef.set({
+        uid: userRecord.uid, // Link to the auth user
         username,
-        password, // Storing password in plain text as requested to mimic old system
+        email,
         role,
         assignedServerId: assignedServerId || null,
         createdAt: new Date(),
         expiresAt: role === 'owner' ? null : expiresAt
-    };
-
-    const newUserRef = await usersRef.add(userDocData);
+    });
     
-    return NextResponse.json({ success: true, uid: newUserRef.id });
+    return NextResponse.json({ success: true, uid: userRecord.uid });
 
   } catch (error: any) {
     console.error('Create User API error:', error);
     let message = 'Error creating user.';
+    if(error.code === 'auth/email-already-exists') {
+        message = 'Este correo electrónico ya está en uso.';
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

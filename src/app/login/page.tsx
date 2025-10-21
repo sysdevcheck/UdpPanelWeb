@@ -8,10 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const auth = useAuth();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -21,17 +24,20 @@ export default function LoginPage() {
     setIsPending(true);
     setError(null);
 
-    if (!username || !password) {
-      setError('Se requieren nombre de usuario y contraseña.');
+    if (!email || !password) {
+      setError('Se requieren correo y contraseña.');
       setIsPending(false);
       return;
     }
 
     try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCredential.user.getIdToken();
+
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ idToken }),
       });
 
       const data = await response.json();
@@ -44,7 +50,11 @@ export default function LoginPage() {
 
     } catch (e: any) {
       console.error("Login page error:", e);
-      setError('Ocurrió un error inesperado durante el inicio de sesión.');
+       if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
+        setError('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
+      } else {
+        setError('Ocurrió un error inesperado durante el inicio de sesión.');
+      }
     } finally {
       setIsPending(false);
     }
@@ -57,7 +67,7 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
             <CardDescription>
-              Introduce tus credenciales para acceder al panel.
+              Introduce tus credenciales de Firebase para acceder al panel.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -71,8 +81,8 @@ export default function LoginPage() {
               </Alert>
             )}
             <div className="grid gap-2">
-              <Label htmlFor="username">Usuario</Label>
-              <Input id="username" name="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required disabled={isPending}/>
+              <Label htmlFor="email">Correo Electrónico</Label>
+              <Input id="email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={isPending}/>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Contraseña</Label>
