@@ -3,13 +3,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { addManager, deleteManager, editManager } from '@/app/actions';
+import { addManager, deleteManager, editManager, saveSshConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -34,10 +34,17 @@ import {
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 
+type SshConfig = {
+    host: string;
+    port: number;
+    username: string;
+}
+
 type Manager = {
   username: string;
   createdAt?: string;
   expiresAt?: string;
+  ssh?: SshConfig;
 }
 
 type ManagerWithStatus = Manager & {
@@ -73,6 +80,12 @@ const initialActionState = {
     managers: [],
 };
 
+const initialSshActionState = {
+    success: false,
+    error: undefined,
+    message: undefined,
+}
+
 export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManagers: Manager[], ownerUsername: string }) {
   const [isClient, setIsClient] = useState(false);
   const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
@@ -80,11 +93,15 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const { toast } = useToast();
   const addFormRef = useRef<HTMLFormElement>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
+  const sshFormRef = useRef<HTMLFormElement>(null);
 
   const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, initialActionState);
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
   const [deleteManagerState, deleteManagerAction, isDeletingPending] = useActionState(deleteManager, initialActionState);
+  const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialSshActionState);
   
+  const owner = useMemo(() => initialManagers.find(m => m.username === ownerUsername), [initialManagers, ownerUsername]);
+
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -97,8 +114,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   const handleStateUpdate = (state: typeof addManagerState, actionType: string) => {
     if (!state) return false;
-    if (state.success && state.managers) {
-        setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+    if (state.success) {
+        if(state.managers) {
+             setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+        }
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
         }
@@ -115,7 +134,8 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
           addFormRef.current?.reset();
       }
     }
-  }, [addManagerState, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addManagerState]);
   
   useEffect(() => {
     if (editManagerState.success || editManagerState.error) {
@@ -123,15 +143,24 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
           setEditingManager(null);
       }
     }
-  }, [editManagerState, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editManagerState]);
 
   useEffect(() => {
     if (deleteManagerState.success || deleteManagerState.error) {
       handleStateUpdate(deleteManagerState, 'Deleting Manager');
     }
-  }, [deleteManagerState, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteManagerState]);
 
-  const isPending = isAddingPending || isEditingPending || isDeletingPending;
+  useEffect(() => {
+    if(sshState.success || sshState.error) {
+        handleStateUpdate(sshState as any, 'Saving SSH Config');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sshState]);
+
+  const isPending = isAddingPending || isEditingPending || isDeletingPending || isSshPending;
 
   if (!isClient) {
     return (
@@ -145,6 +174,47 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   return (
     <div className="space-y-6">
+        { process.env.NODE_ENV === 'production' && (
+            <Card className="w-full max-w-4xl mx-auto shadow-lg">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server SSH Config</CardTitle>
+                    <CardDescription>
+                        Enter the credentials for the remote VPS where ZiVPN is installed. This is only required for remote management.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form ref={sshFormRef} action={sshAction} className="space-y-4">
+                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                        <div className="grid sm:grid-cols-2 gap-4">
+                             <div className="grid gap-1.5">
+                                <Label htmlFor="host">Server IP / Hostname</Label>
+                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
+                            </div>
+                             <div className="grid gap-1.5">
+                                <Label htmlFor="port">SSH Port</Label>
+                                <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port} disabled={isPending} />
+                            </div>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                             <div className="grid gap-1.5">
+                                <Label htmlFor="ssh-username">SSH Username</Label>
+                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
+                            </div>
+                             <div className="grid gap-1.5">
+                                <Label htmlFor="ssh-password">SSH Password</Label>
+                                <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
+                            </div>
+                        </div>
+                        <div className='flex justify-end'>
+                            <Button type="submit" disabled={isPending}>
+                                {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                Save SSH Config
+                            </Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+        )}
       <Card className="w-full max-w-4xl mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>Add New Manager</CardTitle>
