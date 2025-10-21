@@ -110,28 +110,21 @@ export async function getLoggedInUser() {
 
   try {
     const session = JSON.parse(sessionCookie.value);
-    if (!session.uid) return null;
-
-    const firestore = getFirestore(adminApp);
     
-    // Primero, revisamos si el UID corresponde al documento del dueño
-    const ownerDoc = await firestore.collection('users').doc('owner').get();
-    if (ownerDoc.exists && ownerDoc.data()?.uid === session.uid) {
-      return ownerDoc.data();
-    }
+    // La sesión ahora contiene directamente el username y el rol
+    if (!session.username || !session.role) return null;
     
-    // Si no es el dueño, buscamos en la colección de usuarios por UID
-    const usersQuery = await firestore.collection('users').where('uid', '==', session.uid).limit(1).get();
-    if (!usersQuery.empty) {
-        const userDoc = usersQuery.docs[0];
-        return userDoc.data();
-    }
-    
-    // Si no se encuentra en ningún lado, no tiene perfil en la app
-    return null;
+    // Devolvemos los datos de la sesión directamente.
+    // El 'uid' ya no es relevante para la sesión, pero podemos mantener la consistencia si es necesario.
+    return {
+        uid: session.username, // Usar username como identificador único para la sesión.
+        username: session.username,
+        role: session.role,
+        assignedServerId: session.assignedServerId || null,
+    };
 
   } catch (e){
-    console.error("Failed to parse session cookie or fetch user from firestore", e);
+    console.error("Failed to parse session cookie", e);
     // Borramos la cookie si está corrupta
     cookies().delete('session');
     return null;
