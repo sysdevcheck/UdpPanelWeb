@@ -30,29 +30,27 @@ export async function POST(request: NextRequest) {
     }
 
     const role = isOwner ? 'owner' : 'manager';
-
-    // Find matching user document in firestore to get assignedServerId for managers
-    const usersRef = firestore.collection('users');
-    // If it's the owner, we already have their info. If manager, query by UID.
-    let userQuerySnapshot;
-    if (!isOwner) {
-        userQuerySnapshot = await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
-    }
-    
-    const userDocData = isOwner 
-        ? ownerDoc.data() 
-        : (userQuerySnapshot && !userQuerySnapshot.empty ? userQuerySnapshot.docs[0].data() : null);
-
     let assignedServerId = null;
     let username = decodedToken.email; // Default to email
 
-    if (userDocData) {
-        assignedServerId = userDocData.assignedServerId || null;
-        username = userDocData.username || decodedToken.email;
-    } else if (!isOwner) {
-        // This is a manager who has an auth account but no firestore doc yet.
-        // This case might need to be handled depending on app logic, but for now we proceed.
-        console.warn(`Manager with UID ${decodedToken.uid} is missing a Firestore document.`);
+    if (isOwner) {
+        const ownerData = ownerDoc.data();
+        username = ownerData?.username || decodedToken.email;
+    } else {
+        // It's a manager, so query for their user document by UID
+        const usersRef = firestore.collection('users');
+        const userQuerySnapshot = await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
+
+        if (!userQuerySnapshot.empty) {
+            const userDocData = userQuerySnapshot.docs[0].data();
+            assignedServerId = userDocData.assignedServerId || null;
+            username = userDocData.username || decodedToken.email;
+        } else {
+            // This is a manager who has an auth account but no firestore doc, or an unauthorized user.
+            console.warn(`Manager with UID ${decodedToken.uid} is missing a Firestore document or is not a registered manager.`);
+            // For security, we could deny login here if every manager must have a doc.
+            // Let's allow login but they will have limited access.
+        }
     }
 
 
@@ -80,8 +78,8 @@ export async function POST(request: NextRequest) {
     let message = 'Error de autenticación.';
     if (error.code === 'auth/id-token-expired') {
         message = 'La sesión ha expirado, por favor inicia sesión de nuevo.';
-    } else if (error.code === 'auth/argument-error') {
-        message = 'Token de autenticación inválido.';
+    } else if (error.code === 'auth/argument-error' || error.code === 'auth/id-token-revoked') {
+        message = 'Token de autenticación inválido. Por favor, intenta de nuevo.';
     }
     return NextResponse.json({ error: message }, { status: 401 });
   }
