@@ -3,7 +3,7 @@ import { readConfig, getLoggedInUser, logout, readFullConfig } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
-import { Users, LogOut, UserCog, Server } from 'lucide-react';
+import { Users, LogOut, UserCog, Server, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import {
@@ -43,7 +43,7 @@ export default async function Home() {
   const defaultTab = isOwner ? "servers" : "vpn-users";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-4">
@@ -70,7 +70,7 @@ export default async function Home() {
           </div>
         </div>
       </header>
-      <main className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
          <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-1'} max-w-lg mx-auto`}>
             {isOwner && (
@@ -121,6 +121,21 @@ export default async function Home() {
           )}
         </Tabs>
       </main>
+       <footer className="py-4 text-center text-sm text-muted-foreground border-t border-border">
+          <div className="container mx-auto flex items-center justify-center gap-2">
+            <span>© {new Date().getFullYear()} Todos los derechos reservados.</span>
+            <span className="text-muted-foreground">|</span>
+            <a
+              href="https://t.me/sysdevcheck"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+            >
+              <Send className="w-4 h-4" />
+              <span>@sysdevcheck</span>
+            </a>
+          </div>
+        </footer>
     </div>
   );
 }
