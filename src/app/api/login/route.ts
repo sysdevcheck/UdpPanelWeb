@@ -1,3 +1,4 @@
+
 'use server';
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -20,28 +21,42 @@ export async function POST(request: NextRequest) {
     }
 
     const decodedToken = await adminAuth.verifyIdToken(idToken);
-    const userRecord = await adminAuth.getUser(decodedToken.uid);
-
-    const role = userRecord.customClaims?.role || 'manager';
     
+    // Check if the user is the designated owner by checking the 'owner' document
+    const ownerDoc = await firestore.collection('users').doc('owner').get();
+    let isOwner = false;
+    if (ownerDoc.exists && ownerDoc.data()?.uid === decodedToken.uid) {
+        isOwner = true;
+    }
+
+    const role = isOwner ? 'owner' : 'manager';
+
     // Find matching user document in firestore to get assignedServerId for managers
     const usersRef = firestore.collection('users');
-    const userQuery = await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
+    // If it's the owner, we already have their info. If manager, query by UID.
+    const userQuery = isOwner 
+        ? ownerDoc.ref 
+        : await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
 
     let assignedServerId = null;
-    let username = userRecord.email; // Default to email
+    let username = decodedToken.email; // Default to email
 
-    if (!userQuery.empty) {
-        const userDoc = userQuery.docs[0];
-        const userData = userDoc.data();
-        assignedServerId = userData.assignedServerId || null;
-        username = userData.username || userRecord.email;
+    const userDocData = isOwner ? ownerDoc.data() : (!userQuery.empty ? userQuery.docs[0].data() : null);
+
+    if (userDocData) {
+        assignedServerId = userDocData.assignedServerId || null;
+        username = userDocData.username || decodedToken.email;
+    } else if (!isOwner) {
+        // This is a manager who has an auth account but no firestore doc yet.
+        // This case might need to be handled depending on app logic, but for now we proceed.
+        console.warn(`Manager with UID ${decodedToken.uid} is missing a Firestore document.`);
     }
+
 
     const sessionPayload = {
         uid: decodedToken.uid,
         username: username,
-        email: userRecord.email,
+        email: decodedToken.email,
         role: role,
         assignedServerId: assignedServerId,
     };
