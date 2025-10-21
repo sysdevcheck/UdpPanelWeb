@@ -225,6 +225,7 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     }
 
     const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    revalidatePath('/');
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
@@ -266,6 +267,7 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
     }
 
     const managerUsers = updatedMetadata.filter((u: any) => u.createdBy === managerUsername);
+    revalidatePath('/');
     return { success: true, users: managerUsers };
 }
 
@@ -315,6 +317,7 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     }
 
     const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    revalidatePath('/');
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
@@ -348,6 +351,7 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
     }
 
     const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    revalidatePath('/');
     return { success: true, users: managerUsers };
 }
 
@@ -665,3 +669,5 @@ export async function clearSshConfig(ownerUsername: string): Promise<{ success: 
     revalidatePath('/');
     return { success: true, message: "SSH configuration has been cleared." };
 }
+
+    
