@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import React, { useState, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
-import { Loader2 } from "lucide-react";
+import { Loader2, Folder, File as FileIcon } from "lucide-react";
 
 export type LogEntry = {
     level: 'INPUT' | 'INFO' | 'SUCCESS' | 'ERROR';
@@ -18,6 +18,28 @@ interface ConsoleOutputProps {
   isExecuting: boolean;
   onCommandSubmit: (command: string) => void;
 }
+
+const renderLine = (line: string) => {
+    // ls -l output check
+    if (line.startsWith('d')) {
+        return (
+            <span className="flex items-center gap-2 text-cyan-400">
+                <Folder className="w-4 h-4 shrink-0" />
+                <span>{line}</span>
+            </span>
+        );
+    }
+    if (line.startsWith('-')) {
+         return (
+            <span className="flex items-center gap-2">
+                <FileIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <span>{line}</span>
+            </span>
+        );
+    }
+    return <span>{line}</span>;
+}
+
 
 export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bash", prompt = "$", className, isExecuting, onCommandSubmit }) => {
   const [command, setCommand] = useState('');
@@ -89,20 +111,26 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bas
       </div>
       <div ref={scrollAreaRef} className="p-4 font-mono text-sm text-white max-h-96 overflow-y-auto cursor-text h-full">
         {logs.map((entry, index) => (
-          <div key={index} className="flex items-start whitespace-pre-wrap break-words">
-            {entry.level === 'INPUT' && <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>}
-            
-            <span
-              className={cn({
-                "text-cyan-300": entry.level === 'INPUT',
-                "text-green-400": entry.level === 'SUCCESS',
-                "text-red-400": entry.level === 'ERROR',
-                "text-gray-300": entry.level === 'INFO',
-              })}
-            >
-              {entry.message}
-            </span>
-          </div>
+            <div key={index} className="whitespace-pre-wrap break-words">
+                {entry.level === 'INPUT' ? (
+                    <div className="flex">
+                        <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>
+                        <span className="text-cyan-300">{entry.message}</span>
+                    </div>
+                ) : (
+                    <div
+                    className={cn({
+                        "text-green-400": entry.level === 'SUCCESS',
+                        "text-red-400": entry.level === 'ERROR',
+                        "text-gray-300": entry.level === 'INFO',
+                    })}
+                    >
+                        {entry.message.split('\n').map((line, lineIndex) => (
+                           <div key={`${index}-${lineIndex}`}>{renderLine(line)}</div>
+                        ))}
+                    </div>
+                )}
+            </div>
         ))}
          <form onSubmit={handleFormSubmit} className="flex items-center">
             <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>
