@@ -62,16 +62,9 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
         });
 
         const responseBody: SshApiResponse = await response.json();
-
-        if (!response.ok) {
-             return {
-                success: false,
-                error: responseBody.error || `API request failed with status ${response.status}`,
-                log: responseBody.log || [{ level: 'ERROR', message: `API request failed with status ${response.status}` }]
-            };
-        }
-
+        
         return responseBody;
+
     } catch (e: any) {
         console.error(`Failed to fetch from SSH API endpoint. Is the app running? URL: ${baseUrl}/api/ssh`, e);
         return {
@@ -88,28 +81,35 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 // ====================================================================
 
 async function restartVpnService(sshConfig: any | null): Promise<{ success: boolean; error?: string }> {
-    if (!sshConfig) {
+    if (!isProduction) {
         console.log("DEV-MODE: Simulated service restart.");
         return { success: true };
     }
+    // In production, we assume local execution if no sshConfig is provided.
+    // However, with the new model, only remote execution should restart services.
+    if (!sshConfig) {
+        return { success: false, error: "Cannot restart service without SSH config in production." };
+    }
+
     const result = await sshApiRequest('restartService', {}, sshConfig);
     return { success: result.success, error: result.error };
 }
 
 async function ensureDirExists(sshConfig: any | null, remotePath: string) {
-    if (!sshConfig) {
+    if (!sshConfig) { // Local mode (dev)
         try {
-            await fs.mkdir(localBasePath, { recursive: true });
+            await fs.mkdir(path.dirname(remotePath), { recursive: true });
         } catch (e) {
-            console.error("Could not create local directory", localBasePath, e);
+            console.error("Could not create local directory", path.dirname(remotePath), e);
         }
         return;
     }
-    await sshApiRequest('ensureDir', { path: remotePath }, sshConfig);
+    // Remote mode
+    await sshApiRequest('ensureDir', { path: path.dirname(remotePath) }, sshConfig);
 }
 
 async function readFile(filePath: string, sshConfig: any | null): Promise<string> {
-    if (!sshConfig) {
+    if (!sshConfig) { // Local mode
         try {
             return await fs.readFile(filePath, 'utf8');
         } catch (e: any) {
@@ -117,16 +117,20 @@ async function readFile(filePath: string, sshConfig: any | null): Promise<string
             throw e;
         }
     }
+    // Remote mode
     const result = await sshApiRequest('readFile', { path: filePath }, sshConfig);
     if (!result.success) throw new Error(result.error);
     return result.data;
 }
 
 async function writeFile(filePath: string, data: string, sshConfig: any | null): Promise<{ success: boolean, error?: string }> {
-    if (!sshConfig) {
+    if (!sshConfig) { // Local mode
+        await ensureDirExists(null, filePath);
         await fs.writeFile(filePath, data, 'utf8');
         return { success: true };
     }
+    // Remote mode
+    await ensureDirExists(sshConfig, filePath);
     const result = await sshApiRequest('writeFile', { path: filePath, data }, sshConfig);
      if (!result.success) return { success: false, error: result.error };
     return { success: true };
@@ -136,27 +140,29 @@ async function writeFile(filePath: string, data: string, sshConfig: any | null):
 // Data Access Layer (Reading/Writing JSON files)
 // ====================================================================
 
-async function getSshConfigForManager(managerUsername: string): Promise<any | null> {
+async function getSshConfig(managerUsername: string, serverId?: string): Promise<any | null> {
     const managersData = await readManagersFile();
-    
-    // If the logged-in user is the owner, they don't have a direct SSH config.
-    // They manage servers, so we return null.
-    if (managerUsername === managersData.owner.username) {
-        return null; 
+    const isOwner = await isOwnerCheck(managerUsername);
+
+    if (isOwner) {
+        if (!serverId) return null; // Owner must specify a server
+        return managersData.servers.find(s => s.id === serverId) || null;
     }
 
+    // It's a manager
     const manager = managersData.managers.find(m => m.username === managerUsername);
     if (!manager || !manager.assignedServerId) {
         return null; // Manager not found or not assigned to a server
     }
 
-    const server = managersData.servers.find(s => s.id === manager.assignedServerId);
-    return server || null;
+    return managersData.servers.find(s => s.id === manager.assignedServerId) || null;
 }
 
 async function readRawConfig(sshConfig: any): Promise<any> {
-    await ensureDirExists(sshConfig, remoteBasePath);
-    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, 'config.json');
+    const hostIdentifier = sshConfig ? sshConfig.host : 'local';
+    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, `config.${hostIdentifier}.json`);
+    
+    await ensureDirExists(sshConfig, configPath);
     const configData = await readFile(configPath, sshConfig);
 
     if (!configData || !configData.trim()) {
@@ -165,38 +171,43 @@ async function readRawConfig(sshConfig: any): Promise<any> {
     try {
         return JSON.parse(configData);
     } catch (e) {
-        console.error("Failed to parse config.json, returning default. Content:", configData);
+        console.error(`Failed to parse config.json for ${hostIdentifier}, returning default. Content:`, configData);
         return { ...defaultConfig };
     }
 }
 
 async function readUsersMetadata(sshConfig: any): Promise<any[]> {
     const hostIdentifier = sshConfig ? sshConfig.host : 'local';
-    const metadataPath = sshConfig ? remoteUsersMetadataPath(sshConfig.host) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
+    const metadataPath = sshConfig ? remoteUsersMetadataPath(hostIdentifier) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
 
-    await ensureDirExists(sshConfig, remoteBasePath);
+    await ensureDirExists(sshConfig, metadataPath);
     const metadataStr = await readFile(metadataPath, sshConfig);
     
     if (!metadataStr.trim()) {
         await saveUsersMetadata([], sshConfig); // Create the file if it doesn't exist
         return [];
     }
-    return JSON.parse(metadataStr);
+    try {
+        return JSON.parse(metadataStr);
+    } catch (e) {
+        console.error(`Error parsing user metadata for ${hostIdentifier}:`, e);
+        return [];
+    }
 }
 
 async function saveConfig(usernames: string[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
-    await ensureDirExists(sshConfig, remoteBasePath);
+    const hostIdentifier = sshConfig ? sshConfig.host : 'local';
+    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, `config.${hostIdentifier}.json`);
+
     const configData = await readRawConfig(sshConfig);
     configData.auth.config = usernames;
-    const configPath = sshConfig ? remoteConfigPath : path.join(localBasePath, 'config.json');
     return writeFile(configPath, JSON.stringify(configData, null, 2), sshConfig);
 }
 
 async function saveUsersMetadata(metadata: any[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
     const hostIdentifier = sshConfig ? sshConfig.host : 'local';
-    const metadataPath = sshConfig ? remoteUsersMetadataPath(sshConfig.host) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
+    const metadataPath = sshConfig ? remoteUsersMetadataPath(hostIdentifier) : path.join(localBasePath, `users-metadata.${hostIdentifier}.json`);
     
-    await ensureDirExists(sshConfig, remoteBasePath);
     return writeFile(metadataPath, JSON.stringify(metadata, null, 2), sshConfig);
 }
 
@@ -205,22 +216,27 @@ async function saveUsersMetadata(metadata: any[], sshConfig: any): Promise<{ suc
 // VPN User Management
 // ====================================================================
 
-export async function readConfig(managerUsername: string): Promise<any> {
+export async function readConfig(managerUsername: string, serverId?: string): Promise<any> {
   if (!managerUsername) {
     redirect('/login');
   }
 
-  const sshConfig = await getSshConfigForManager(managerUsername);
-
-  // For owner, we don't load users by default. They need to select a server.
   const isOwner = await isOwnerCheck(managerUsername);
-  if (isOwner) {
-    return { auth: { config: [] }, isOwner: true };
+  
+  // For owners, if no serverId is provided, it's a request for the initial page state, not for user data.
+  if (isOwner && !serverId) {
+    return { auth: { config: [] } };
   }
+
+  // Get the sshConfig. For managers, serverId is ignored. For owners, it's required.
+  const sshConfig = await getSshConfig(managerUsername, serverId);
   
   if (!sshConfig) {
-      console.log(`Manager ${managerUsername} is not assigned to a valid server. No users will be loaded.`);
-      return { auth: { config: [] }, error: "You are not assigned to a server. Please contact the owner." };
+      const errorMsg = isOwner 
+          ? "Server not found or specified." 
+          : "You are not assigned to a server. Please contact the owner.";
+      console.log(`Manager ${managerUsername}: ${errorMsg}`);
+      return { auth: { config: [] }, error: errorMsg };
   }
 
   let usersMetadata = await readUsersMetadata(sshConfig);
@@ -234,24 +250,28 @@ export async function readConfig(managerUsername: string): Promise<any> {
     
     await saveUsersMetadata(validMetadata, sshConfig);
     const saveResult = await saveConfig(activeUsernames, sshConfig);
-    if(saveResult.success) {
+    if (isProduction && saveResult.success) {
         await restartVpnService(sshConfig);
     }
     usersMetadata = validMetadata;
   }
 
-  const managerUsers = usersMetadata.filter((user: any) => user.createdBy === managerUsername);
+  // Filter users for the specific manager, unless it's the owner, who sees all users on the selected server.
+  const usersForResponse = isOwner
+    ? usersMetadata
+    : usersMetadata.filter((user: any) => user.createdBy === managerUsername);
   
-  return { auth: { config: managerUsers } };
+  return { auth: { config: usersForResponse } };
 }
 
 
 export async function addUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string; message?: string; }> {
     const managerUsername = formData.get('managerUsername') as string;
+    const serverId = formData.get('serverId') as string | undefined; // For owner
     if (!managerUsername) {
         return { success: false, error: "Authentication required. Please log in again." };
     }
-    const sshConfig = await getSshConfigForManager(managerUsername);
+    const sshConfig = await getSshConfig(managerUsername, serverId);
     if (!sshConfig) {
       return { success: false, error: "You are not assigned to a server or the server is misconfigured." };
     }
@@ -287,22 +307,26 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
         return { success: false, error: configResult.error };
     }
     
-    const restartResult = await restartVpnService(sshConfig);
-    if(!restartResult.success) {
-        return { success: false, error: restartResult.error };
+    if (isProduction) {
+        const restartResult = await restartVpnService(sshConfig);
+        if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
     }
 
-    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    const isOwner = await isOwnerCheck(managerUsername);
+    const managerUsers = isOwner ? usersMetadata : usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
     return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
 }
 
 export async function deleteUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string }> {
     const managerUsername = formData.get('managerUsername') as string;
+    const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const sshConfig = await getSshConfigForManager(managerUsername);
+    const sshConfig = await getSshConfig(managerUsername, serverId);
     if (!sshConfig) {
       return { success: false, error: "Cannot perform action: not assigned to a server." };
     }
@@ -311,11 +335,12 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
 
     let usersMetadata = await readUsersMetadata(sshConfig);
     const userToDelete = usersMetadata.find((user: any) => user.username === username);
+    const isOwner = await isOwnerCheck(managerUsername);
 
     if (!userToDelete) {
         return { success: false, error: "User not found." };
     }
-    if (userToDelete.createdBy !== managerUsername) {
+    if (!isOwner && userToDelete.createdBy !== managerUsername) {
         return { success: false, error: "Permission denied." };
     }
     
@@ -331,22 +356,25 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: configResult.error };
     }
     
-    const restartResult = await restartVpnService(sshConfig);
-    if(!restartResult.success) {
-        return { success: false, error: restartResult.error };
+    if (isProduction) {
+        const restartResult = await restartVpnService(sshConfig);
+        if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
     }
-
-    const managerUsers = updatedMetadata.filter((u: any) => u.createdBy === managerUsername);
+    
+    const managerUsers = isOwner ? updatedMetadata : updatedMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
     return { success: true, users: managerUsers };
 }
 
 export async function editUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string, message?: string }> {
     const managerUsername = formData.get('managerUsername') as string;
+    const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const sshConfig = await getSshConfigForManager(managerUsername);
+    const sshConfig = await getSshConfig(managerUsername, serverId);
     if (!sshConfig) {
       return { success: false, error: "Cannot perform action: not assigned to a server." };
     }
@@ -359,11 +387,12 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
 
     let usersMetadata = await readUsersMetadata(sshConfig);
     const userIndex = usersMetadata.findIndex((user: any) => user.username === oldUsername);
+    const isOwner = await isOwnerCheck(managerUsername);
 
     if (userIndex === -1) {
         return { success: false, error: `User "${oldUsername}" not found.` };
     }
-    if (usersMetadata[userIndex].createdBy !== managerUsername) {
+    if (!isOwner && usersMetadata[userIndex].createdBy !== managerUsername) {
         return { success: false, error: "Permission denied." };
     }
     if (oldUsername !== newUsername && usersMetadata.some((user: any) => user.username === newUsername)) {
@@ -383,35 +412,38 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
         return { success: false, error: configResult.error };
     }
     
-    const restartResult = await restartVpnService(sshConfig);
-    if(!restartResult.success) {
-        return { success: false, error: restartResult.error };
+    if (isProduction) {
+        const restartResult = await restartVpnService(sshConfig);
+        if(!restartResult.success) {
+            return { success: false, error: restartResult.error };
+        }
     }
 
-    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    const managerUsers = isOwner ? usersMetadata : usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
     return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
 }
 
 export async function renewUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string }> {
     const managerUsername = formData.get('managerUsername') as string;
+    const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
         return { success: false, error: "Authentication required." };
     }
-    const sshConfig = await getSshConfigForManager(managerUsername);
+    const sshConfig = await getSshConfig(managerUsername, serverId);
     if (!sshConfig) {
       return { success: false, error: "Cannot perform action: not assigned to a server." };
     }
     
     const username = formData.get('username') as string;
-
     let usersMetadata = await readUsersMetadata(sshConfig);
     const userIndex = usersMetadata.findIndex((user: any) => user.username === username);
+    const isOwner = await isOwnerCheck(managerUsername);
 
     if (userIndex === -1) {
         return { success: false, error: `User "${username}" not found.` };
     }
-    if (usersMetadata[userIndex].createdBy !== managerUsername) {
+    if (!isOwner && usersMetadata[userIndex].createdBy !== managerUsername) {
         return { success: false, error: "Permission denied." };
     }
 
@@ -423,8 +455,8 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
     if (!metadataResult.success) {
         return { success: false, error: metadataResult.error };
     }
-
-    const managerUsers = usersMetadata.filter((u: any) => u.createdBy === managerUsername);
+    
+    const managerUsers = isOwner ? usersMetadata : usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
     return { success: true, users: managerUsers };
 }
@@ -434,7 +466,7 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 // ====================================================================
 
 async function readManagersFile(): Promise<any> {
-    await ensureDirExists(null, localBasePath);
+    await ensureDirExists(null, localManagersConfigPath);
     const managersData = await readFile(localManagersConfigPath, null);
     if (!managersData.trim()) {
         console.log('No managers file found. Creating default.');
@@ -444,19 +476,6 @@ async function readManagersFile(): Promise<any> {
     
     try {
       const data = JSON.parse(managersData);
-      // Basic validation for new structure
-      if (!data.owner || !data.servers || !data.managers) {
-        console.log('Old data structure detected. Migrating...');
-        const owner = data.find((m:any) => m.ssh);
-        const otherManagers = data.filter((m:any) => !m.ssh);
-        const newStructure = {
-          owner: { username: owner?.username || 'admin', password: owner?.password || 'password' },
-          servers: owner?.ssh ? [{ id: 'default-server', name: 'Default Server', ...owner.ssh }] : [],
-          managers: otherManagers.map((m: any) => ({...m, assignedServerId: owner?.ssh ? 'default-server' : null }))
-        };
-        await saveManagersFile(newStructure);
-        return newStructure;
-      }
       return data;
     } catch(e) {
       console.error("Failed to parse managers.json, creating default. Error:", e);

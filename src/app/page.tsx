@@ -25,18 +25,19 @@ export default async function Home() {
   const configData = await readFullConfig();
   if (configData.error || !configData.managersData) {
     console.error("Critical State: Could not read managers file.", configData.error);
+    // You might want to log the user out or show a more graceful error page
     return <div>Error loading configuration data: {configData.error}. Please check file permissions or login again.</div>;
   }
   const { owner, servers, managers } = configData.managersData;
 
   const isOwner = loggedInUser === owner.username;
   const managerInfo = !isOwner ? managers.find(m => m.username === loggedInUser) : null;
+  
+  // For a manager, find their specific assigned server
   const assignedServer = managerInfo ? servers.find(s => s.id === managerInfo.assignedServerId) : null;
 
-  // Fetch initial data for the logged-in user
-  // For managers, this loads users from their assigned server.
-  // For owners, it starts empty; they must select a server to manage.
-  const initialVpnUsersData = await readConfig(loggedInUser);
+  // For managers, we pre-load their users. For owners, this will be empty initially.
+  const initialVpnUsersData = !isOwner ? await readConfig(loggedInUser) : { auth: { config: [] } };
   const vpnUsers = initialVpnUsersData.auth?.config || [];
 
   const defaultTab = isOwner ? "servers" : "vpn-users";
@@ -104,21 +105,12 @@ export default async function Home() {
                   </AlertDescription>
                 </Alert>
             )}
-            {isOwner && (
-                <Alert className="max-w-xl mx-auto mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Owner View</AlertTitle>
-                  <AlertDescription>
-                    As the owner, you can manage users on any server. Go to the <strong className='font-bold'>Servers</strong> tab, select a server, and click "Manage Users".
-                  </AlertDescription>
-                </Alert>
-            )}
-            {((!isOwner && assignedServer) || isOwner) && (
+            {(assignedServer || isOwner) && (
               <UserManager 
                 initialUsers={vpnUsers} 
                 managerUsername={loggedInUser} 
                 isOwner={isOwner}
-                servers={servers}
+                servers={isOwner ? servers : (assignedServer ? [assignedServer] : [])}
               />
             )}
           </TabsContent>

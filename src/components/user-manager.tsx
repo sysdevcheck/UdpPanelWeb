@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { addUser, deleteUser, editUser, renewUser } from '@/app/actions';
+import { addUser, deleteUser, editUser, renewUser, readConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,9 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedServer, setSelectedServer] = useState<Server | null>(null);
+  const [selectedServer, setSelectedServer] = useState<Server | null>(isOwner ? null : servers.find(s => s.id === 'implicit') || null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
 
   const { toast } = useToast();
   const addUserFormRef = useRef<HTMLFormElement>(null);
@@ -98,8 +100,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   }, []);
 
   useEffect(() => {
-    // This effect is for managers, who get their users on initial load
-    if(!isOwner) {
+    if (!isOwner) {
       setUsers(initialUsers.map(u => ({ ...u, status: getStatus(u.expiresAt) })));
     }
   }, [initialUsers, isOwner]);
@@ -118,6 +119,19 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     }
     return false;
   };
+  
+  const loadUsersForServer = async (server: Server) => {
+    setIsLoadingUsers(true);
+    setSelectedServer(server);
+    const result = await readConfig(managerUsername, server.id);
+    if (result.auth?.config) {
+      setUsers(result.auth.config.map((u: User) => ({ ...u, status: getStatus(u.expiresAt) })));
+    } else if (result.error) {
+      toast({ variant: 'destructive', title: `Error loading users`, description: result.error });
+      setUsers([]);
+    }
+    setIsLoadingUsers(false);
+  }
 
   useEffect(() => {
     if (!addUserState) return;
@@ -212,7 +226,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
             <CardContent>
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
                     {servers.map(server => (
-                        <Button key={server.id} variant="outline" className='p-6 flex flex-col items-start h-auto gap-2' onClick={() => setSelectedServer(server)}>
+                        <Button key={server.id} variant="outline" className='p-6 flex flex-col items-start h-auto gap-2 justify-start' onClick={() => loadUsersForServer(server)}>
                            <div className='flex items-center gap-2'>
                              <Server className='w-5 h-5 text-primary'/>
                              <span className='text-lg font-bold'>{server.name}</span>
@@ -221,12 +235,27 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                         </Button>
                     ))}
                     {servers.length === 0 && (
-                        <p className='text-muted-foreground col-span-full text-center'>No servers configured. Please add a server in the 'Servers' tab.</p>
+                        <p className='text-muted-foreground col-span-full text-center py-10'>No servers configured. Please add a server in the 'Servers' tab.</p>
                     )}
                 </div>
             </CardContent>
         </Card>
     )
+  }
+
+  if (isLoadingUsers) {
+      return (
+        <Card className="w-full max-w-5xl mx-auto shadow-lg">
+            <CardHeader>
+                <CardTitle className="text-xl">Loading users for {selectedServer?.name}...</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+            </CardContent>
+        </Card>
+      )
   }
   
   return (
@@ -243,7 +272,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                 </CardDescription>
             </div>
             {isOwner && (
-                <Button variant="outline" onClick={() => setSelectedServer(null)}>
+                <Button variant="outline" onClick={() => { setSelectedServer(null); setUsers([]); }}>
                     Change Server
                 </Button>
             )}
@@ -252,6 +281,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
       <CardContent>
         <form ref={addUserFormRef} action={addUserAction} className="flex flex-col sm:flex-row gap-2 mb-4">
           <input type="hidden" name="managerUsername" value={managerUsername} />
+          {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
           <Input
             name="username"
             placeholder="New username"
@@ -324,6 +354,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                                 <form action={renewUserAction} className='inline-flex'>
                                     <input type="hidden" name="username" value={user.username} />
                                     <input type="hidden" name="managerUsername" value={managerUsername} />
+                                    {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
                                     <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
                                         <RefreshCw className="h-4 w-4" />
                                     </Button>
@@ -348,6 +379,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                                             <AlertDialogFooter>
                                                 <input type="hidden" name="username" value={user.username} />
                                                 <input type="hidden" name="managerUsername" value={managerUsername} />
+                                                {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
                                                 <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
                                                 <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
                                                     {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
@@ -425,6 +457,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                     />
                     <input type="hidden" name="oldUsername" value={editingUser?.username || ''} />
                     <input type="hidden" name="managerUsername" value={managerUsername} />
+                    {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
                 </div>
             </div>
             <DialogFooter>
