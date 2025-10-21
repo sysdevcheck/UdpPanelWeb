@@ -600,5 +600,3 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     </>
   );
 }
-
-    
