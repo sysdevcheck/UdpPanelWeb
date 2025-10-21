@@ -1,95 +1,34 @@
 # 🛡️ Panel de Gestión para ZiVPN - Multi-Manager
 
-Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core). En lugar de editar manualmente archivos de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios de forma aislada.
+Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core).
+
+## 🚀 Modelos de Despliegue
+
+Este panel ofrece dos modos de funcionamiento flexibles:
+
+1.  **Modo Integrado (Todo en uno)**: El panel y el servicio `zivpn` se ejecutan en el **mismo VPS**. Esta es la configuración más simple y directa. La aplicación edita archivos locales en `/etc/zivpn/`.
+2.  **Modo Remoto (Panel en la Nube)**: El panel se despliega en un servicio de hosting (como **Firebase App Hosting**) y gestiona un servidor `zivpn` remoto a través de **SSH**. Esto te permite tener una interfaz web rápida y escalable sin exponer directamente tu servidor VPN.
+
+---
 
 ## ✨ Características Principales
 
 - **🔑 Sistema de Login**: Los administradores (managers) deben iniciar sesión para acceder al panel.
 - **👤 Gestión de Usuarios por Propietario**: Cada manager solo puede ver, agregar, editar, eliminar y renovar los usuarios que él mismo ha creado.
-- **🗓️ Expiración Automática**: Los usuarios se crean con una vida útil de 30 días. Los usuarios vencidos se eliminan automáticamente del archivo de configuración para mantener el sistema limpio.
+- **🗓️ Expiración Automática**: Los usuarios se crean con una vida útil de 30 días y se eliminan automáticamente al vencer.
 - **🔄 Renovación Fácil**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
 - **🚦 Indicadores de Estado**: Los usuarios se etiquetan visualmente como **Activo**, **Por Vencer** (dentro de 7 días) o **Vencido**.
-- **⚡ Reinicio Automático del Servicio**: Después de cada acción que afecte a los usuarios activos (agregar, editar, eliminar), la aplicación reinicia automáticamente el servicio `zivpn` para aplicar los cambios de inmediato.
+- **⚡ Reinicio Automático del Servicio (local o remoto)**: Después de cada acción, la aplicación reinicia el servicio `zivpn` para aplicar los cambios.
 - **🔎 Filtrado y Paginación**: Filtra y navega fácilmente por la lista de usuarios.
-- **👑 Gestión de Managers (Superadmin)**: El primer usuario (dueño) puede crear y eliminar otras cuentas de manager directamente desde el panel.
+- **👑 Gestión de Managers (Superadmin)**: El primer usuario (dueño) puede crear y eliminar otras cuentas de manager.
+- **☁️ Soporte para Gestión Remota (SSH)**: El dueño puede configurar credenciales SSH para que el panel gestione un servidor `zivpn` remoto.
 - **📱 Interfaz Responsiva**: Totalmente funcional en dispositivos móviles y de escritorio.
-
-## ⚙️ Cómo Funciona
-
-La aplicación interactúa con dos archivos de configuración principales en el servidor donde se despliega.
-
-> **Importante:** Estos archivos **no están en el proyecto**. La aplicación los crea y gestiona por ti directamente en el directorio `/etc/zivpn/` de tu VPS. No necesitas crearlos manualmente.
-
-1.  **`/etc/zivpn/managers.json`**: Almacena las credenciales (usuario y contraseña) de los managers que pueden iniciar sesión en este panel. La aplicación gestiona este archivo automáticamente.
-2.  **`/etc/zivpn/users-metadata.json`**: Almacena los metadatos de los usuarios VPN (quién lo creó, cuándo expira, etc.).
-3.  **`/etc/zivpn/config.json`**: Almacena la configuración de los usuarios finales de la VPN en un formato simple que `zivpn` entiende. La aplicación mantiene este archivo sincronizado.
-
-### Estructura de `managers.json`
-
-Este archivo es un array de objetos. **No necesitas crearlo manualmente**. La primera vez que accedas al panel, se creará automáticamente un usuario por defecto:
-- **Usuario:** `admin`
-- **Contraseña:** `password`
-
-El primer manager en este archivo es considerado el "dueño" o superadministrador y tiene permisos para gestionar a los demás.
-
-```json
-[
-  {
-    "username": "admin",
-    "password": "password",
-    "createdAt": "2023-10-27T10:00:00.000Z"
-  },
-  {
-    "username": "otro_manager",
-    "password": "otra_contraseña_fuerte",
-    "createdAt": "2023-10-28T11:00:00.000Z",
-    "expiresAt": "2023-11-27T11:00:00.000Z"
-  }
-]
-```
-
-### Estructura de los Usuarios en `users-metadata.json`
-
-Cada usuario de la VPN tiene un campo `createdBy` para asociarlo a un manager.
-
-```json
-[
-  {
-    "username": "testuser",
-    "createdAt": "2023-10-27T10:00:00.000Z",
-    "expiresAt": "2023-11-26T10:00:00.000Z",
-    "createdBy": "admin"
-  }
-]
-```
-
-## 💻 Desarrollo Local
-
-Si deseas ejecutar la aplicación en tu computadora local para desarrollo:
-
-1.  **Clona el repositorio**:
-    ```bash
-    git clone https://github.com/sysdevcheck/UdpPanelWeb.git
-    cd UdpPanelWeb
-    ```
-2.  **Instala Node.js**: Asegúrate de tener Node.js v20 o superior.
-3.  **Instala dependencias**:
-    ```bash
-    npm install
-    ```
-4.  **Ejecuta el servidor de desarrollo**:
-    ```bash
-    npm run dev
-    ```
-La aplicación estará disponible en `http://localhost:9002`.
-
-> **Nota**: En modo de desarrollo, los archivos de configuración (`managers.json`, `users-metadata.json`) se crearán y guardarán en la carpeta `src/lib/local-dev/` dentro del proyecto.
 
 ---
 
-## 🚀 Instalación y Despliegue en Servidor VPS (Ubuntu)
+## 🚀 Opción 1: Instalación Integrada (Panel y ZiVPN en el mismo VPS)
 
-> **Nota:** Estas instrucciones son para un entorno de producción en un servidor.
+> **Nota:** Usa este método si quieres instalar todo en un único servidor.
 
 ### 1. Prerrequisitos
 
@@ -152,7 +91,7 @@ sudo chown -R root:root /etc/zivpn
 
 ### 5. Permisos de `sudo` para Reiniciar el Servicio (Paso Crítico ⚠️)
 
-Para que la aplicación pueda reiniciar `zivpn`, el usuario que la ejecuta necesita permisos para usar `systemctl` sin contraseña. Dado que la aplicación se ejecuta como `root` a través de `pm2`, la configuración debe aplicarse a `root`.
+Para que la aplicación pueda reiniciar `zivpn`, el usuario que la ejecuta necesita permisos para usar `systemctl` sin contraseña.
 
 Abre el archivo de sudoers con `visudo` (es la forma segura de editarlo):
 ```bash
@@ -177,7 +116,7 @@ npm run build
 
 ### 7. Mantén la Aplicación en Funcionamiento con PM2
 
-Para que el panel permanezca en línea incluso si cierras la terminal o reinicias el servidor, usa un gestor de procesos como `pm2`.
+Para que el panel permanezca en línea, usa un gestor de procesos como `pm2`.
 
 > **⚠️ Error Común: `sudo: npm: command not found`**
 > Si al ejecutar el siguiente comando recibes este error, es porque `sudo` no sabe dónde está el `npm` instalado por `nvm`. La solución es usar la ruta completa que `nvm` proporciona.
@@ -192,7 +131,6 @@ Ahora, con `pm2` instalado, inicia la aplicación:
 
 ```bash
 # Dentro de la carpeta del proyecto (UdpPanelWeb), inicia la aplicación con pm2
-# Ejecútalo como tu usuario normal, pm2 se encargará de los permisos.
 pm2 start npm --name "zivpn-panel" -- start
 
 # Configura pm2 para que se inicie automáticamente al arrancar el servidor
@@ -205,14 +143,77 @@ pm2 save
 
 **¡Instalación completa! 🎉** Ahora deberías poder acceder a tu panel visitando `http://[IP_DE_TU_VPS]:9002`.
 
-> **Nota sobre los puertos:** La aplicación se ejecuta en el puerto **9002**. Este puerto solo es para acceso directo o para que el reverse proxy (Nginx) se comunique con él. Para un acceso público, sigue el siguiente paso para configurar un subdominio.
-
 - **Usuario:** `admin`
 - **Contraseña:** `password`
 
-## 🔒 Opcional y Recomendado: Usar un Subdominio con HTTPS
+---
 
-Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), puedes usar **Nginx** como reverse proxy y **Let's Encrypt** para obtener un certificado SSL gratuito.
+## 🚀 Opción 2: Instalación Remota (Panel en Firebase, ZiVPN en VPS)
+
+Este modo te permite alojar la interfaz del panel en un servicio como Firebase App Hosting y controlar tu servidor `zivpn` de forma remota a través de SSH.
+
+### Requisitos del Servidor VPN (VPS)
+
+1.  **`zivpn` instalado**: Asegúrate de que `zivpn` esté instalado y funcionando como un servicio `systemd`.
+2.  **Acceso SSH**: Debes tener acceso SSH al VPS con un usuario que tenga permisos `sudo`.
+3.  **Configuración `sudoers`**: Al igual que en la instalación local, el usuario SSH que utilices necesita permisos para reiniciar `zivpn` sin contraseña.
+    ```bash
+    sudo visudo
+    ```
+    Y añade la línea (reemplazando `el_usuario_ssh` si no es `root`):
+    ```
+    el_usuario_ssh ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
+    ```
+
+### Despliegue del Panel en Firebase
+
+1.  **Clona el proyecto en tu máquina local**:
+    ```bash
+    git clone https://github.com/sysdevcheck/UdpPanelWeb.git
+    cd UdpPanelWeb
+    npm install
+    ```
+2.  **Instala Firebase CLI**:
+    ```bash
+    npm install -g firebase-tools
+    ```
+3.  **Inicia sesión en Firebase**:
+    ```bash
+    firebase login
+    ```
+4.  **Inicializa Firebase en el proyecto**:
+    ```bash
+    firebase init hosting
+    ```
+    *   Selecciona un proyecto existente o crea uno nuevo.
+    *   Cuando te pregunte por el directorio público, **no uses `public`**. Como esta es una app Next.js, la configuración de despliegue es diferente. Firebase App Hosting lo detectará automáticamente.
+5.  **Despliega en Firebase App Hosting**:
+    ```bash
+    firebase deploy --only hosting
+    ```
+    Firebase te dará la URL de tu panel desplegado (ej. `https://tu-proyecto.web.app`).
+
+### Configuración de la Conexión SSH
+
+1.  **Accede al panel**: Ve a la URL de tu panel desplegado en Firebase.
+2.  **Inicia sesión**: Usa las credenciales por defecto:
+    *   **Usuario:** `admin`
+    *   **Contraseña:** `password`
+3.  **Ve a la pestaña "Managers"**: Como eres el primer usuario, eres el "dueño".
+4.  **Rellena el formulario "ZiVPN Server SSH Configuration"**:
+    *   **Server IP / Hostname**: La IP de tu VPS donde corre `zivpn`.
+    *   **SSH Port**: El puerto SSH de tu VPS (normalmente 22).
+    *   **SSH Username**: El usuario con el que te conectas por SSH (ej. `root`).
+    *   **SSH Password**: La contraseña de ese usuario.
+5.  **Guarda la configuración**.
+
+¡Listo! El panel alojado en Firebase ahora gestionará tu servidor `zivpn` de forma remota.
+
+---
+
+## 🔒 Opcional y Recomendado: Usar un Subdominio con HTTPS (para Instalación Integrada)
+
+Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), puedes usar **Nginx** como reverse proxy.
 
 ### Prerrequisitos del Subdominio
 
@@ -240,7 +241,6 @@ server {
     server_name panel.tudominio.com;
 
     location / {
-        # La magia ocurre aquí:
         # Nginx redirige el tráfico a la aplicación Node.js que corre en el puerto 9002.
         proxy_pass http://127.0.0.1:9002;
         proxy_http_version 1.1;
@@ -255,7 +255,7 @@ server {
 }
 ```
 
-> **Explicación de los puertos**: Nginx escucha en el puerto 80 (HTTP) para las visitas del público. Luego, reenvía internamente esas visitas a tu aplicación, que está escuchando en `localhost` en el puerto `9002`. El usuario final nunca necesita saber el puerto 9002.
+> **Explicación de los puertos**: Nginx escucha en el puerto 80 (HTTP). Luego, reenvía internamente esas visitas a tu aplicación, que está escuchando en `localhost` en el puerto `9002`. El usuario final nunca necesita saber el puerto 9002.
 
 ### Paso 3: Activar la Configuración y Reiniciar Nginx
 
@@ -280,57 +280,17 @@ sudo apt install certbot python3-certbot-nginx -y
 # Obtén y configura el certificado SSL (reemplaza con tu subdominio)
 sudo certbot --nginx -d panel.tudominio.com
 ```
-Sigue las instrucciones en pantalla. Te pedirá un email y que aceptes los términos de servicio. Cuando te pregunte sobre la redirección de HTTP a HTTPS, es muy recomendable elegir la opción de redirigir.
+Sigue las instrucciones en pantalla. Es muy recomendable elegir la opción de redirigir todo el tráfico HTTP a HTTPS.
 
-¡Listo! Ahora puedes acceder de forma segura a `https://panel.tudominio.com`.
-
-## 🛠️ Mantenimiento y Actualizaciones
-
-### Cómo Subir Cambios a GitHub (desde tu PC de desarrollo)
-
-1.  **Añade todos los archivos modificados:**
-    ```bash
-    git add .
-    ```
-2.  **Crea un "commit" con un mensaje descriptivo:**
-    ```bash
-    git commit -m "Describe aquí los cambios que hiciste"
-    ```
-3.  **Sube los cambios a la rama principal:**
-    ```bash
-    git push origin main
-    ```
-
-### Cómo Actualizar la Aplicación en el VPS
-
-Una vez que tus cambios estén en GitHub, conéctate a tu VPS y sigue estos pasos.
-
-```bash
-# 1. Ve a la carpeta del proyecto
-cd ~/UdpPanelWeb # o la ruta donde lo clonaste
-
-# 2. Descarga la última versión desde GitHub
-git pull origin main
-
-# 3. Instala las dependencias (importante si se añadieron nuevas librerías)
-npm install
-
-# 4. Reconstruye la aplicación con los nuevos cambios
-npm run build
-
-# 5. Reinicia la aplicación con PM2 para que los cambios surtan efecto
-pm2 restart zivpn-panel
-```
+---
 
 ## 🚑 Resolución de Problemas
-
-Aquí tienes algunos comandos útiles para diagnosticar y solucionar problemas comunes.
 
 ### Error: 502 Bad Gateway
 
 Este error significa que Nginx no puede comunicarse con tu aplicación (`zivpn-panel`). La causa más probable es que la aplicación se ha detenido o ha fallado.
 
-1.  **Revisa los logs de la aplicación en tiempo real.** Este es el comando más importante. Te dirá exactamente por qué la aplicación no arranca o se detiene.
+1.  **Revisa los logs de la aplicación en tiempo real.** Este es el comando más importante.
     ```bash
     pm2 logs zivpn-panel
     ```
@@ -343,26 +303,11 @@ Este error significa que Nginx no puede comunicarse con tu aplicación (`zivpn-p
     - Si este comando **muestra una línea de resultado** que dice `LISTEN`, tu aplicación está corriendo bien. El problema casi seguro está en la configuración de Nginx. Revisa `proxy_pass http://127.0.0.1:9002;` en tu archivo de configuración de Nginx.
     - Si este comando **no muestra nada**, tu aplicación se ha detenido. La respuesta está en los logs del paso anterior.
 
-3.  **Verifica el estado del proceso en PM2.**
-    ```bash
-    pm2 list
-    ```
-    Asegúrate de que `zivpn-panel` tiene el estado `online`. Si dice `errored` o `stopped`, significa que la aplicación se ha colgado. Intenta reiniciarla con `pm2 restart zivpn-panel` y observa los logs.
-
-4.  **Revisa los logs de Nginx.** Si la aplicación parece estar corriendo (`online` en `pm2 list`), los logs de Nginx pueden darte una pista.
+3.  **Revisa los logs de Nginx.**
     ```bash
     sudo tail -f /var/log/nginx/error.log
     ```
-    Busca errores como `connect() failed (111: Connection refused)`. Esto confirma que Nginx está intentando conectar pero la aplicación no responde en el puerto `9002`.
-
-5.  **Comprueba la configuración de Nginx.** Un error de sintaxis puede ser el problema.
-    ```bash
-    sudo nginx -t
-    ```
-    Si hay un error, te indicará el archivo y la línea. Si todo está `ok`, reinicia Nginx.
-    ```bash
-    sudo systemctl restart nginx
-    ```
+    Busca errores como `connect() failed (111: Connection refused)`.
 
 ### Error: `EACCES: permission denied` en los logs de PM2
 
@@ -375,44 +320,8 @@ Esto significa que la aplicación no tiene permisos para leer o escribir en el d
     Fíjate en la columna `user`.
 2.  **Asigna la propiedad del directorio a ese usuario.**
     ```bash
-    # Reemplaza 'usuario_correcto' con el que viste en 'pm2 list' (normalmente 'root')
-    sudo chown -R usuario_correcto:usuario_correcto /etc/zivpn
+    # Reemplaza 'root' con el que viste en 'pm2 list' si es diferente
+    sudo chown -R root:root /etc/zivpn
     ```
     Luego, reinicia la aplicación: `pm2 restart zivpn-panel`.
-
-### Error de `sudo` al reiniciar el servicio `zivpn`
-
-Si los logs de PM2 muestran un error relacionado con `sudo` o `systemctl`, el problema está en la configuración de `sudoers`.
-
-1.  **Edita el archivo `sudoers` de forma segura.**
-    ```bash
-    sudo visudo
-    ```
-2.  **Comprueba la línea que añadiste.** Asegúrate de que no tiene errores de tipeo y que usa el nombre de usuario correcto (el mismo que aparece en `pm2 list`, normalmente `root`).
-    ```
-    # La línea debe ser exactamente así (cambiando 'root' si usas otro usuario)
-    root ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
-    ```
-
-### Comandos Generales de PM2
-
-- **Reiniciar el panel manualmente:**
-  ```bash
-  pm2 restart zivpn-panel
-  ```
-
-- **Limpiar procesos duplicados (si has iniciado el panel varias veces por error):**
-  ```bash
-  # Detiene y elimina el proceso de la lista de PM2
-  pm2 delete zivpn-panel
-  
-  # Guarda la lista de procesos ahora limpia
-  pm2 save
-  
-  # Inicia el proceso de nuevo, una sola vez
-  # (Asegúrate de estar en la carpeta del proyecto)
-  pm2 start npm --name "zivpn-panel" -- start
-  
-  # Guarda la configuración final
-  pm2 save
-  ```
+```
