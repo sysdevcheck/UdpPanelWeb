@@ -1,6 +1,6 @@
 'use server';
 
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/headers';
 import { cookies } from 'next/headers';
 import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
@@ -11,6 +11,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 // We must use the client SDK's REST API for this verification step.
 async function verifyPassword(email: string, password: string): Promise<{idToken: string, localId: string} | null> {
     const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    if (!apiKey) {
+      console.error("Firebase API Key is not configured.");
+      return null;
+    }
     const restApiUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
 
     try {
@@ -40,15 +44,31 @@ async function verifyPassword(email: string, password: string): Promise<{idToken
 export async function POST(request: NextRequest) {
   try {
     const adminAuth = getAuth(adminApp);
+    const firestore = getFirestore(adminApp);
     
     const body = await request.json();
-    const { email, password } = body;
+    const { username, password } = body;
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Correo y contraseña son requeridos.' }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: 'Usuario y contraseña son requeridos.' }, { status: 400 });
     }
 
-    // Step 1: Verify the user's password using the REST API.
+    // Step 1: Find user by username in Firestore to get their email
+    const usersQuery = await firestore.collection('users').where('username', '==', username).limit(1).get();
+
+    if (usersQuery.empty) {
+      return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
+    }
+
+    const userDoc = usersQuery.docs[0];
+    const userDocData = userDoc.data();
+    const email = userDocData.email;
+
+    if (!email) {
+      return NextResponse.json({ error: 'La cuenta de usuario no tiene un email asociado.' }, { status: 500 });
+    }
+    
+    // Step 2: Verify the user's password using the REST API with the fetched email.
     const verificationResult = await verifyPassword(email, password);
 
     if (!verificationResult) {
@@ -57,16 +77,14 @@ export async function POST(request: NextRequest) {
 
     const { idToken, localId: uid } = verificationResult;
 
-    // Step 2: Verify the token just to be sure, although getting it means password was correct.
+    // Step 3: Verify the token just to be sure, although getting it means password was correct.
     await adminAuth.verifyIdToken(idToken);
     
-    // Step 3: Create a session cookie with the user's UID.
-    // The role and other data will be fetched on subsequent requests by getLoggedInUser.
+    // Step 4: Create a session cookie with the user's UID.
     const sessionPayload = {
         uid,
     };
     
-    // Set a session cookie that expires in 30 days.
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     cookies().set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
@@ -81,11 +99,6 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Login API error:', error);
     let message = 'Error de autenticación.';
-    if (error.code === 'auth/id-token-expired') {
-        message = 'La sesión ha expirado, por favor inicia sesión de nuevo.';
-    } else if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        message = 'Credenciales inválidas.';
-    }
     // Return a generic 401 for auth errors.
     return NextResponse.json({ error: message }, { status: 401 });
   }

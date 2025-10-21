@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('sysdevcheck@gmail.com');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -21,8 +21,8 @@ export default function LoginPage() {
     setIsPending(true);
     setError(null);
 
-    if (!email || !password) {
-      setError('Se requieren correo y contraseña.');
+    if (!username || !password) {
+      setError('Se requieren usuario y contraseña.');
       setIsPending(false);
       return;
     }
@@ -31,7 +31,7 @@ export default function LoginPage() {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
@@ -72,8 +72,8 @@ export default function LoginPage() {
               </Alert>
             )}
             <div className="grid gap-2">
-              <Label htmlFor="email">Correo Electrónico</Label>
-              <Input id="email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={isPending}/>
+              <Label htmlFor="username">Usuario</Label>
+              <Input id="username" name="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required disabled={isPending}/>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Contraseña</Label>
