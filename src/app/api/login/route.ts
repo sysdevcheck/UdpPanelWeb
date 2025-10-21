@@ -1,31 +1,40 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 import { adminApp } from '@/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { idToken } = body;
+    const { username, password } = body;
 
-    if (!idToken) {
-      return NextResponse.json({ error: 'ID token is required' }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
     }
 
-    const adminAuth = getAuth(adminApp);
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
-    
-    const userRecord = await adminAuth.getUser(decodedToken.uid);
-    const customClaims = userRecord.customClaims || {};
+    const firestore = getFirestore(adminApp);
+    const usersRef = firestore.collection('users');
+    const userQuery = await usersRef.where('username', '==', username).limit(1).get();
+
+    if (userQuery.empty) {
+        return NextResponse.json({ error: 'Usuario o contraseña inválidos.' }, { status: 401 });
+    }
+
+    const userDoc = userQuery.docs[0];
+    const userData = userDoc.data();
+
+    if (userData.password !== password) {
+        return NextResponse.json({ error: 'Usuario o contraseña inválidos.' }, { status: 401 });
+    }
 
     const sessionPayload = {
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        role: customClaims.role || 'user', // default to 'user' if no role
-        assignedServerId: customClaims.assignedServerId || null,
+        uid: userDoc.id,
+        username: userData.username,
+        email: userData.email, // keeping email if available
+        role: userData.role || 'user',
+        assignedServerId: userData.assignedServerId || null,
     };
     
-    // Set cookie
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     cookies().set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
@@ -39,12 +48,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login API error:', error);
-    let message = 'Internal Server Error';
-    if(error.code === 'auth/id-token-expired') {
-        message = 'La sesión ha expirado, por favor inicia sesión de nuevo.';
-    } else if (error.code === 'auth/argument-error') {
-        message = 'Token de autenticación inválido.';
-    }
-    return NextResponse.json({ error: message }, { status: 401 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

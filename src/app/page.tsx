@@ -23,7 +23,7 @@ export default async function Home() {
     redirect('/login');
   }
 
-  const { uid, email, role, assignedServerId } = user;
+  const { uid, username, role, assignedServerId } = user;
   const isOwner = role === 'owner';
   const defaultTab = isOwner ? "servers" : "vpn-users";
 
@@ -41,7 +41,7 @@ export default async function Home() {
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-sm text-muted-foreground">
                 <span className="hidden sm:inline">Bienvenido, </span>
-                <strong className="font-medium text-foreground">{email}</strong>
+                <strong className="font-medium text-foreground">{username}</strong>
                  {isOwner && <span className="text-amber-500 ml-1">(Dueño)</span>}
               </span>
               <form action={logout}>

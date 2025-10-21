@@ -78,7 +78,7 @@ const getStatus = (expiresAt: Timestamp): UserWithStatus['status'] => {
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function UserManager({ user }: { user: { uid: string; email: string; role: string; assignedServerId?: string; }}) {
+export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string; }}) {
   const { role, assignedServerId, uid } = user;
   const isOwner = role === 'owner';
 
@@ -119,7 +119,7 @@ export function UserManager({ user }: { user: { uid: string; email: string; role
     if (!currentServer || !vpnUsersData) return;
     setIsActionPending(true);
 
-    const sshConfig = currentServer; // The password should already be here if needed by the action
+    const sshConfig = currentServer;
 
     await syncVpnUsersWithVps(currentServer.id, sshConfig, vpnUsersData);
     setIsActionPending(false);
@@ -146,7 +146,7 @@ export function UserManager({ user }: { user: { uid: string; email: string; role
         });
         toast({ title: 'Éxito', description: `Usuario "${username}" añadido.` });
         addUserFormRef.current?.reset();
-        await handleVpsSync(); // Sync with VPS after adding
+        await handleVpsSync();
     } catch (e: any) {
         toast({variant: 'destructive', title: 'Error', description: e.message });
     }
@@ -208,7 +208,6 @@ export function UserManager({ user }: { user: { uid: string; email: string; role
       const formData = new FormData();
       formData.set('serverId', currentServer.id);
       
-      // The server config now needs to be passed in stringified form
       formData.set('sshConfig', JSON.stringify(currentServer));
 
       const result = await actionFn({ success: false }, formData);
