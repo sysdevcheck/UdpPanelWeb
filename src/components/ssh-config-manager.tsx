@@ -35,6 +35,7 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
     const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialSshActionState);
 
     useEffect(() => {
+        if (!sshState) return; // Add this check
         if(sshState.success || sshState.error) {
             if (sshState.success) {
                 if (sshState.message) {
