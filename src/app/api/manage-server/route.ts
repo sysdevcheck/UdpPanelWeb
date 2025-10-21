@@ -2,10 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-const serversCollection = collection(firestore, 'servers');
-
 export async function GET(request: NextRequest) {
+    const { firestore } = getSdks();
+    const serversCollection = collection(firestore, 'servers');
     const { searchParams } = new URL(request.url);
     const serverId = searchParams.get('serverId');
 
@@ -27,6 +26,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { firestore } = getSdks();
+  const serversCollection = collection(firestore, 'servers');
   try {
     const body = await request.json();
     const { serverId, name, host, port, username, password } = body;
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const { firestore } = getSdks();
   try {
     const { serverId } = await request.json();
     

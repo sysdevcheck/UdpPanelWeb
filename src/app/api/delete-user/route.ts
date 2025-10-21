@@ -2,9 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-
 export async function POST(request: NextRequest) {
+  const { firestore } = getSdks();
   try {
     const body = await request.json();
     const { id } = body;

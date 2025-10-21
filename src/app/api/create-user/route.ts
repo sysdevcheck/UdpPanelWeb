@@ -2,10 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-const credentialsCollection = collection(firestore, 'credentials');
-
 export async function GET(request: NextRequest) {
+    const { firestore } = getSdks();
+    const credentialsCollection = collection(firestore, 'credentials');
     try {
         const q = query(credentialsCollection, where('role', '==', 'manager'));
         const querySnapshot = await getDocs(q);
@@ -18,6 +17,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { firestore } = getSdks();
+  const credentialsCollection = collection(firestore, 'credentials');
   try {
     const body = await request.json();
     const { username, password, role, assignedServerId } = body;

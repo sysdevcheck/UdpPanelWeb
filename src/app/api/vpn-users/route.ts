@@ -2,10 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-const vpnUsersCollection = collection(firestore, 'vpn-users');
-
 export async function GET(request: NextRequest) {
+    const { firestore } = getSdks();
+    const vpnUsersCollection = collection(firestore, 'vpn-users');
     try {
         const { searchParams } = new URL(request.url);
         const serverId = searchParams.get('serverId');
@@ -34,6 +33,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const { firestore } = getSdks();
+    const vpnUsersCollection = collection(firestore, 'vpn-users');
     try {
         const { username, serverId, createdBy } = await request.json();
 
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+    const { firestore } = getSdks();
     try {
         const { docId, username, renew } = await request.json();
 
@@ -96,6 +98,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+    const { firestore } = getSdks();
     try {
         const { searchParams } = new URL(request.url);
         const docId = searchParams.get('docId');

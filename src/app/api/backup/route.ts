@@ -1,10 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-
 export async function GET(request: NextRequest) {
+    const { firestore } = getSdks();
     try {
         const credentialsSnap = await getDocs(collection(firestore, 'credentials'));
         const serversSnap = await getDocs(collection(firestore, 'servers'));
@@ -41,6 +40,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const { firestore } = getSdks();
     const batch = writeBatch(firestore);
 
     try {

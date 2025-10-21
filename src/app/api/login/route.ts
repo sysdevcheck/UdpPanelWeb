@@ -3,10 +3,9 @@ import { cookies } from 'next/headers';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { getSdks } from '@/firebase';
 
-const { firestore } = getSdks();
-const credentialsCollection = collection(firestore, 'credentials');
-
 export async function POST(request: NextRequest) {
+  const { firestore } = getSdks();
+  const credentialsCollection = collection(firestore, 'credentials');
   try {
     const body = await request.json();
     const { username, password } = body;
