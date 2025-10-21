@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+   webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Exclude ssh2 from bundling
+      config.externals.push('ssh2');
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
