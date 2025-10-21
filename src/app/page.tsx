@@ -1,8 +1,9 @@
 
-import { readConfig, getLoggedInUser, logout, readManagers } from './actions';
+import { readConfig, getLoggedInUser, logout, readManagers, saveSshConfig } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
-import { Users, LogOut, UserCog } from 'lucide-react';
+import { SshConfigManager } from '@/components/ssh-config-manager';
+import { Users, LogOut, UserCog, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import {
@@ -39,7 +40,8 @@ export default async function Home() {
   const vpnUsers = initialVpnUsersData.auth?.config || [];
   
   // The first manager in the list is the owner/superadmin
-  const ownerUsername = allManagers.length > 0 ? allManagers[0].username : '';
+  const owner = allManagers.length > 0 ? allManagers[0] : null;
+  const ownerUsername = owner?.username || '';
   const isOwner = loggedInUser === ownerUsername;
 
   return (
@@ -70,7 +72,13 @@ export default async function Home() {
       </header>
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
          <Tabs defaultValue="vpn-users" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-1'} max-w-lg mx-auto`}>
+            {isOwner && (
+                <TabsTrigger value="ssh-config">
+                    <Server className="mr-2 h-4 w-4" />
+                    Remote Server
+                </TabsTrigger>
+            )}
             <TabsTrigger value="vpn-users">
               <Users className="mr-2 h-4 w-4" />
               VPN Users
@@ -82,6 +90,11 @@ export default async function Home() {
               </TabsTrigger>
             )}
           </TabsList>
+           {isOwner && (
+            <TabsContent value="ssh-config">
+               <SshConfigManager owner={owner} ownerUsername={ownerUsername} />
+            </TabsContent>
+          )}
           <TabsContent value="vpn-users">
             <UserManager initialUsers={vpnUsers} managerUsername={loggedInUser} />
           </TabsContent>
