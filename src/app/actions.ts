@@ -38,7 +38,15 @@ const defaultConfig = {
 // SSH API Wrapper Functions
 // ====================================================================
 
-async function sshApiRequest(action: string, payload: any, sshConfig: any) {
+type SshApiResponse = {
+    success: boolean;
+    error?: string;
+    message?: string;
+    log?: { level: 'INFO' | 'SUCCESS' | 'ERROR', message: string }[];
+    data?: any;
+}
+
+async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
     // This function will run on the Next.js server, not the browser.
     // We can get the base URL for the fetch request.
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
@@ -50,15 +58,20 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any) {
             body: JSON.stringify({ action, payload, sshConfig }),
         });
 
+        const responseBody: SshApiResponse = await response.json();
+
         if (!response.ok) {
-            const errorBody = await response.json();
-            throw new Error(errorBody.error || `API request failed with status ${response.status}`);
+            throw new Error(responseBody.error || `API request failed with status ${response.status}`);
         }
 
-        return await response.json();
+        return responseBody;
     } catch (e: any) {
         console.error(`Failed to fetch from SSH API endpoint. Is the app running? URL: ${baseUrl}/api/ssh`, e);
-        throw new Error(`Could not connect to the internal SSH service. Details: ${e.message}`);
+        return {
+            success: false,
+            error: `Could not connect to the internal SSH service. Details: ${e.message}`,
+            log: [{ level: 'ERROR', message: `Could not connect to the internal SSH service. Is the panel running correctly? Details: ${e.message}` }]
+        };
     }
 }
 
@@ -586,12 +599,12 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
     return { success: true, managers, message: `Manager "${newUsername || oldUsername}" has been updated.` };
 }
 
-export async function saveSshConfig(prevState: any, formData: FormData): Promise<{ success: boolean, error?: string, message?: string }> {
+export async function saveSshConfig(prevState: any, formData: FormData): Promise<SshApiResponse> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!ownerUsername) return { success: false, error: "Authentication required." };
+    if (!ownerUsername) return { success: false, error: "Authentication required.", log: [] };
 
     const isOwnerCheck = await isOwner(ownerUsername);
-    if (!isOwnerCheck) return { success: false, error: "Permission denied." };
+    if (!isOwnerCheck) return { success: false, error: "Permission denied.", log: [] };
     
     const host = formData.get('host') as string;
     const port = formData.get('port') as string;
@@ -599,7 +612,7 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     const password = formData.get('password') as string;
 
     if (!host || !username || !password) {
-        return { success: false, error: "Host, username, and password are required." };
+        return { success: false, error: "Host, username, and password are required.", log: [] };
     }
 
     const newSshConfig = {
@@ -610,21 +623,16 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     };
 
     // Test the new configuration first
-    try {
-        const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
-        if (!testResult.success) {
-            return { success: false, error: `Connection failed: ${testResult.error}` };
-        }
-    } catch(e: any) {
-         return { success: false, error: `Connection failed: ${e.message}` };
+    const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
+    if (!testResult.success) {
+        return { success: false, error: testResult.error || 'Connection failed', log: testResult.log };
     }
-
 
     const managers = await readManagersFile();
     const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
 
     if (ownerIndex === -1) {
-        return { success: false, error: "Owner account not found." };
+        return { success: false, error: "Owner account not found.", log: testResult.log };
     }
 
     managers[ownerIndex].ssh = newSshConfig;
@@ -632,10 +640,12 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     const result = await saveManagersFile(managers);
     if(result.success) {
         revalidatePath('/');
-        return { success: true, message: "SSH Connection Successful!" };
+        return { success: true, message: "SSH Connection Successful!", log: testResult.log };
     }
 
-    return { success: false, error: result.error || "Failed to save SSH configuration." };
+    const finalLog = testResult.log || [];
+    finalLog.push({ level: 'ERROR', message: `Failed to save configuration file: ${result.error}` });
+    return { success: false, error: result.error || "Failed to save SSH configuration.", log: finalLog };
 }
 
 export async function clearSshConfig(ownerUsername: string): Promise<{ success: boolean; error?: string; message?: string }> {
@@ -669,5 +679,3 @@ export async function clearSshConfig(ownerUsername: string): Promise<{ success: 
     revalidatePath('/');
     return { success: true, message: "SSH configuration has been cleared." };
 }
-
-    

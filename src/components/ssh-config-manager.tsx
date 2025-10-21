@@ -1,14 +1,14 @@
 
 'use client';
 
-import { useEffect, useActionState, useTransition } from 'react';
+import { useEffect, useActionState, useTransition, useState } from 'react';
 import { saveSshConfig, clearSshConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, LogOut, CheckCircle } from 'lucide-react';
+import { Loader2, Server, LogOut, CheckCircle, Terminal } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
 
 
 type SshConfig = {
@@ -33,15 +34,22 @@ type Manager = {
   ssh?: SshConfig;
 }
 
+type LogEntry = {
+    level: 'INFO' | 'SUCCESS' | 'ERROR';
+    message: string;
+}
+
 const initialActionState = {
     success: false,
     error: undefined,
     message: undefined,
+    log: [],
 }
 
 export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | null, ownerUsername: string }) {
     const { toast } = useToast();
     const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialActionState);
+    const [log, setLog] = useState<LogEntry[]>([]);
     
     // For the clear action, we'll handle it with useTransition as it's not a form action
     const [isClearingPending, startTransition] = useTransition();
@@ -51,6 +59,7 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
             const result = await clearSshConfig(ownerUsername);
             if (result.success) {
                 toast({ title: 'Success', description: result.message });
+                setLog([]); // Clear log on disconnect
             } else if (result.error) {
                 toast({ variant: 'destructive', title: 'Error Clearing Config', description: result.error });
             }
@@ -59,15 +68,17 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
 
     useEffect(() => {
         if (!sshState) return;
-        if(sshState.success || sshState.error) {
-            if (sshState.success) {
-                if (sshState.message) {
-                    toast({ title: 'Success', description: sshState.message, className: 'bg-green-500 text-white' });
-                }
-            } else if (sshState.error) {
-                toast({ variant: 'destructive', title: 'Error Saving SSH Config', description: sshState.error });
-            }
+
+        if (sshState.log && sshState.log.length > 0) {
+            setLog(sshState.log);
         }
+
+        if(sshState.success && sshState.message) {
+            toast({ title: 'Success', description: sshState.message, className: 'bg-green-500 text-white' });
+        } else if (sshState.error) {
+             toast({ variant: 'destructive', title: 'Connection Failed', description: sshState.error });
+        }
+        
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sshState]);
 
@@ -149,6 +160,27 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
                             </Button>
                         </div>
                     </form>
+                )}
+
+                {log.length > 0 && (
+                    <div className="mt-4 p-4 bg-black rounded-md font-mono text-sm text-white space-y-2">
+                         <div className="flex items-center gap-2 border-b border-gray-700 pb-2 mb-2">
+                            <Terminal className="w-5 h-5 text-gray-400" />
+                            <h3 className="font-semibold">Connection Log</h3>
+                        </div>
+                        {log.map((entry, index) => (
+                            <div key={index} className="flex items-start">
+                                <span className={cn('mr-2 font-bold', {
+                                    'text-cyan-400': entry.level === 'INFO',
+                                    'text-green-400': entry.level === 'SUCCESS',
+                                    'text-red-400': entry.level === 'ERROR',
+                                })}>
+                                    [{entry.level}]
+                                </span>
+                                <span className="flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </CardContent>
         </Card>
