@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "VpnConfiguration": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VpnConfiguration",
+      "type": "object",
+      "description": "Represents the overall VPN configuration stored in the config.json file.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the VPN configuration.  (Primary Key)"
+        },
+        "users": {
+          "type": "array",
+          "description": "Array of user configurations.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serverSettings": {
+          "type": "string",
+          "description": "References ServerSetting"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user with VPN access.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user. (Primary Key)"
+        },
+        "username": {
+          "type": "string",
+          "description": "The user's username."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "vpnConfigurationId": {
+          "type": "string",
+          "description": "Reference to VpnConfiguration. (Relationship: VpnConfiguration 1:N User)"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "email"
+      ]
+    },
+    "ServerSetting": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ServerSetting",
+      "type": "object",
+      "description": "Represents server settings for vpn configuration",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the server settings. (Primary Key)"
+        },
+        "address": {
+          "type": "string",
+          "description": "The server's address."
+        },
+        "port": {
+          "type": "number",
+          "description": "The server's port."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "The server's protocol."
+        }
+      },
+      "required": [
+        "id",
+        "address",
+        "port",
+        "protocol"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/vpn_configurations/{vpnConfigurationId}",
+        "definition": {
+          "entityName": "VpnConfiguration",
+          "schema": {
+            "$ref": "#/backend/entities/VpnConfiguration"
+          },
+          "description": "Stores VPN configuration settings. Contains a list of associated users, but their details are stored in a subcollection.",
+          "params": [
+            {
+              "name": "vpnConfigurationId",
+              "description": "Unique identifier for the VPN configuration."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/vpn_configurations/{vpnConfigurationId}/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user data associated with a specific VPN configuration. Includes denormalized 'vpnConfigurationId' for authorization independence.",
+          "params": [
+            {
+              "name": "vpnConfigurationId",
+              "description": "Unique identifier for the parent VPN configuration."
+            },
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/server_settings/{serverSettingId}",
+        "definition": {
+          "entityName": "ServerSetting",
+          "schema": {
+            "$ref": "#/backend/entities/ServerSetting"
+          },
+          "description": "Stores server settings for the VPN configuration.",
+          "params": [
+            {
+              "name": "serverSettingId",
+              "description": "Unique identifier for the server setting."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "This design prioritizes security and scalability for managing VPN configurations and user data within Firestore. It adheres to the principles of Authorization Independence, Structural Segregation, Access Modeling, and Data Clarity.\n\n**Authorization Independence:**\n\n*   User documents within `vpn_configurations/{vpnConfigurationId}/users/{userId}` denormalize `vpnConfigurationId`. This eliminates the need for security rules to perform `get()` operations on the parent `vpn_configurations` document to verify ownership. Atomic operations are now possible when creating users within a VPN configuration.\n\n**Structural Segregation:**\n\n*   The `vpn_configurations` collection stores the overall VPN configuration settings.\n*   Users associated with a VPN configuration are stored in a subcollection `/vpn_configurations/{vpnConfigurationId}/users/{userId}`. This segregation ensures that security rules for users are specific to their parent configuration, simplifying rule management.\n\n**Access Modeling:**\n\n*   Path-based ownership is used for user data: `/vpn_configurations/{vpnConfigurationId}/users/{userId}`. This enables straightforward security rules based on `request.auth.uid`.\n\n**QAPs (Rules are not Filters):**\n\n*   The structure enables secure `list` operations. Listing users is always scoped to a specific VPN configuration via `/vpn_configurations/{vpnConfigurationId}/users`. Because the `vpnConfigurationId` is part of the path, rules can enforce that the user has access to the specified VPN configuration before listing its users.\n\n**Invariants:**\n\n*   The structure supports the integrity of ownership by enforcing that the `vpnConfigurationId` in user documents matches the path in which they are stored. Firestore rules will be used to enforce this.\n\n**Justification for choices:**\n\n*   Using subcollections for users allows for efficient querying of users associated with a specific VPN configuration.\n*   Denormalizing the `vpnConfigurationId` into user documents facilitates independent authorization, which is crucial for atomic operations and simplifies security rules.\n*   The path-based ownership model (`/vpn_configurations/{vpnConfigurationId}/users/{userId}`) makes the intent of the security rules clear and easy to debug."
+  }
+}
