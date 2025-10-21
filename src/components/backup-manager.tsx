@@ -1,19 +1,19 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Loader2, Download, Upload } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 export function BackupManager() {
     const { toast } = useToast();
-    const [backupJson, setBackupJson] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleExport = async () => {
         setIsExporting(true);
@@ -45,44 +45,63 @@ export function BackupManager() {
     };
 
     const handleImport = async () => {
-        if (!backupJson) {
-            toast({ variant: 'destructive', title: 'Error', description: 'El campo de texto del backup no puede estar vacío.' });
+        const file = fileInputRef.current?.files?.[0];
+        if (!file) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, selecciona un archivo de backup.' });
             return;
         }
-        let parsedJson;
-        try {
-            parsedJson = JSON.parse(backupJson);
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error de Formato', description: 'El texto introducido no es un JSON válido.' });
-            return;
+
+        setIsImporting(true);
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') {
+                    throw new Error("No se pudo leer el archivo.");
+                }
+                const parsedJson = JSON.parse(text);
+
+                const response = await fetch('/api/backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parsedJson),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Ocurrió un error desconocido durante la importación.');
+                }
+
+                toast({ title: 'Éxito', description: 'El backup se ha importado correctamente. La página se recargará.' });
+                
+                // Recargar la página para reflejar los cambios
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+
+            } catch (error: any) {
+                let description = error.message;
+                if (error instanceof SyntaxError) {
+                    description = 'El archivo seleccionado no es un JSON válido.';
+                }
+                toast({ variant: 'destructive', title: 'Error de Importación', description });
+            } finally {
+                setIsImporting(false);
+                // Reset file input
+                if(fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
+            }
+        };
+
+        reader.onerror = () => {
+             toast({ variant: 'destructive', title: 'Error de Lectura', description: 'No se pudo leer el archivo seleccionado.' });
+             setIsImporting(false);
         }
         
-        setIsImporting(true);
-        try {
-            const response = await fetch('/api/backup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(parsedJson),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Ocurrió un error desconocido durante la importación.');
-            }
-
-            toast({ title: 'Éxito', description: 'El backup se ha importado correctamente. La página se recargará.' });
-            
-            // Recargar la página para reflejar los cambios
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
-
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Error de Importación', description: error.message });
-        } finally {
-            setIsImporting(false);
-        }
+        reader.readAsText(file);
     };
 
     const isPending = isExporting || isImporting;
@@ -114,21 +133,21 @@ export function BackupManager() {
                         Importar Backup
                     </CardTitle>
                     <CardDescription>
-                        Pega el contenido de un archivo de backup JSON para restaurar la configuración.
+                        Selecciona un archivo de backup JSON para restaurar la configuración completa.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <Alert variant="destructive">
                         <AlertTitle>¡Atención!</AlertTitle>
                         <AlertDescription>
-                            La importación es una operación destructiva. Se borrarán todos los datos actuales (servidores, managers, usuarios) y se reemplazarán con los datos del backup.
+                            La importación es una operación destructiva. Se borrarán todos los datos actuales y se reemplazarán con los del backup.
                         </AlertDescription>
                     </Alert>
-                    <Textarea
-                        value={backupJson}
-                        onChange={(e) => setBackupJson(e.target.value)}
-                        placeholder="Pega aquí el contenido de tu archivo de backup JSON..."
-                        className="min-h-[200px] font-mono text-xs"
+                    <Input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".json"
+                        className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                         disabled={isPending}
                     />
                     <Button onClick={handleImport} disabled={isPending} className="w-full">
