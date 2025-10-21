@@ -284,7 +284,9 @@ export function ManagerAdmin() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Usuario</TableHead>
+                    <TableHead>Rol</TableHead>
                     <TableHead>Estado</TableHead>
+                    <TableHead>Vencimiento</TableHead>
                     <TableHead>Servidor Asignado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -296,7 +298,7 @@ export function ManagerAdmin() {
 
                        return (
                         <TableRow key={manager.id}>
-                          <TableCell className="min-w-[200px]">
+                          <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-3">
                               <div className='flex items-center gap-2'>
                                 <User className="w-4 h-4 text-muted-foreground" />
@@ -304,24 +306,25 @@ export function ManagerAdmin() {
                               </div>
                             </div>
                           </TableCell>
-                           <TableCell className="min-w-[150px]">
-                             <div className="flex flex-col gap-1">
-                                <Badge variant="secondary" className="w-fit">
-                                    <Shield className="mr-2 h-4 w-4" />
-                                    Manager
-                                </Badge>
-                                {manager.expiresAt && (
-                                    <>
-                                        <Badge variant={variant} className="w-fit">{label}</Badge>
-                                        {daysLeft !== null && (
-                                        <span className="text-xs text-muted-foreground">
-                                            {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
-                                        </span>
-                                        )}
-                                    </>
-                                )}
-                                {!manager.expiresAt && <Badge variant="outline">Permanente</Badge>}
-                             </div>
+                          <TableCell>
+                            <Badge variant="secondary" className="w-fit">
+                                <Shield className="mr-2 h-4 w-4" />
+                                Manager
+                            </Badge>
+                          </TableCell>
+                           <TableCell>
+                                <Badge variant={variant} className="w-fit">{label}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {manager.expiresAt ? (
+                                daysLeft !== null && (
+                                    <span>
+                                        {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
+                                    </span>
+                                )
+                            ) : (
+                                <Badge variant="outline">Permanente</Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                              {assignedServer ? (
@@ -368,7 +371,7 @@ export function ManagerAdmin() {
                     })}
                     {managers.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={4} className="text-center h-24">
+                            <TableCell colSpan={6} className="text-center h-24">
                                 No hay managers creados.
                             </TableCell>
                         </TableRow>
@@ -445,3 +448,5 @@ export function ManagerAdmin() {
     </div>
   );
 }
+
+    
