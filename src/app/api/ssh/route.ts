@@ -1,17 +1,48 @@
 
 import { NextResponse } from 'next/server';
-import SSH2Promise from 'ssh2-promise';
+import { Client, SFTPWrapper } from 'ssh2';
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
-async function getSshConnection(sshConfig: any) {
-    const ssh = new SSH2Promise(sshConfig);
-    await ssh.connect();
-    return ssh;
+async function getSshConnection(sshConfig: any): Promise<Client> {
+    const conn = new Client();
+    return new Promise((resolve, reject) => {
+        conn.on('ready', () => resolve(conn))
+            .on('error', (err) => reject(err))
+            .on('timeout', () => reject(new Error('Connection timed out')))
+            .connect(sshConfig);
+    });
+}
+
+async function execCommand(ssh: Client, command: string): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+        let stdout = '';
+        let stderr = '';
+        ssh.exec(command, (err, stream) => {
+            if (err) return reject(err);
+            stream.on('close', () => {
+                resolve({ stdout, stderr });
+            }).on('data', (data: Buffer) => {
+                stdout += data.toString();
+            }).stderr.on('data', (data: Buffer) => {
+                stderr += data.toString();
+            });
+        });
+    });
+}
+
+function getSftp(ssh: Client): Promise<SFTPWrapper> {
+    return new Promise((resolve, reject) => {
+        ssh.sftp((err, sftp) => {
+            if (err) return reject(err);
+            resolve(sftp);
+        });
+    });
 }
 
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
+    let ssh: Client | null = null;
     
     try {
         const { action, payload, sshConfig } = await request.json();
@@ -24,16 +55,16 @@ export async function POST(request: Request) {
         if (action === 'testConnection') {
             try {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.username}@${sshConfig.host}:${sshConfig.port || 22}...` });
-                const ssh = await getSshConnection(sshConfig);
-                log.push({ level: 'SUCCESS', message: 'Connection established.' });
-                // connect() already implies authentication was successful
-                log.push({ level: 'SUCCESS', message: 'Authentication successful.' });
-                await ssh.close();
+                ssh = await getSshConnection(sshConfig);
+                log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
+                
+                ssh.end();
+                
                 log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
                 return NextResponse.json({ success: true, message: 'Connection successful', log });
             } catch (e: any) {
                 let errorMessage = e.message;
-                if (e.code === 'ENOTFOUND') {
+                 if (e.code === 'ENOTFOUND' || e.message.includes('ENOTFOUND')) {
                     errorMessage = `Host not found. Could not resolve DNS for ${sshConfig.host}.`;
                 } else if (e.message.includes('All configured authentication methods failed')) {
                     errorMessage = 'Authentication failed. Please check your username and password.';
@@ -45,46 +76,49 @@ export async function POST(request: Request) {
             }
         }
 
-        const ssh = await getSshConnection(sshConfig);
-        const sftp = ssh.sftp();
+        ssh = await getSshConnection(sshConfig);
+        const sftp = await getSftp(ssh);
 
         switch (action) {
             case 'readFile': {
                 const { path } = payload;
-                try {
-                    const data = await sftp.readFile(path, 'utf8');
-                    await ssh.close();
-                    return NextResponse.json({ success: true, data });
-                } catch (e: any) {
-                    await ssh.close();
-                    if (e.code === 2) { // SFTP_STATUS_CODE.NO_SUCH_FILE
-                         return NextResponse.json({ success: true, data: '' }); // Return empty string if file doesn't exist
-                    }
-                    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
-                }
+                return new Promise((resolve) => {
+                    sftp.readFile(path, 'utf8', (err: any, data: string) => {
+                        if (err) {
+                            if (err.code === 2) { // SFTP_STATUS_CODE.NO_SUCH_FILE
+                                resolve(NextResponse.json({ success: true, data: '' }));
+                            } else {
+                                resolve(NextResponse.json({ success: false, error: err.message }, { status: 500 }));
+                            }
+                        } else {
+                            resolve(NextResponse.json({ success: true, data }));
+                        }
+                    });
+                });
             }
             
             case 'writeFile': {
                 const { path, data } = payload;
-                await sftp.writeFile(path, data, 'utf8');
-                await ssh.close();
-                return NextResponse.json({ success: true });
+                 return new Promise((resolve) => {
+                    sftp.writeFile(path, data, 'utf8', (err) => {
+                         if (err) {
+                            resolve(NextResponse.json({ success: false, error: err.message }, { status: 500 }));
+                        } else {
+                            resolve(NextResponse.json({ success: true }));
+                        }
+                    });
+                });
             }
 
             case 'ensureDir': {
                  const { path } = payload;
-                 try {
-                    await ssh.exec(`mkdir -p ${path}`);
-                 } catch(e) {
-                     // Ignore if dir already exists
-                 }
-                 await ssh.close();
+                 // sftp.mkdir doesn't have a recursive option, so we use `mkdir -p` via exec.
+                 await execCommand(ssh, `mkdir -p ${path}`);
                  return NextResponse.json({ success: true });
             }
 
             case 'restartService': {
-                 const { stdout, stderr } = await ssh.exec('sudo /usr/bin/systemctl restart zivpn');
-                 await ssh.close();
+                 const { stdout, stderr } = await execCommand(ssh, 'sudo /usr/bin/systemctl restart zivpn');
                  if (stderr) {
                      return NextResponse.json({ success: false, error: stderr }, { status: 500 });
                  }
@@ -92,14 +126,25 @@ export async function POST(request: Request) {
             }
 
             default:
-                await ssh.close();
                 log.push({ level: 'ERROR', message: `Invalid action specified: '${action}'` });
                 return NextResponse.json({ success: false, error: 'Invalid action', log }, { status: 400 });
         }
 
     } catch (error: any) {
         console.error('API SSH Route Error:', error);
-        log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${error.message}` });
-        return NextResponse.json({ success: false, error: error.message, log }, { status: 500 });
+        let errorMessage = error.message;
+        if (error.code === 'ENOTFOUND' || error.message.includes('ENOTFOUND')) {
+            errorMessage = `Host not found. Could not resolve DNS.`;
+        } else if (error.message.includes('All configured authentication methods failed')) {
+            errorMessage = 'Authentication failed. Please check your username and password.';
+        } else if (error.level === 'client-timeout' || error.message.includes('Timed out')) {
+            errorMessage = `Connection timed out. Check the host IP and port.`;
+        }
+        log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${errorMessage}` });
+        return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
+    } finally {
+        if(ssh && ssh.readable) {
+            ssh.end();
+        }
     }
 }

@@ -18,13 +18,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  webpack: (config, { isServer }) => {
-    // Excluir el módulo problemático del empaquetado del lado del servidor
-    if (isServer) {
-        config.externals.push('@heroku/socksv5');
-    }
-    return config;
-  },
 };
 
 export default nextConfig;
