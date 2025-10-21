@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start -p 9002",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "create-owner": "tsx src/lib/create-owner.ts"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
@@ -57,6 +58,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@google-cloud/secret-manager": "^5.5.0",
     "@types/lodash": "^4.17.4",
     "@types/node": "^20",
     "@types/react": "^18",
@@ -65,6 +67,7 @@
     "genkit-cli": "^1.14.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.15.6",
     "typescript": "^5"
   }
 }
