@@ -1,6 +1,6 @@
 'use server';
 
-import { type NextRequest, NextResponse } from 'next/headers';
+import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 // Importa el archivo JSON directamente. Next.js lo incluirá en el bundle.
 import users from '@/../data/credentials.json';
