@@ -3,13 +3,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { addManager, deleteManager, editManager, exportBackup } from '@/app/actions';
+import { addManager, deleteManager, editManager, exportBackup, importBackup } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server, AlertCircle, Upload, Download } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Server, AlertCircle, Upload, Download } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +83,7 @@ const initialActionState = {
     error: undefined,
     message: undefined,
     managersData: { managers: [], owner: {}, servers: [] },
+    data: undefined,
 };
 
 export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { initialManagers: Manager[], ownerUsername: string, allServers: Server[] }) {
@@ -92,10 +93,14 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   const { toast } = useToast();
   const addFormRef = useRef<HTMLFormElement>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
+  const importFormRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, initialActionState);
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
   const [deleteManagerState, deleteManagerAction, isDeletingPending] = useActionState(deleteManager, initialActionState);
+  const [exportState, exportAction, isExportingPending] = useActionState(exportBackup, initialActionState);
+  const [importState, importAction, isImportingPending] = useActionState(importBackup, initialActionState);
 
   useEffect(() => {
     setIsClient(true);
@@ -151,25 +156,57 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteManagerState]);
 
-  const handleExport = async () => {
-    const result = await exportBackup();
-    if (result.success && result.data) {
-        const blob = new Blob([result.data], { type: 'application/json' });
+  useEffect(() => {
+    if (!exportState) return;
+    if (exportState.success && exportState.data) {
+        const blob = new Blob([exportState.data], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'zivpn-panel-backup.json';
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `zivpn-panel-backup-${timestamp}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast({ title: 'Success', description: 'Backup has been downloaded.' });
-    } else {
-        toast({ variant: 'destructive', title: 'Export Failed', description: result.error });
+        toast({ title: 'Success', description: 'Full system backup has been downloaded.' });
+    } else if (exportState.error) {
+        toast({ variant: 'destructive', title: 'Export Failed', description: exportState.error });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportState]);
+
+  useEffect(() => {
+    if(!importState) return;
+    if (importState.success) {
+      toast({ title: 'Success', description: importState.message, className: 'bg-green-500 text-white' });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } else if (importState.error) {
+      toast({ variant: 'destructive', title: 'Import Failed', description: importState.error });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importState]);
+
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
   }
 
-  const isPending = isAddingPending || isEditingPending || isDeletingPending;
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              const content = e.target?.result as string;
+              const formData = new FormData(importFormRef.current!);
+              formData.set('backupFile', content);
+              importAction(formData);
+          };
+          reader.readAsText(file);
+      }
+  }
+
+  const isPending = isAddingPending || isEditingPending || isDeletingPending || isExportingPending || isImportingPending;
   const ownerData = { username: ownerUsername, createdAt: undefined, expiresAt: undefined };
 
   if (!isClient) {
@@ -193,11 +230,22 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                         Create accounts that can manage users on a specific server.
                     </CardDescription>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleExport}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export Backup
-                    </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <form action={exportAction}>
+                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                        <Button type="submit" variant="outline" disabled={isPending} className='w-full'>
+                            {isExportingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />}
+                            Export Backup
+                        </Button>
+                    </form>
+                     <form ref={importFormRef} className='w-full'>
+                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+                        <Button type="button" variant="outline" onClick={handleImportClick} disabled={isPending} className='w-full'>
+                           {isImportingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
+                            Import Backup
+                        </Button>
+                    </form>
                 </div>
             </div>
         </CardHeader>
@@ -414,5 +462,3 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
     </div>
   );
 }
-
-    

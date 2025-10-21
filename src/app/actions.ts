@@ -817,13 +817,76 @@ export async function restartService(prevState: any, formData: FormData): Promis
 }
 
 
-export async function exportBackup(): Promise<{ success: boolean; data?: string; error?: string; }> {
+export async function exportBackup(prevState: any, formData: FormData): Promise<{ success: boolean; data?: string; error?: string; }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+
     try {
-        const data = await readManagersFile();
-        return { success: true, data: JSON.stringify(data, null, 2) };
+        const managersData = await readManagersFile();
+        const fullBackup: any = {
+            ...managersData,
+            vpnUsers: {}
+        };
+
+        for (const server of managersData.servers) {
+            const sshConfig = await getSshConfig(ownerUsername, server.id);
+            if (sshConfig) {
+                const usersMetadata = await readUsersMetadata(sshConfig);
+                // Use server ID as key for uniqueness instead of host
+                fullBackup.vpnUsers[server.id] = usersMetadata;
+            }
+        }
+        
+        return { success: true, data: JSON.stringify(fullBackup, null, 2) };
     } catch(e: any) {
         return { success: false, error: e.message };
     }
 }
 
-    
+export async function importBackup(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string; }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+
+    const backupFileContent = formData.get('backupFile') as string;
+    if (!backupFileContent) {
+        return { success: false, error: "No backup file content provided." };
+    }
+
+    try {
+        const backupData = JSON.parse(backupFileContent);
+
+        // Validate backup structure
+        if (!backupData.owner || !backupData.servers || !backupData.managers || !backupData.vpnUsers) {
+            throw new Error("Invalid backup file structure.");
+        }
+
+        const { vpnUsers, ...managersData } = backupData;
+        
+        // Restore managers.json
+        await saveManagersFile(managersData);
+
+        // Restore VPN users for each server
+        for (const server of managersData.servers) {
+            const sshConfig = await getSshConfig(ownerUsername, server.id);
+            const usersForServer = vpnUsers[server.id];
+
+            if (sshConfig && usersForServer) {
+                // Save metadata
+                await saveUsersMetadata(usersForServer, sshConfig);
+                
+                // Save main config and restart service
+                const activeUsernames = usersForServer.map((u: any) => u.username);
+                await saveConfig(activeUsernames, sshConfig);
+
+                if (isProduction) {
+                    await restartVpnService(sshConfig);
+                }
+            }
+        }
+        revalidatePath('/');
+        return { success: true, message: "Backup restored successfully!" };
+
+    } catch (e: any) {
+        return { success: false, error: `Failed to restore backup: ${e.message}` };
+    }
+}

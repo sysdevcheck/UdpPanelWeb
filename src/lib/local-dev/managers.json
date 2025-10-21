@@ -21,13 +21,6 @@
       "createdAt": "2025-10-21T15:22:59.810Z",
       "expiresAt": "2025-11-20T15:22:59.810Z",
       "assignedServerId": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d"
-    },
-    {
-      "username": "test",
-      "password": "test",
-      "assignedServerId": "a9b4e21a-71c8-4e8a-9c7f-3d6f5b1e6a5d",
-      "createdAt": "2025-10-21T15:37:05.730Z",
-      "expiresAt": "2025-11-20T15:37:05.730Z"
     }
   ]
 }
