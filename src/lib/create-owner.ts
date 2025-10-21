@@ -8,8 +8,8 @@ import { adminApp } from '@/firebase/admin';
 
 // --- CONFIGURATION ---
 // IMPORTANT: Make sure this user already exists in Firebase Authentication.
-const OWNER_EMAIL = 'admin@panel.com';
-const OWNER_USERNAME = 'admin';
+const OWNER_EMAIL = 'sysdevcheck@gmail.com';
+const OWNER_USERNAME = 'sysdevcheck';
 // ---------------------
 
 async function promoteOwner() {
