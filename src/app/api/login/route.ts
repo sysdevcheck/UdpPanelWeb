@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Los usuarios se cargan directamente desde el archivo importado
-    const typedUsers: UserCredentials[] = users;
+    const typedUsers = users as UserCredentials[];
 
     // Buscar al usuario por nombre de usuario
     const user = typedUsers.find(u => u.username === username);
