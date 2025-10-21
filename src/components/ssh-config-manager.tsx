@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useActionState, useState, useRef } from 'react';
-import { saveServerConfig, deleteServer } from '@/app/actions';
+import { saveServerConfig, deleteServer, testServerConnection } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, LogOut, CheckCircle, Terminal, Trash2, Pencil, Plus, ServerCrash, Users } from 'lucide-react';
+import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +53,8 @@ type SshActionState = {
     log?: LogEntry[];
 }
 
+type ServerStatus = 'online' | 'offline' | 'checking';
+
 const initialActionState: SshActionState = {
     success: false,
     error: undefined,
@@ -69,6 +71,36 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     const [saveState, saveAction, isSavingPending] = useActionState(saveServerConfig, initialActionState);
     const [deleteState, deleteAction, isDeletingPending] = useActionState(deleteServer, {success: false});
 
+    const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
+
+    const checkAllServers = async () => {
+        setServerStatuses(prev => {
+            const checkingState: Record<string, ServerStatus> = {};
+            initialServers.forEach(s => { checkingState[s.id] = 'checking' });
+            return checkingState;
+        });
+
+        const statusPromises = initialServers.map(async (server) => {
+            const { success } = await testServerConnection(server);
+            return { serverId: server.id, status: success ? 'online' : 'offline' as ServerStatus };
+        });
+
+        const results = await Promise.all(statusPromises);
+
+        setServerStatuses(prev => {
+            const newStatuses = { ...prev };
+            results.forEach(({ serverId, status }) => {
+                newStatuses[serverId] = status;
+            });
+            return newStatuses;
+        });
+    };
+
+    useEffect(() => {
+        checkAllServers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialServers]);
+
     useEffect(() => {
         if (!saveState) return;
         if (saveState.log && saveState.log.length > 0) setLog(saveState.log);
@@ -77,6 +109,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
             toast({ title: 'Success', description: saveState.message, className: 'bg-green-500 text-white' });
             setEditingServer(null);
             formRef.current?.reset();
+            checkAllServers(); // Re-check statuses after a change
         } else if (saveState.error) {
              toast({ variant: 'destructive', title: 'Action Failed', description: saveState.error });
         }
@@ -87,6 +120,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
         if (!deleteState) return;
         if(deleteState.success && deleteState.message) {
             toast({ title: 'Success', description: deleteState.message });
+            checkAllServers(); // Re-check statuses after a change
         } else if (deleteState.error) {
              toast({ variant: 'destructive', title: 'Delete Failed', description: deleteState.error });
         }
@@ -106,9 +140,15 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                             Add, edit, or remove your remote VPS configurations. Managers can be assigned to these servers.
                         </CardDescription>
                     </div>
-                     <Button onClick={() => setEditingServer({} as SshConfig)} disabled={isPending}>
-                        <Plus className='mr-2 h-4 w-4'/> Add Server
-                    </Button>
+                     <div className='flex gap-2'>
+                        <Button variant="outline" onClick={checkAllServers} disabled={Object.values(serverStatuses).some(s => s === 'checking')}>
+                            {Object.values(serverStatuses).some(s => s === 'checking') ? <Loader2 className='mr-2 h-4 w-4 animate-spin'/> : <RefreshCw className='mr-2 h-4 w-4'/>}
+                             Re-check All
+                        </Button>
+                        <Button onClick={() => setEditingServer({} as SshConfig)} disabled={isPending}>
+                            <Plus className='mr-2 h-4 w-4'/> Add Server
+                        </Button>
+                     </div>
                 </div>
             </CardHeader>
             <CardContent>
@@ -116,6 +156,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Status</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Connection Details</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -123,46 +164,54 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                     </TableHeader>
                     <TableBody>
                       {initialServers.length > 0 ? (
-                        initialServers.map((server) => (
-                            <TableRow key={server.id}>
-                              <TableCell className="font-medium">{server.name}</TableCell>
-                              <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
-                              <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                                 <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <form action={deleteAction}>
-                                            <input type="hidden" name="serverId" value={server.id} />
-                                            <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    This will permanently delete the server <strong className='font-mono'>{server.name}</strong>. Managers assigned to this server will lose access. This action cannot be undone.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                                    Delete Server
-                                                </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </form>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                              </TableCell>
-                            </TableRow>
-                        ))
+                        initialServers.map((server) => {
+                            const status = serverStatuses[server.id];
+                            return (
+                                <TableRow key={server.id}>
+                                  <TableCell>
+                                     {status === 'checking' && <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin" />Checking</Badge>}
+                                     {status === 'online' && <Badge className='bg-green-500 hover:bg-green-600'>Online</Badge>}
+                                     {status === 'offline' && <Badge variant="destructive">Offline</Badge>}
+                                  </TableCell>
+                                  <TableCell className="font-medium">{server.name}</TableCell>
+                                  <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)}>
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                     <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <form action={deleteAction}>
+                                                <input type="hidden" name="serverId" value={server.id} />
+                                                <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This will permanently delete the server <strong className='font-mono'>{server.name}</strong>. Managers assigned to this server will lose access. This action cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                        {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                                        Delete Server
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </form>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                  </TableCell>
+                                </TableRow>
+                            )
+                        })
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                             <div className='flex flex-col items-center gap-2'>
                                 <ServerCrash className='w-8 h-8'/>
                                 <span>No servers configured. Add one to get started.</span>

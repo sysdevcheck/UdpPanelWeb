@@ -63,7 +63,7 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 
         const responseBody: SshApiResponse = await response.json();
 
-        if (!response.ok || !responseBody.success) {
+        if (!response.ok) {
              return {
                 success: false,
                 error: responseBody.error || `API request failed with status ${response.status}`,
@@ -649,6 +649,11 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
 
 
 // --- Server Management Actions by Owner ---
+
+export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
+  const result = await sshApiRequest('testConnection', {}, serverConfig);
+  return { success: result.success };
+}
 
 export async function saveServerConfig(prevState: any, formData: FormData): Promise<SshApiResponse> {
     const ownerUsername = formData.get('ownerUsername') as string;
