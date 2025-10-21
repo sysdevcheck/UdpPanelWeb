@@ -31,14 +31,13 @@ async function getSshConnection(sshConfig: any): Promise<Client> {
     });
 }
 
-
 async function execCommand(ssh: Client, command: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         let stdout = '';
         let stderr = '';
         ssh.exec(command, (err, stream) => {
             if (err) return reject(err);
-            stream.on('close', () => {
+            stream.on('close', (code: any, signal: any) => {
                 resolve({ stdout, stderr });
             }).on('data', (data: Buffer) => {
                 stdout += data.toString();
@@ -226,3 +225,5 @@ export async function POST(request: Request) {
         }
     }
 }
+
+    
