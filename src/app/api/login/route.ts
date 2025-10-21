@@ -1,9 +1,9 @@
-'use server';
-
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 // Importa el archivo JSON directamente. Next.js lo incluirá en el bundle.
 import users from '@/../data/credentials.json';
+
+export const dynamic = 'force-dynamic';
 
 // Define la estructura de un usuario en el archivo de credenciales
 interface UserCredentials {
