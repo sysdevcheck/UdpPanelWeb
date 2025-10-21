@@ -112,21 +112,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
-        if (!finalSshConfig.password && finalSshConfig.id) {
+        // This logic ensures password is included for API calls if not directly provided in the payload
+        if (!finalSshConfig.password) {
             const servers = await readServers();
             const server = servers.find((s: any) => s.id === finalSshConfig.id);
             if (server && server.password) {
                 finalSshConfig.password = server.password;
             } else {
                  log.push({ level: 'ERROR', message: 'SSH password not provided and not found in local data.' });
-                 return NextResponse.json({ success: false, error: 'SSH password not available.', log }, { status: 400 });
-            }
-        } else if (!finalSshConfig.password) {
-            if (action === 'testConnection' || action === 'executeCommand') {
-                log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
-                return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
+                 return NextResponse.json({ success: false, error: 'SSH password not available for this operation.', log }, { status: 400 });
             }
         }
+
 
         if (action === 'testConnection') {
             try {
@@ -181,7 +178,10 @@ export async function POST(request: Request) {
                 const { stderr: scriptErr } = await execCommand(ssh, scriptCommand);
                 if (scriptErr) {
                     console.warn("Error during script execution:", scriptErr);
-                    return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
+                    // Don't treat "stty: not a tty" as a fatal error for this script
+                    if (!scriptErr.includes("stty: not a tty")) {
+                       return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
+                    }
                 }
                 return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
             }
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
                     return NextResponse.json({ success: false, error: 'Command is required.' }, { status: 400 });
                 }
                 const { stdout, stderr } = await execCommand(ssh, command);
-                return NextResponse.json({ success: !stderr, data: { stdout, stderr } });
+                return NextResponse.json({ success: true, data: { stdout, stderr } });
             }
 
             default:

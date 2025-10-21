@@ -1,11 +1,9 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Loader2, Server, Terminal, ServerCrash } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConsoleOutput, LogEntry } from './console-output';
@@ -46,24 +44,20 @@ export function ConsoleManager() {
         fetchServers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+    
+    // Clear logs when server changes
+    useEffect(() => {
+        setOutputLog([]);
+    }, [selectedServerId]);
 
     const selectedServer = servers.find(s => s.id === selectedServerId);
 
-    const handleExecuteCommand = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!selectedServer) return;
+    const handleExecuteCommand = async (command: string) => {
+        if (!selectedServer || !command) return;
 
-        const formData = new FormData(e.currentTarget);
-        const command = formData.get('command') as string;
-
-        if (!command) {
-            toast({ variant: 'destructive', title: 'Error', description: 'El comando no puede estar vacío.' });
-            return;
-        }
-
-        setIsExecuting(true);
-        const commandLog: LogEntry = { level: 'INFO', message: `root@${selectedServer.host}:~# ${command}` };
+        const commandLog: LogEntry = { level: 'INPUT', message: `${selectedServer.username}@${selectedServer.host}:~# ${command}` };
         setOutputLog(prev => [...prev, commandLog]);
+        setIsExecuting(true);
 
         try {
             const response = await fetch('/api/ssh', {
@@ -83,18 +77,25 @@ export function ConsoleManager() {
 
             const output: LogEntry[] = [];
             if(result.data.stdout) {
-                output.push({ level: 'SUCCESS', message: result.data.stdout });
+                output.push({ level: 'SUCCESS', message: result.data.stdout.trim() });
             }
             if(result.data.stderr) {
-                output.push({ level: 'ERROR', message: result.data.stderr });
+                // Filter out common harmless warnings that pollute the output
+                const filteredStderr = result.data.stderr.split('\n').filter((line: string) => 
+                    line.trim() !== '' && 
+                    !line.toLowerCase().includes('stty: not a tty') &&
+                    !line.toLowerCase().includes('term environment variable not set')
+                ).join('\n');
+
+                if (filteredStderr) {
+                    output.push({ level: 'ERROR', message: filteredStderr.trim() });
+                }
             }
-            if(output.length === 0) {
-                output.push({ level: 'INFO', message: 'El comando no produjo ninguna salida.' });
+            if(output.length === 0 && !result.data.stdout && !result.data.stderr) {
+                // Don't show a message if there's no output, it's common for some commands
             }
 
             setOutputLog(prev => [...prev, ...output]);
-             // Reset form
-            (e.target as HTMLFormElement).reset();
 
         } catch (e: any) {
             setOutputLog(prev => [...prev, { level: 'ERROR', message: e.message }]);
@@ -160,21 +161,11 @@ export function ConsoleManager() {
                         <div className="space-y-4 pt-4">
                              <ConsoleOutput 
                                 logs={outputLog} 
-                                title={`root@${selectedServer.host}:~#`} 
-                                className="min-h-[300px]"
+                                title={`${selectedServer.username}@${selectedServer.host}:~#`} 
+                                className="min-h-[400px]"
+                                onCommandSubmit={handleExecuteCommand}
+                                isExecuting={isExecuting}
                             />
-                            <form onSubmit={handleExecuteCommand} className="flex gap-2">
-                                <Input
-                                    name="command"
-                                    placeholder="Escribe un comando y presiona Enter..."
-                                    className="font-mono"
-                                    disabled={isExecuting}
-                                    autoComplete="off"
-                                />
-                                <Button type="submit" disabled={isExecuting}>
-                                    {isExecuting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ejecutar"}
-                                </Button>
-                            </form>
                         </div>
                     )}
                 </div>
@@ -182,4 +173,3 @@ export function ConsoleManager() {
         </Card>
     );
 }
-
