@@ -78,27 +78,49 @@ const getStatus = (expiresAt: Date): UserWithStatus['status'] => {
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function UserManager({ user, initialServers }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }, initialServers: any[]}) {
+export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }}) {
   const { role, assignedServerId, uid, username: loggedInUsername } = user;
   const isOwner = role === 'owner';
 
+  const [allServers, setAllServers] = useState<ServerData[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(isOwner ? null : assignedServerId || null);
   const [editingUser, setEditingUser] = useState<UserWithStatus | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [vpnUsers, setVpnUsers] = useState<UserWithStatus[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const { toast } = useToast();
   const addUserFormRef = useRef<HTMLFormElement>(null);
   
   const USERS_PER_PAGE = 10;
   
-  const allServers = initialServers as ServerData[];
   const currentServer = allServers?.find(s => s.id === selectedServerId);
 
-  const fetchUsers = async (serverId: string) => {
+  const fetchInitialData = async () => {
+    setIsLoading(true);
+    try {
+      if (isOwner) {
+        const serversRes = await fetch('/api/manage-server');
+        const serversData = await serversRes.json();
+        if (!serversRes.ok) throw new Error(serversData.error || 'Failed to fetch servers');
+        setAllServers(serversData);
+      } else if (assignedServerId) {
+        const serverRes = await fetch(`/api/manage-server?serverId=${assignedServerId}`);
+        const serverData = await serverRes.json();
+        if (!serverRes.ok) throw new Error(serverData.error || 'Failed to fetch assigned server');
+        setAllServers(serverData.id ? [serverData] : []);
+        fetchUsersForServer(assignedServerId);
+      }
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: `Failed to load initial data: ${error.message}` });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+  
+  const fetchUsersForServer = async (serverId: string) => {
       setIsLoading(true);
       try {
           const response = await fetch(`/api/vpn-users?serverId=${serverId}${!isOwner ? `&createdBy=${loggedInUsername}` : ''}`);
@@ -116,16 +138,25 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
           setVpnUsers(processedUsers);
       } catch (error: any) {
           toast({ variant: 'destructive', title: 'Error', description: `Failed to load users: ${error.message}` });
+          setVpnUsers([]);
       } finally {
           setIsLoading(false);
       }
   };
 
   useEffect(() => {
+    fetchInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
       if (selectedServerId) {
-          fetchUsers(selectedServerId);
+          fetchUsersForServer(selectedServerId);
+      } else {
+        setVpnUsers([]);
       }
-  }, [selectedServerId, isOwner, loggedInUsername]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedServerId]);
 
   const handleVpsSync = async () => {
     if (!currentServer) return;
@@ -163,12 +194,12 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
             body: JSON.stringify({ username, serverId: selectedServerId, createdBy: loggedInUsername })
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        if (!response.ok) throw new Error(result.error || 'Failed to create user');
 
         toast({ title: 'Éxito', description: `Usuario "${username}" añadido.` });
         addUserFormRef.current?.reset();
         await handleVpsSync();
-        fetchUsers(selectedServerId);
+        fetchUsersForServer(selectedServerId);
     } catch (e: any) {
         toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -192,12 +223,12 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
             body: JSON.stringify({ docId: userId, username: newUsername })
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        if (!response.ok) throw new Error(result.error || 'Failed to update user');
 
         toast({ title: 'Éxito', description: 'Usuario actualizado.' });
         setEditingUser(null);
         await handleVpsSync();
-        fetchUsers(selectedServerId);
+        fetchUsersForServer(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -216,10 +247,10 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
             body: JSON.stringify({ docId: userId, renew: true })
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        if (!response.ok) throw new Error(result.error || 'Failed to renew user');
 
         toast({ title: 'Éxito', description: 'Usuario renovado.' });
-        fetchUsers(selectedServerId);
+        fetchUsersForServer(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -237,11 +268,11 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
             body: JSON.stringify({ docId: userId })
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        if (!response.ok) throw new Error(result.error || 'Failed to delete user');
 
         toast({ title: 'Éxito', description: 'Usuario eliminado.' });
         await handleVpsSync();
-        fetchUsers(selectedServerId);
+        fetchUsersForServer(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -303,6 +334,9 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
   };
   
   if (isOwner && !selectedServerId) {
+    if (isLoading) {
+        return <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+    }
     return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
@@ -328,21 +362,6 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
         </Card>
     )
   }
-
-  if (isLoading) {
-      return (
-        <Card className="w-full max-w-5xl mx-auto shadow-lg">
-            <CardHeader>
-                <CardTitle className="text-xl">Cargando Usuarios...</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-            </CardContent>
-        </Card>
-      )
-  }
   
   return (
     <>
@@ -363,12 +382,12 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
                         Cambiar Servidor
                     </Button>
                 )}
-                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending} title="Reiniciar Servicio">
-                     <Power className="h-4 w-4" /> <span className='ml-2'>Reiniciar Servicio</span>
+                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending || isLoading} title="Reiniciar Servicio">
+                     {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} <span className='ml-2'>Reiniciar Servicio</span>
                  </Button>
                   <AlertDialog>
                       <AlertDialogTrigger asChild>
-                          <Button variant="destructive" disabled={isActionPending} title="Resetear Configuración">
+                          <Button variant="destructive" disabled={isActionPending || isLoading} title="Resetear Configuración">
                               <Settings2 className="h-4 w-4" /> <span className='ml-2'>Resetear Config</span>
                           </Button>
                       </AlertDialogTrigger>
@@ -396,11 +415,11 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
           <Input
             name="username"
             placeholder="Nuevo usuario"
-            disabled={isActionPending}
+            disabled={isActionPending || isLoading}
             className="text-base"
             required
           />
-          <Button type="submit" disabled={isActionPending} className="mt-2 sm:mt-0 w-full sm:w-auto">
+          <Button type="submit" disabled={isActionPending || isLoading} className="mt-2 sm:mt-0 w-full sm:w-auto">
             {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>Añadir Usuario</span>
           </Button>
@@ -417,95 +436,101 @@ export function UserManager({ user, initialServers }: { user: { uid: string; use
 
         <div className="space-y-3">
             <div className="border rounded-md overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Usuario</TableHead>
-                    <TableHead>Creado</TableHead>
-                    <TableHead>Estado</TableHead>
-                    {isOwner && <TableHead>Creado Por</TableHead>}
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedUsers.length > 0 ? (
-                    paginatedUsers.map((user) => {
-                      const { label, daysLeft, variant } = user.status;
-                      return (
-                        <TableRow key={user.id}>
-                          <TableCell className="min-w-[150px]">
-                            <div className="flex items-center gap-3">
-                              <User className="w-5 h-5 text-muted-foreground" />
-                              <span className="font-mono text-base">{user.username}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="min-w-[150px]">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Calendar className="w-4 h-4" />
-                              {format(user.createdAt, 'PPP', { locale: es })}
-                            </div>
-                          </TableCell>
-                           <TableCell className="min-w-[150px]">
-                             <div className="flex items-center gap-2 text-sm">
-                               <div className="flex flex-col">
-                                   <Badge variant={variant}>{label}</Badge>
-                                   <span className="text-xs text-muted-foreground mt-1">
-                                      {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
-                                   </span>
-                                </div>
-                             </div>
-                          </TableCell>
-                          {isOwner && (
-                            <TableCell className="min-w-[150px]">
-                                 <span className="font-mono text-sm">{user.createdBy}</span>
-                            </TableCell>
-                          )}
-                          <TableCell className="text-right space-x-0">
-                             <div className="flex justify-end items-center">
-                                <Button onClick={() => handleRenewUser(user.id)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isActionPending} title="Renovar Usuario">
-                                    <RefreshCw className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending} title="Eliminar Usuario">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Esta acción no se puede deshacer. Esto eliminará permanentemente al usuario <strong className="font-mono">{user.username}</strong>.
-                                        </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel disabled={isActionPending}>Cancelar</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90" disabled={isActionPending}>
-                                                {isActionPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Eliminar'}
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                             </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  ) : (
+              {isLoading ? (
+                  <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={isOwner ? 5 : 4} className="h-24 text-center text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                            <AlertCircle className="w-8 h-8" />
-                           <span>No hay usuarios para mostrar en este servidor o filtro.</span>
-                        </div>
-                      </TableCell>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Creado</TableHead>
+                      <TableHead>Estado</TableHead>
+                      {isOwner && <TableHead>Creado Por</TableHead>}
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedUsers.length > 0 ? (
+                      paginatedUsers.map((user) => {
+                        const { label, daysLeft, variant } = user.status;
+                        return (
+                          <TableRow key={user.id}>
+                            <TableCell className="min-w-[150px]">
+                              <div className="flex items-center gap-3">
+                                <User className="w-5 h-5 text-muted-foreground" />
+                                <span className="font-mono text-base">{user.username}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="min-w-[150px]">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Calendar className="w-4 h-4" />
+                                {format(user.createdAt, 'PPP', { locale: es })}
+                              </div>
+                            </TableCell>
+                             <TableCell className="min-w-[150px]">
+                               <div className="flex items-center gap-2 text-sm">
+                                 <div className="flex flex-col">
+                                     <Badge variant={variant}>{label}</Badge>
+                                     <span className="text-xs text-muted-foreground mt-1">
+                                        {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
+                                     </span>
+                                  </div>
+                               </div>
+                            </TableCell>
+                            {isOwner && (
+                              <TableCell className="min-w-[150px]">
+                                   <span className="font-mono text-sm">{user.createdBy}</span>
+                              </TableCell>
+                            )}
+                            <TableCell className="text-right space-x-0">
+                               <div className="flex justify-end items-center">
+                                  <Button onClick={() => handleRenewUser(user.id)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isActionPending} title="Renovar Usuario">
+                                      <RefreshCw className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
+                                      <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending} title="Eliminar Usuario">
+                                              <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                          <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                              Esta acción no se puede deshacer. Esto eliminará permanentemente al usuario <strong className="font-mono">{user.username}</strong>.
+                                          </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                              <AlertDialogCancel disabled={isActionPending}>Cancelar</AlertDialogCancel>
+                                              <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90" disabled={isActionPending}>
+                                                  {isActionPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Eliminar'}
+                                              </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                  </AlertDialog>
+                               </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={isOwner ? 5 : 4} className="h-24 text-center text-muted-foreground">
+                          <div className="flex flex-col items-center gap-2">
+                              <AlertCircle className="w-8 h-8" />
+                             <span>No hay usuarios para mostrar en este servidor o filtro.</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
              {totalPages > 1 && (
               <div className="flex items-center justify-end pt-4 gap-2">

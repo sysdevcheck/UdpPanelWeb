@@ -1,15 +1,30 @@
+
 import { type NextRequest, NextResponse } from 'next/server';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 
+const firestore = getFirestore(adminApp);
+const auth = getAuth(adminApp);
+
+export async function GET(request: NextRequest) {
+    try {
+        const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
+        if (managersSnapshot.empty) {
+            return NextResponse.json([]);
+        }
+        const managers = managersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        return NextResponse.json(managers);
+    } catch (error: any) {
+        console.error('Get Managers API error:', error);
+        return NextResponse.json({ error: 'Failed to fetch managers', details: error.message }, { status: 500 });
+    }
+}
+
+
 export async function POST(request: NextRequest) {
   try {
-    const firestore = getFirestore(adminApp);
-    const auth = getAuth(adminApp);
-    
     const body = await request.json();
-    // Use email as the primary identifier now
     const { username, email, password, role, assignedServerId } = body;
 
     if (!username || !email || !password || !role) {
@@ -26,28 +41,26 @@ export async function POST(request: NextRequest) {
         displayName: username,
     });
     
-    // Set custom claims if it's a manager
-    if (role === 'manager') {
-        await auth.setCustomUserClaims(userRecord.uid, { role: 'manager' });
-    }
-
+    await auth.setCustomUserClaims(userRecord.uid, { role: 'manager' });
+    
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    // Create a corresponding document in Firestore
     const userDocRef = firestore.collection('users').doc();
     await userDocRef.set({
         uid: userRecord.uid, // Link to the auth user
         username,
         email,
-        password, // Store password for direct login
+        password, 
         role,
         assignedServerId: assignedServerId || null,
-        createdAt: new Date(),
-        expiresAt: role === 'owner' ? null : expiresAt
+        createdAt: Timestamp.now(),
+        expiresAt: expiresAt,
     });
     
-    return NextResponse.json({ success: true, uid: userRecord.uid });
+    const newManagerData = await userDocRef.get();
+
+    return NextResponse.json({ success: true, user: {id: newManagerData.id, ...newManagerData.data()} });
 
   } catch (error: any) {
     console.error('Create User API error:', error);
@@ -55,6 +68,6 @@ export async function POST(request: NextRequest) {
     if(error.code === 'auth/email-already-exists') {
         message = 'Este correo electrónico ya está en uso.';
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message, details: error.message }, { status: 500 });
   }
 }

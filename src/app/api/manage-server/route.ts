@@ -1,23 +1,14 @@
+
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { adminApp } from '@/firebase/admin';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
-// This is a server-side only file.
-
 const firestore = getFirestore(adminApp);
 const adminAuth = getAuth(adminApp);
 const secretManager = new SecretManagerServiceClient();
 const projectId = process.env.GCLOUD_PROJECT;
-
-async function getAuthenticatedUser(request: NextRequest) {
-    const idToken = request.headers.get('Authorization')?.split('Bearer ')[1];
-    if (!idToken) {
-        throw new Error('Unauthorized');
-    }
-    return await adminAuth.verifyIdToken(idToken);
-}
 
 async function setSecret(secretName: string, payload: string): Promise<any> {
     if (!projectId) {
@@ -25,7 +16,6 @@ async function setSecret(secretName: string, payload: string): Promise<any> {
     }
     const parent = `projects/${projectId}`;
     
-    // Check if secret exists
     try {
        await secretManager.getSecret({ name: `${parent}/secrets/${secretName}` });
     } catch (e: any) {
@@ -33,42 +23,81 @@ async function setSecret(secretName: string, payload: string): Promise<any> {
              await secretManager.createSecret({
                 parent,
                 secretId: secretName,
-                secret: {
-                    replication: {
-                        automatic: {},
-                    },
-                },
+                secret: { replication: { automatic: {} } },
             });
-        } else {
-            throw e;
-        }
+        } else { throw e; }
     }
     
     const [version] = await secretManager.addSecretVersion({
         parent: `${parent}/secrets/${secretName}`,
-        payload: {
-            data: Buffer.from(payload, 'utf8'),
-        },
+        payload: { data: Buffer.from(payload, 'utf8') },
     });
 
     return version;
 }
+
+async function getSecret(secretName: string): Promise<string | null> {
+    try {
+        const [version] = await secretManager.accessSecretVersion({
+            name: `projects/${projectId}/secrets/${secretName}/versions/latest`,
+        });
+        const payload = version.payload?.data?.toString();
+        return payload || null;
+    } catch (e: any) {
+        if (e.code === 5) { // NOT_FOUND
+            return null;
+        }
+        console.error(`Could not access secret: ${secretName}`, e);
+        return null;
+    }
+}
+
 
 async function deleteSecret(secretName: string): Promise<void> {
     if (!projectId) {
         throw new Error('Google Cloud Project ID is not configured.');
     }
     const parent = `projects/${projectId}`;
-    await secretManager.deleteSecret({
-      name: `${parent}/secrets/${secretName}`,
-    });
+    try {
+        await secretManager.deleteSecret({
+            name: `${parent}/secrets/${secretName}`,
+        });
+    } catch (error: any) {
+        if (error.code === 5) { // NOT_FOUND
+            console.log(`Secret ${secretName} not found, skipping deletion.`);
+        } else {
+            throw error;
+        }
+    }
+}
+
+export async function GET(request: NextRequest) {
+    const { searchParams } = new URL(request.url);
+    const serverId = searchParams.get('serverId');
+
+    try {
+        if (serverId) {
+            const serverDoc = await firestore.collection('servers').doc(serverId).get();
+            if (!serverDoc.exists) {
+                return NextResponse.json({ error: 'Server not found' }, { status: 404 });
+            }
+            return NextResponse.json({ id: serverDoc.id, ...serverDoc.data() });
+        } else {
+            const serversSnapshot = await firestore.collection('servers').get();
+            if (serversSnapshot.empty) {
+                return NextResponse.json([]);
+            }
+            const servers = serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            return NextResponse.json(servers);
+        }
+    } catch (error: any) {
+        return NextResponse.json({ error: 'Failed to fetch servers.', details: error.message }, { status: 500 });
+    }
 }
 
 
 export async function POST(request: NextRequest) {
   try {
-    // We don't authenticate here, as testConnection needs to run before user logs in
-    // Will authenticate inside each action if needed
     const body = await request.json();
     const { serverId, ownerUid, name, host, port, username, password } = body;
     
@@ -104,9 +133,6 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    // Auth check needed for deletion
-    // const user = await getAuthenticatedUser(request);
-    
     const { serverId, ownerUid } = await request.json();
     
     if (!serverId) {
@@ -118,25 +144,20 @@ export async function DELETE(request: NextRequest) {
 
     const batch = firestore.batch();
     
-    // Delete server document
     batch.delete(serverRef);
     
-    // Find and delete associated managers
     const managersQuery = firestore.collection('users').where('assignedServerId', '==', serverId);
     const managersSnapshot = await managersQuery.get();
     for (const managerDoc of managersSnapshot.docs) {
-        // Here you might want to just unassign them instead of deleting their auth account
         batch.update(managerDoc.ref, { assignedServerId: null });
     }
 
-    // Find and delete associated vpnUsers
     const vpnUsersQuery = firestore.collection('vpnUsers').where('serverId', '==', serverId);
     const vpnUsersSnapshot = await vpnUsersQuery.get();
     vpnUsersSnapshot.forEach(doc => batch.delete(doc.ref));
 
     await batch.commit();
     
-    // Delete the secret
     await deleteSecret(secretName);
 
     return NextResponse.json({ success: true, message: 'Server deleted successfully.' });

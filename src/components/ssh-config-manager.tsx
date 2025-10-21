@@ -51,26 +51,50 @@ type LogEntry = {
 type ServerStatus = 'online' | 'offline' | 'comprobando' | 'unknown';
 
 
-export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: string, initialServers: SshConfig[] }) {
+export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
     const { toast } = useToast();
 
     const formRef = useRef<HTMLFormElement>(null);
-    const [servers, setServers] = useState(initialServers);
+    const [servers, setServers] = useState<SshConfig[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [editingServer, setEditingServer] = useState<Partial<SshConfig> | null>(null);
     const [log, setLog] = useState<LogEntry[]>([]);
     const [isSavingPending, setIsSavingPending] = useState(false);
     const [isDeletingPending, setIsDeletingPending] = useState(false);
     const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
 
-    const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>(
-        Object.fromEntries(initialServers.map(s => [s.id, 'unknown']))
-    );
+    const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
+    
+    const fetchServers = async () => {
+        setIsLoading(true);
+        try {
+            const response = await fetch('/api/manage-server');
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to fetch servers');
+            setServers(data);
+            
+            const initialStatuses: Record<string, ServerStatus> = {};
+            data.forEach((s: SshConfig) => { initialStatuses[s.id] = 'unknown' });
+            setServerStatuses(initialStatuses);
+            
+            checkAllServers(data);
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error', description: error.message });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    useEffect(() => {
+        fetchServers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const checkAllServers = async (serverList: SshConfig[]) => {
-        if (!serverList) return;
+        if (!serverList || serverList.length === 0) return;
 
         setServerStatuses(prev => {
-            const checkingState: Record<string, ServerStatus> = {};
+            const checkingState: Record<string, ServerStatus> = { ...prev };
             serverList.forEach(s => { checkingState[s.id] = 'comprobando' });
             return checkingState;
         });
@@ -90,13 +114,6 @@ export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: strin
             return newStatuses;
         });
     };
-
-    useEffect(() => {
-        if(servers) {
-            checkAllServers(servers);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [servers]);
 
     const handleSaveServer = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -145,9 +162,7 @@ export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: strin
             toast({ title: 'Éxito', description: result.message, className: 'bg-green-500 text-white' });
             setEditingServer(null);
             formRef.current?.reset();
-            // This is a client component, so we can't use revalidatePath here.
-            // We should trigger a refresh or manually update state.
-            window.location.reload();
+            fetchServers();
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Acción Fallida', description: e.message });
         } finally {
@@ -168,7 +183,7 @@ export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: strin
                 throw new Error(result.error || 'Fallo al eliminar el servidor.');
             }
             toast({ title: 'Éxito', description: 'Servidor y recursos asociados eliminados.' });
-            window.location.reload();
+            fetchServers();
         } catch (e: any) {
              toast({ variant: 'destructive', title: 'Eliminación Fallida', description: e.message });
         } finally {
@@ -198,6 +213,14 @@ export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: strin
     }
 
     const isPending = isSavingPending || isDeletingPending || Object.values(isActionPending).some(p => p);
+    
+    if (isLoading) {
+        return (
+            <div className="flex justify-center items-center h-40">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
+    }
 
     return (
     <>

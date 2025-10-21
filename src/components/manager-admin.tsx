@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,8 +37,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
-
-// This is now a Client Component, but it receives its initial data from a Server Component.
 
 type ServerInfo = {
     id: string;
@@ -82,24 +80,55 @@ const getStatus = (expiresAt: Date | undefined | null): ManagerWithStatus['statu
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function ManagerAdmin({ ownerUid, initialManagers, initialServers }: { ownerUid: string, initialManagers: any[], initialServers: any[] }) {
+export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
+  const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
+  const [allServers, setAllServers] = useState<ServerInfo[]>([]);
   const [editingManager, setEditingManager] = useState<ManagerWithStatus | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { toast } = useToast();
   
   const addFormRef = useRef<HTMLFormElement>(null);
   
-  const allServers = initialServers as ServerInfo[];
-  const managers = useMemo(() => (initialManagers || []).map((m: Manager) => {
-      const expiresAtDate = m.expiresAt ? new Date(m.expiresAt.seconds * 1000) : undefined;
-      return {
-          ...m,
-          createdAt: m.createdAt ? new Date(m.createdAt.seconds * 1000) : undefined,
-          expiresAt: expiresAtDate,
-          status: getStatus(expiresAtDate)
+  const fetchManagersAndServers = async () => {
+      setIsLoading(true);
+      try {
+          const [managersRes, serversRes] = await Promise.all([
+              fetch('/api/create-user'), // Using create-user API to fetch managers
+              fetch('/api/manage-server')
+          ]);
+
+          const managersData = await managersRes.json();
+          if (!managersRes.ok) throw new Error(managersData.error || 'Failed to fetch managers');
+          
+          const serversData = await serversRes.json();
+          if (!serversRes.ok) throw new Error(serversData.error || 'Failed to fetch servers');
+
+          const processedManagers = (managersData || []).map((m: Manager) => {
+              const expiresAtDate = m.expiresAt ? new Date(m.expiresAt.seconds * 1000) : undefined;
+              return {
+                  ...m,
+                  createdAt: m.createdAt ? new Date(m.createdAt.seconds * 1000) : undefined,
+                  expiresAt: expiresAtDate,
+                  status: getStatus(expiresAtDate)
+              };
+          });
+          
+          setManagers(processedManagers);
+          setAllServers(serversData);
+
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Error', description: `No se pudieron cargar los datos: ${error.message}` });
+      } finally {
+          setIsLoading(false);
       }
-  }), [initialManagers]);
+  };
+
+  useEffect(() => {
+      fetchManagersAndServers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   const handleAddManager = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,7 +160,7 @@ export function ManagerAdmin({ ownerUid, initialManagers, initialServers }: { ow
 
         toast({ title: 'Éxito', description: `Manager "${username}" ha sido añadido.` });
         addFormRef.current?.reset();
-        window.location.reload();
+        fetchManagersAndServers();
     } catch(e: any) {
         toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -153,7 +182,7 @@ export function ManagerAdmin({ ownerUid, initialManagers, initialServers }: { ow
             throw new Error(result.error || 'Fallo al eliminar manager');
         }
         toast({ title: 'Éxito', description: 'Manager eliminado.' });
-        window.location.reload();
+        fetchManagersAndServers();
     } catch(e: any) {
         toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -186,12 +215,20 @@ export function ManagerAdmin({ ownerUid, initialManagers, initialServers }: { ow
         }
         toast({ title: 'Éxito', description: 'Manager actualizado.' });
         setEditingManager(null);
-        window.location.reload();
+        fetchManagersAndServers();
     } catch (e: any) {
          toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
         setIsPending(false);
     }
+  }
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+    )
   }
 
   return (
