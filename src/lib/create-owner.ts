@@ -1,17 +1,18 @@
+
 // This is a server-side script to be run manually from the terminal.
-// It creates the initial 'owner' user in Firebase Authentication and Firestore.
+// It finds an existing user by email and promotes them to 'owner'.
 
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 
 // --- CONFIGURATION ---
+// IMPORTANT: Make sure this user already exists in Firebase Authentication.
 const OWNER_EMAIL = 'admin@panel.com';
-const OWNER_PASSWORD = 'password'; // You MUST change this after your first login.
 const OWNER_USERNAME = 'admin';
 // ---------------------
 
-async function createOwner() {
+async function promoteOwner() {
   try {
     console.log("Connecting to Firebase services...");
     const firestore = getFirestore(adminApp);
@@ -20,31 +21,27 @@ async function createOwner() {
 
     let userRecord;
 
-    // Check if user exists in Firebase Auth by email
+    // Step 1: Find the user in Firebase Auth by email
     try {
+        console.log(`Looking for user with email '${OWNER_EMAIL}' in Firebase Auth...`);
         userRecord = await auth.getUserByEmail(OWNER_EMAIL);
-        console.log(`User with email '${OWNER_EMAIL}' already exists in Firebase Auth (UID: ${userRecord.uid}).`);
+        console.log(`User found (UID: ${userRecord.uid}).`);
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
-            console.log(`User with email '${OWNER_EMAIL}' not found. Creating new user...`);
-            userRecord = await auth.createUser({
-                email: OWNER_EMAIL,
-                password: OWNER_PASSWORD,
-                displayName: OWNER_USERNAME,
-            });
-            console.log(`Successfully created new user in Firebase Auth (UID: ${userRecord.uid}).`);
-        } else {
-            throw error; // Re-throw other auth errors
+            console.error(`❌ ERROR: User with email '${OWNER_EMAIL}' was not found in Firebase Authentication.`);
+            console.error("Please create this user in the Firebase Console first, then run this script again.");
+            process.exit(1);
         }
+        throw error; // Re-throw other auth errors
     }
 
-    // Set custom claim to make them an owner
+    // Step 2: Set custom claim to make them an owner
     console.log(`Setting 'owner' custom claim for UID: ${userRecord.uid}`);
     await auth.setCustomUserClaims(userRecord.uid, { role: 'owner' });
     console.log("Custom claim set successfully.");
 
 
-    // Check if user exists in Firestore 'users' collection
+    // Step 3: Find or create the user document in Firestore 'users' collection
     const firestoreUserQuery = await usersRef.where('uid', '==', userRecord.uid).limit(1).get();
 
     if (!firestoreUserQuery.empty) {
@@ -54,18 +51,19 @@ async function createOwner() {
             role: 'owner',
             username: OWNER_USERNAME,
             email: OWNER_EMAIL,
-            expiresAt: null
+            expiresAt: null, // Owner doesn't expire
+            assignedServerId: null,
         });
         console.log("Firestore user document updated.");
     } else {
-        console.log("Creating user document in Firestore...");
+        console.log("User document not found in Firestore. Creating new one...");
         await usersRef.add({
             uid: userRecord.uid,
             username: OWNER_USERNAME,
             email: OWNER_EMAIL,
             role: 'owner',
             createdAt: new Date(),
-            expiresAt: null, // Owner does not expire.
+            expiresAt: null,
             assignedServerId: null,
         });
         console.log("Firestore user document created.");
@@ -73,19 +71,17 @@ async function createOwner() {
     
     console.log("-----------------------------------------");
     console.log("✅ Success!");
-    console.log(`Owner user configured with credentials:`);
-    console.log(`   Email: ${OWNER_EMAIL}`);
-    console.log(`   Password: ${OWNER_PASSWORD}`);
+    console.log(`User '${OWNER_EMAIL}' has been promoted to Owner.`);
     console.log("-----------------------------------------");
     console.log("You can now run 'npm run dev' and log in.");
-    console.log("IMPORTANT: Please change the password immediately after your first login through the Firebase Console.");
 
   } catch (error) {
-    console.error("❌ An error occurred while creating the owner user:", error);
+    console.error("❌ An error occurred while promoting the owner user:", error);
     process.exit(1);
   }
 }
 
-createOwner().then(() => {
+// Rename function call to reflect new purpose
+promoteOwner().then(() => {
     process.exit(0);
 });
