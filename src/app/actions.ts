@@ -356,6 +356,7 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 // ====================================================================
 
 async function readManagersFile(): Promise<any[]> {
+    await ensureDirExists(null); // Ensure local-dev dir exists
     const managersData = await readFile(localManagersConfigPath, null); // Always reads local file system
     const managers = managersData.trim() ? JSON.parse(managersData) : [];
     
@@ -632,3 +633,37 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
 
     return { success: false, error: result.error || "Failed to save SSH configuration." };
 }
+
+export async function clearSshConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!ownerUsername) {
+        return { success: false, error: "Authentication required." };
+    }
+
+    const isOwnerCheck = await isOwner(ownerUsername);
+    if (!isOwnerCheck) {
+        return { success: false, error: "Permission denied. Only the owner can clear the SSH configuration." };
+    }
+    
+    const managers = await readManagersFile();
+    const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
+
+    if (ownerIndex === -1) {
+        return { success: false, error: "Owner account not found." };
+    }
+
+    // Delete the ssh property from the owner object
+    if (managers[ownerIndex].ssh) {
+        delete managers[ownerIndex].ssh;
+    }
+
+    const result = await saveManagersFile(managers);
+
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+    
+    revalidatePath('/');
+    return { success: true, message: "SSH configuration has been cleared." };
+}
+

@@ -3,13 +3,24 @@
 
 import { useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { saveSshConfig } from '@/app/actions';
+import { saveSshConfig, clearSshConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server } from 'lucide-react';
+import { Loader2, Server, LogOut, CheckCircle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 
 type SshConfig = {
@@ -23,7 +34,7 @@ type Manager = {
   ssh?: SshConfig;
 }
 
-const initialSshActionState = {
+const initialActionState = {
     success: false,
     error: undefined,
     message: undefined,
@@ -31,11 +42,11 @@ const initialSshActionState = {
 
 export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | null, ownerUsername: string }) {
     const { toast } = useToast();
-    const sshFormRef = useRef<HTMLFormElement>(null);
-    const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialSshActionState);
+    const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialActionState);
+    const [clearState, clearAction, isClearingPending] = useActionState(clearSshConfig, initialActionState);
 
     useEffect(() => {
-        if (!sshState) return; // Add this check
+        if (!sshState) return;
         if(sshState.success || sshState.error) {
             if (sshState.success) {
                 if (sshState.message) {
@@ -48,46 +59,102 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sshState]);
 
-    const isPending = isSshPending;
+    useEffect(() => {
+        if (!clearState) return;
+        if(clearState.success || clearState.error) {
+            if (clearState.success) {
+                if (clearState.message) {
+                    toast({ title: 'Success', description: clearState.message });
+                }
+            } else if (clearState.error) {
+                toast({ variant: 'destructive', title: 'Error Clearing Config', description: clearState.error });
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clearState]);
+
+    const isPending = isSshPending || isClearingPending;
+    const isConnected = owner?.ssh && owner.ssh.host;
 
     return (
         <Card className="w-full max-w-4xl mx-auto shadow-lg mt-6">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server SSH Config</CardTitle>
+             <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Remote Server</CardTitle>
                 <CardDescription>
-                    Enter the credentials for the remote VPS where ZiVPN is installed. This enables remote management. Leave this blank to manage users on the same server where this panel is running.
+                    {isConnected 
+                        ? 'You are connected to a remote server. All user management actions will be performed on this server.'
+                        : 'Configure a remote VPS to manage users. Leave blank to manage users on the server where this panel is running.'
+                    }
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <form ref={sshFormRef} action={sshAction} className="space-y-4">
-                    <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                    <div className="grid sm:grid-cols-2 gap-4">
-                         <div className="grid gap-1.5">
-                            <Label htmlFor="host">Server IP / Hostname</Label>
-                            <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
+                {isConnected ? (
+                    <div className="flex flex-col items-start gap-4 rounded-lg border p-4">
+                        <div className="flex items-center gap-3">
+                            <CheckCircle className="h-6 w-6 text-green-500" />
+                            <div>
+                                <p className="font-semibold">Connected to:</p>
+                                <p className="text-muted-foreground font-mono">{owner.ssh?.host}</p>
+                            </div>
                         </div>
-                         <div className="grid gap-1.5">
-                            <Label htmlFor="port">SSH Port</Label>
-                            <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port} disabled={isPending} />
-                        </div>
+                         <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="outline" disabled={isPending} className="gap-2">
+                                     <LogOut className="h-4 w-4" />
+                                    Disconnect
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <form action={clearAction}>
+                                    <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                    <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure you want to disconnect?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will clear your saved SSH credentials. You will need to enter them again to manage the remote server.
+                                    </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction type="submit" variant="destructive" disabled={isPending}>
+                                            {isClearingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                            Disconnect
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </form>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </div>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                         <div className="grid gap-1.5">
-                            <Label htmlFor="ssh-username">SSH Username</Label>
-                            <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
+                ) : (
+                    <form action={sshAction} className="space-y-4">
+                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="host">Server IP / Hostname</Label>
+                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={owner?.ssh?.host} required disabled={isPending} />
+                            </div>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="port">SSH Port</Label>
+                                <Input name="port" id="port" type="number" placeholder="22" defaultValue={owner?.ssh?.port || 22} disabled={isPending} />
+                            </div>
                         </div>
-                         <div className="grid gap-1.5">
-                            <Label htmlFor="ssh-password">SSH Password</Label>
-                            <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="ssh-username">SSH Username</Label>
+                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={owner?.ssh?.username} required disabled={isPending} />
+                            </div>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="ssh-password">SSH Password</Label>
+                                <Input name="password" id="ssh-password" type="password" placeholder="Enter SSH password" required disabled={isPending} />
+                            </div>
                         </div>
-                    </div>
-                    <div className='flex justify-end'>
-                        <Button type="submit" disabled={isPending} className="gap-2">
-                            {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                            Save SSH Config
-                        </Button>
-                    </div>
-                </form>
+                        <div className='flex justify-end'>
+                            <Button type="submit" disabled={isPending} className="gap-2">
+                                {isSshPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                Test & Save Connection
+                            </Button>
+                        </div>
+                    </form>
+                )}
             </CardContent>
         </Card>
     )
