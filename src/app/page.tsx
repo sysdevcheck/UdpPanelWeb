@@ -3,7 +3,8 @@ import { getLoggedInUser, logout } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
-import { Users, LogOut, UserCog, Server } from 'lucide-react';
+import { BackupManager } from '@/components/backup-manager';
+import { Users, LogOut, UserCog, Server, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import {
@@ -55,17 +56,8 @@ export default async function Home() {
         </div>
       </header>
       <div className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
-        <Alert>
-            <AlertTitle>¡Login Exitoso!</AlertTitle>
-            <AlertDescription>
-                Has iniciado sesión correctamente. Rol: {role}.
-                Los componentes principales han sido desactivados temporalmente para depurar el login.
-            </AlertDescription>
-        </Alert>
-
-        {/*
          <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-1'} max-w-lg mx-auto`}>
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-1'} max-w-2xl mx-auto`}>
             {isOwner && (
                 <TabsTrigger value="servers">
                     <Server className="mr-2 h-4 w-4" />
@@ -82,6 +74,12 @@ export default async function Home() {
                 Managers
               </TabsTrigger>
             )}
+            {isOwner && (
+                <TabsTrigger value="backup">
+                    <Database className="mr-2 h-4 w-4" />
+                    Backup
+                </TabsTrigger>
+            )}
           </TabsList>
            {isOwner && (
             <TabsContent value="servers">
@@ -95,7 +93,7 @@ export default async function Home() {
                   <AlertTitle>No Asignado a un Servidor</AlertTitle>
                   <AlertDescription>
                     No estás asignado a un servidor. Por favor, contacta al dueño para que te asigne a un VPS.
-                  </AlerDescription>
+                  </AlertDescription>
                 </Alert>
             )}
             {(isOwner || assignedServerId) && (
@@ -109,8 +107,12 @@ export default async function Home() {
                <ManagerAdmin ownerUid={uid} />
             </TabsContent>
           )}
+           {isOwner && (
+            <TabsContent value="backup">
+               <BackupManager />
+            </TabsContent>
+          )}
         </Tabs>
-        */}
       </div>
     </div>
   );
