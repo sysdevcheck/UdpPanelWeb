@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
 
 type User = {
@@ -394,7 +395,7 @@ useEffect(() => {
                           <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Calendar className="w-4 h-4" />
-                              {format(new Date(user.createdAt), 'PPP', { locale: (require('date-fns/locale/es')) })}
+                              {format(new Date(user.createdAt), 'PPP', { locale: es })}
                             </div>
                           </TableCell>
                            <TableCell className="min-w-[150px]">
@@ -539,3 +540,5 @@ useEffect(() => {
     </>
   );
 }
+
+    
