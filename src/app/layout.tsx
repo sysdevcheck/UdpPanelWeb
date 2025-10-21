@@ -1,9 +1,10 @@
+
 import type {Metadata} from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { Send } from 'lucide-react';
-import { Providers } from '@/components/providers';
+import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -26,7 +27,6 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className={cn("dark flex flex-col min-h-screen", inter.variable)}>
-        <Providers>
           <main className="flex-grow">
             {children}
           </main>
@@ -45,7 +45,7 @@ export default function RootLayout({
               </a>
             </div>
           </footer>
-        </Providers>
+          <Toaster />
       </body>
     </html>
   );

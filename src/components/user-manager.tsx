@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -31,20 +32,18 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
-import { useCollection, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
 import { syncVpnUsersWithVps, restartService, resetServerConfig } from '@/app/actions';
 
 type VpnUser = {
   id: string;
   username: string;
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
+  createdAt: { seconds: number, nanoseconds: number };
+  expiresAt: { seconds: number, nanoseconds: number };
   createdBy: string;
   serverId: string;
 }
 
-type Server = {
+type ServerData = {
     id: string;
     name: string;
     host: string;
@@ -53,7 +52,9 @@ type Server = {
     password?: string;
 }
 
-type UserWithStatus = VpnUser & {
+type UserWithStatus = Omit<VpnUser, 'createdAt' | 'expiresAt'> & {
+    createdAt: Date;
+    expiresAt: Date;
     status: {
         label: 'Activo' | 'Por Vencer' | 'Vencido';
         daysLeft: number;
@@ -63,10 +64,9 @@ type UserWithStatus = VpnUser & {
 
 type StatusFilter = 'all' | 'active' | 'expiring' | 'expired';
 
-const getStatus = (expiresAt: Timestamp): UserWithStatus['status'] => {
-    const expirationDate = expiresAt.toDate();
+const getStatus = (expiresAt: Date): UserWithStatus['status'] => {
     const now = new Date();
-    const diffTime = expirationDate.getTime() - now.getTime();
+    const diffTime = expiresAt.getTime() - now.getTime();
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (daysLeft <= 0) {
@@ -78,60 +78,67 @@ const getStatus = (expiresAt: Timestamp): UserWithStatus['status'] => {
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }}) {
-  const { role, assignedServerId, uid } = user;
+export function UserManager({ user, initialServers }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }, initialServers: any[]}) {
+  const { role, assignedServerId, uid, username: loggedInUsername } = user;
   const isOwner = role === 'owner';
 
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(isOwner ? null : assignedServerId || null);
-  const [editingUser, setEditingUser] = useState<VpnUser | null>(null);
+  const [editingUser, setEditingUser] = useState<UserWithStatus | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [vpnUsers, setVpnUsers] = useState<UserWithStatus[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   const { toast } = useToast();
-  const firestore = useFirestore();
   const addUserFormRef = useRef<HTMLFormElement>(null);
   
   const USERS_PER_PAGE = 10;
   
-  // Fetch servers for owner
-  const serversQuery = useMemoFirebase(() => isOwner ? query(collection(firestore, 'servers'), where('ownerUid', '==', uid)) : null, [isOwner, firestore, uid]);
-  const { data: servers, isLoading: isLoadingServers } = useCollection<Server>(serversQuery);
+  const allServers = initialServers as ServerData[];
+  const currentServer = allServers?.find(s => s.id === selectedServerId);
 
-  // Fetch single server for manager
-  const serverDocRef = useMemoFirebase(() => !isOwner && selectedServerId ? doc(firestore, 'servers', selectedServerId) : null, [isOwner, selectedServerId, firestore]);
-  const { data: assignedServerData, isLoading: isLoadingServer } = useDoc<Server>(serverDocRef);
-  const assignedServer = assignedServerData ? [assignedServerData] : null;
+  const fetchUsers = async (serverId: string) => {
+      setIsLoading(true);
+      try {
+          const response = await fetch(`/api/vpn-users?serverId=${serverId}${!isOwner ? `&createdBy=${loggedInUsername}` : ''}`);
+          if (!response.ok) throw new Error("Failed to fetch users");
+          const usersData: VpnUser[] = await response.json();
+          const processedUsers = usersData.map(u => {
+              const expiresAtDate = new Date(u.expiresAt.seconds * 1000);
+              return {
+                  ...u,
+                  createdAt: new Date(u.createdAt.seconds * 1000),
+                  expiresAt: expiresAtDate,
+                  status: getStatus(expiresAtDate)
+              };
+          });
+          setVpnUsers(processedUsers);
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Error', description: `Failed to load users: ${error.message}` });
+      } finally {
+          setIsLoading(false);
+      }
+  };
 
-  const currentServerList = isOwner ? servers : assignedServer;
-  const currentServer = currentServerList?.find(s => s.id === selectedServerId);
-  
-  // Fetch users for the selected server
-  const usersQuery = useMemoFirebase(() => {
-    if (!selectedServerId) return null;
-    let q = query(collection(firestore, 'vpnUsers'), where('serverId', '==', selectedServerId));
-    if (!isOwner) {
-        q = query(q, where('createdBy', '==', uid));
-    }
-    return q;
-  }, [selectedServerId, isOwner, uid, firestore]);
-  const { data: vpnUsersData, isLoading: isLoadingUsers } = useCollection<VpnUser>(usersQuery);
-
-  const users = useMemo(() => 
-    (vpnUsersData || []).map(u => ({...u, status: getStatus(u.expiresAt)})), 
-  [vpnUsersData]);
+  useEffect(() => {
+      if (selectedServerId) {
+          fetchUsers(selectedServerId);
+      }
+  }, [selectedServerId, isOwner, loggedInUsername]);
 
   const handleVpsSync = async () => {
     if (!currentServer) return;
     setIsActionPending(true);
 
     try {
-        // Fetch ALL users for this server, not just the manager's
-        const allUsersForServerQuery = query(collection(firestore, 'vpnUsers'), where('serverId', '==', currentServer.id));
-        const allUsersSnapshot = await getDocs(allUsersForServerQuery);
-        const allVpnUsers = allUsersSnapshot.docs.map(d => d.data() as VpnUser);
-        
-        await syncVpnUsersWithVps(currentServer.id, currentServer, allVpnUsers);
+        const response = await fetch(`/api/sync-users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ serverId: currentServer.id, sshConfig: currentServer })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
         toast({ title: 'Sincronización Completa', description: `Los usuarios del servidor ${currentServer.name} han sido sincronizados.` });
     } catch (e: any) {
         toast({ variant: 'destructive', title: 'Error de Sincronización', description: e.message });
@@ -149,20 +156,19 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     }
     setIsActionPending(true);
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
     try {
-        await addDoc(collection(firestore, 'vpnUsers'), {
-            username,
-            serverId: selectedServerId,
-            createdBy: uid,
-            createdAt: serverTimestamp(),
-            expiresAt: expiresAt,
+        const response = await fetch('/api/vpn-users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, serverId: selectedServerId, createdBy: loggedInUsername })
         });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
         toast({ title: 'Éxito', description: `Usuario "${username}" añadido.` });
         addUserFormRef.current?.reset();
         await handleVpsSync();
+        fetchUsers(selectedServerId);
     } catch (e: any) {
         toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -176,15 +182,22 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     const userId = formData.get('userId') as string;
     const newUsername = formData.get('newUsername') as string;
 
-    if (!userId || !newUsername) return;
+    if (!userId || !newUsername || !selectedServerId) return;
     setIsActionPending(true);
 
     try {
-        const docRef = doc(firestore, 'vpnUsers', userId);
-        await updateDoc(docRef, { username: newUsername });
+        const response = await fetch('/api/vpn-users', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docId: userId, username: newUsername })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
         toast({ title: 'Éxito', description: 'Usuario actualizado.' });
         setEditingUser(null);
         await handleVpsSync();
+        fetchUsers(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -193,14 +206,20 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
   }
   
   const handleRenewUser = async (userId: string) => {
+    if (!selectedServerId) return;
     setIsActionPending(true);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
 
     try {
-        const docRef = doc(firestore, 'vpnUsers', userId);
-        await updateDoc(docRef, { expiresAt: expiresAt });
+        const response = await fetch('/api/vpn-users', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docId: userId, renew: true })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
         toast({ title: 'Éxito', description: 'Usuario renovado.' });
+        fetchUsers(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -209,11 +228,20 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
   }
 
   const handleDeleteUser = async (userId: string) => {
+    if (!selectedServerId) return;
     setIsActionPending(true);
     try {
-        await deleteDoc(doc(firestore, 'vpnUsers', userId));
+        const response = await fetch('/api/vpn-users', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docId: userId })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
         toast({ title: 'Éxito', description: 'Usuario eliminado.' });
         await handleVpsSync();
+        fetchUsers(selectedServerId);
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -244,15 +272,15 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
   }
 
   const filteredUsers = useMemo(() => {
-    if (filter === 'all') return users;
-    return users.filter(user => {
+    if (filter === 'all') return vpnUsers;
+    return vpnUsers.filter(user => {
         const statusLabel = user.status.label;
         if (filter === 'active' && statusLabel === 'Activo') return true;
         if (filter === 'expiring' && statusLabel === 'Por Vencer') return true;
         if (filter === 'expired' && statusLabel === 'Vencido') return true;
         return false;
     });
-  }, [users, filter]);
+  }, [vpnUsers, filter]);
 
   const paginatedUsers = useMemo(() => {
     const startIndex = (currentPage - 1) * USERS_PER_PAGE;
@@ -274,8 +302,6 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     setCurrentPage(1);
   };
   
-  const isLoading = isLoadingServers || isLoadingServer || (selectedServerId && isLoadingUsers);
-
   if (isOwner && !selectedServerId) {
     return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
@@ -284,9 +310,8 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                 <CardDescription>Selecciona un servidor para ver y gestionar sus usuarios.</CardDescription>
             </CardHeader>
             <CardContent>
-                {isLoadingServers ? <div className="h-24 flex justify-center items-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : 
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-                    {servers?.map(server => (
+                    {allServers?.map(server => (
                         <Button key={server.id} variant="outline" className='p-6 flex flex-col items-start h-auto gap-2 justify-start' onClick={() => setSelectedServerId(server.id)}>
                            <div className='flex items-center gap-2'>
                              <Server className='w-5 h-5 text-primary'/>
@@ -295,11 +320,10 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                            <span className='font-mono text-sm text-muted-foreground'>{server.host}</span>
                         </Button>
                     ))}
-                    {servers?.length === 0 && (
+                    {allServers?.length === 0 && (
                         <p className='text-muted-foreground col-span-full text-center py-10'>No hay servidores configurados. Por favor, añade un servidor en la pestaña 'Servidores'.</p>
                     )}
                 </div>
-                }
             </CardContent>
         </Card>
     )
@@ -309,7 +333,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
       return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                <CardTitle className="text-xl">Cargando...</CardTitle>
+                <CardTitle className="text-xl">Cargando Usuarios...</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
@@ -384,7 +408,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
             <div className="flex gap-1 flex-wrap">
-                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>Todos ({users.length})</Button>
+                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>Todos ({vpnUsers.length})</Button>
                 <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Activos</Button>
                 <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Por Vencer</Button>
                 <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expired')}>Vencidos</Button>
@@ -418,7 +442,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                           <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Calendar className="w-4 h-4" />
-                              {format(user.createdAt.toDate(), 'PPP', { locale: es })}
+                              {format(user.createdAt, 'PPP', { locale: es })}
                             </div>
                           </TableCell>
                            <TableCell className="min-w-[150px]">

@@ -15,6 +15,25 @@ import {
 } from "@/components/ui/tabs";
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { getFirestore } from 'firebase-admin/firestore';
+import { adminApp } from '@/firebase/admin';
+
+async function getServers(ownerUid: string) {
+    const firestore = getFirestore(adminApp);
+    // There is no ownerUid on servers anymore as we have only one owner.
+    // For now, let's just fetch all servers.
+    const serversSnapshot = await firestore.collection('servers').get();
+    if (serversSnapshot.empty) return [];
+    return serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+async function getManagers() {
+    const firestore = getFirestore(adminApp);
+    // Fetch all users with role 'manager'
+    const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
+    if (managersSnapshot.empty) return [];
+    return managersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
 
 
 export default async function Home() {
@@ -27,6 +46,10 @@ export default async function Home() {
   const { uid, username, role, assignedServerId } = user;
   const isOwner = role === 'owner';
   const defaultTab = isOwner ? "servers" : "vpn-users";
+
+  // Fetch all necessary data on the server side
+  const servers = isOwner ? await getServers(uid) : [];
+  const managers = isOwner ? await getManagers() : [];
 
   return (
     <div className="flex flex-col flex-grow">
@@ -83,7 +106,7 @@ export default async function Home() {
           </TabsList>
            {isOwner && (
             <TabsContent value="servers">
-               <SshConfigManager ownerUid={uid} />
+               <SshConfigManager ownerUid={uid} initialServers={servers} />
             </TabsContent>
           )}
           <TabsContent value="vpn-users">
@@ -99,12 +122,13 @@ export default async function Home() {
             {(isOwner || assignedServerId) && (
               <UserManager 
                 user={user}
+                initialServers={servers}
               />
             )}
           </TabsContent>
           {isOwner && (
             <TabsContent value="managers">
-               <ManagerAdmin ownerUid={uid} />
+               <ManagerAdmin ownerUid={uid} initialManagers={managers} initialServers={servers} />
             </TabsContent>
           )}
            {isOwner && (

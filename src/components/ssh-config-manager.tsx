@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -30,8 +31,6 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { testServerConnection, resetServerConfig, restartService } from '@/app/actions';
 
 
@@ -49,35 +48,34 @@ type LogEntry = {
     message: string;
 }
 
-type ServerStatus = 'online' | 'offline' | 'comprobando';
+type ServerStatus = 'online' | 'offline' | 'comprobando' | 'unknown';
 
 
-export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
+export function SshConfigManager({ ownerUid, initialServers }: { ownerUid: string, initialServers: SshConfig[] }) {
     const { toast } = useToast();
-    const firestore = useFirestore();
 
     const formRef = useRef<HTMLFormElement>(null);
+    const [servers, setServers] = useState(initialServers);
     const [editingServer, setEditingServer] = useState<Partial<SshConfig> | null>(null);
     const [log, setLog] = useState<LogEntry[]>([]);
     const [isSavingPending, setIsSavingPending] = useState(false);
     const [isDeletingPending, setIsDeletingPending] = useState(false);
     const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
 
-    const serversQuery = useMemoFirebase(() => collection(firestore, 'servers'), [firestore]);
-    const { data: servers, isLoading } = useCollection<SshConfig>(serversQuery);
+    const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>(
+        Object.fromEntries(initialServers.map(s => [s.id, 'unknown']))
+    );
 
-    const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
-
-    const checkAllServers = async () => {
-        if (!servers) return;
+    const checkAllServers = async (serverList: SshConfig[]) => {
+        if (!serverList) return;
 
         setServerStatuses(prev => {
             const checkingState: Record<string, ServerStatus> = {};
-            servers.forEach(s => { checkingState[s.id] = 'comprobando' });
+            serverList.forEach(s => { checkingState[s.id] = 'comprobando' });
             return checkingState;
         });
 
-        const statusPromises = servers.map(async (server) => {
+        const statusPromises = serverList.map(async (server) => {
             const result = await testServerConnection(server);
             return { serverId: server.id, status: result.success ? 'online' : 'offline' as ServerStatus };
         });
@@ -95,7 +93,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
 
     useEffect(() => {
         if(servers) {
-            checkAllServers();
+            checkAllServers(servers);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [servers]);
@@ -147,7 +145,9 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
             toast({ title: 'Éxito', description: result.message, className: 'bg-green-500 text-white' });
             setEditingServer(null);
             formRef.current?.reset();
-            checkAllServers();
+            // This is a client component, so we can't use revalidatePath here.
+            // We should trigger a refresh or manually update state.
+            window.location.reload();
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Acción Fallida', description: e.message });
         } finally {
@@ -168,7 +168,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
                 throw new Error(result.error || 'Fallo al eliminar el servidor.');
             }
             toast({ title: 'Éxito', description: 'Servidor y recursos asociados eliminados.' });
-            checkAllServers();
+            window.location.reload();
         } catch (e: any) {
              toast({ variant: 'destructive', title: 'Eliminación Fallida', description: e.message });
         } finally {
@@ -211,7 +211,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
                         </CardDescription>
                     </div>
                      <div className='flex gap-2'>
-                        <Button variant="outline" onClick={checkAllServers} disabled={Object.values(serverStatuses).some(s => s === 'comprobando')}>
+                        <Button variant="outline" onClick={() => checkAllServers(servers)} disabled={Object.values(serverStatuses).some(s => s === 'comprobando')}>
                             {Object.values(serverStatuses).some(s => s === 'comprobando') ? <Loader2 className='mr-2 h-4 w-4 animate-spin'/> : <RefreshCw className='mr-2 h-4 w-4'/>}
                              Verificar Todos
                         </Button>
@@ -222,7 +222,6 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
                 </div>
             </CardHeader>
             <CardContent>
-                {isLoading ? <div className='h-24 flex justify-center items-center'><Loader2 className='h-6 w-6 animate-spin'/></div> :
                 <div className="border rounded-md overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -244,6 +243,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
                                      {status === 'comprobando' && <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin" />Comprobando</Badge>}
                                      {status === 'online' && <Badge className='bg-green-500 hover:bg-green-600'>Online</Badge>}
                                      {status === 'offline' && <Badge variant="destructive">Offline</Badge>}
+                                     {status === 'unknown' && <Badge variant="outline">Unknown</Badge>}
                                   </TableCell>
                                   <TableCell className="font-medium">{server.name}</TableCell>
                                   <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
@@ -315,7 +315,6 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
                     </TableBody>
                   </Table>
                 </div>
-                }
             </CardContent>
         </Card>
 

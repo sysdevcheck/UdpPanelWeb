@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
@@ -36,10 +37,10 @@ import {
 } from "@/components/ui/select";
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Timestamp } from 'firebase/firestore';
 
-type Server = {
+// This is now a Client Component, but it receives its initial data from a Server Component.
+
+type ServerInfo = {
     id: string;
     name: string;
 }
@@ -50,11 +51,13 @@ type Manager = {
   username: string;
   email?: string;
   assignedServerId?: string | null;
-  createdAt?: Timestamp;
-  expiresAt?: Timestamp;
+  createdAt?: { seconds: number, nanoseconds: number }; // Firestore Timestamp structure
+  expiresAt?: { seconds: number, nanoseconds: number };
 }
 
-type ManagerWithStatus = Manager & {
+type ManagerWithStatus = Omit<Manager, 'createdAt' | 'expiresAt'> & {
+    createdAt?: Date;
+    expiresAt?: Date;
     status: {
         label: 'Activo' | 'Por Vencer' | 'Vencido' | 'Permanente';
         daysLeft: number | null;
@@ -62,13 +65,12 @@ type ManagerWithStatus = Manager & {
     }
 }
 
-const getStatus = (expiresAt: Timestamp | undefined | null): ManagerWithStatus['status'] => {
+const getStatus = (expiresAt: Date | undefined | null): ManagerWithStatus['status'] => {
     if (!expiresAt) {
       return { label: 'Permanente', daysLeft: null, variant: 'outline' };
     }
-    const expirationDate = expiresAt.toDate();
     const now = new Date();
-    const diffTime = expirationDate.getTime() - now.getTime();
+    const diffTime = expiresAt.getTime() - now.getTime();
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (daysLeft <= 0) {
@@ -80,22 +82,24 @@ const getStatus = (expiresAt: Timestamp | undefined | null): ManagerWithStatus['
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
-  const [editingManager, setEditingManager] = useState<Manager | null>(null);
+export function ManagerAdmin({ ownerUid, initialManagers, initialServers }: { ownerUid: string, initialManagers: any[], initialServers: any[] }) {
+  const [editingManager, setEditingManager] = useState<ManagerWithStatus | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   const { toast } = useToast();
-  const firestore = useFirestore();
   
   const addFormRef = useRef<HTMLFormElement>(null);
-
-  const serversQuery = useMemoFirebase(() => collection(firestore, 'servers'), [firestore]);
-  const { data: allServers, isLoading: isLoadingServers } = useCollection<Server>(serversQuery);
-
-  const managersQuery = useMemoFirebase(() => query(collection(firestore, 'users'), where('role', '==', 'manager')), [firestore]);
-  const { data: managersData, isLoading: isLoadingManagers } = useCollection<Manager>(managersQuery);
-
-  const managers = useMemo(() => (managersData || []).map(m => ({...m, status: getStatus(m.expiresAt)})), [managersData]);
+  
+  const allServers = initialServers as ServerInfo[];
+  const managers = useMemo(() => (initialManagers || []).map((m: Manager) => {
+      const expiresAtDate = m.expiresAt ? new Date(m.expiresAt.seconds * 1000) : undefined;
+      return {
+          ...m,
+          createdAt: m.createdAt ? new Date(m.createdAt.seconds * 1000) : undefined,
+          expiresAt: expiresAtDate,
+          status: getStatus(expiresAtDate)
+      }
+  }), [initialManagers]);
   
   const handleAddManager = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -127,6 +131,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
         toast({ title: 'Éxito', description: `Manager "${username}" ha sido añadido.` });
         addFormRef.current?.reset();
+        window.location.reload();
     } catch(e: any) {
         toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -148,6 +153,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             throw new Error(result.error || 'Fallo al eliminar manager');
         }
         toast({ title: 'Éxito', description: 'Manager eliminado.' });
+        window.location.reload();
     } catch(e: any) {
         toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -180,21 +186,12 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
         }
         toast({ title: 'Éxito', description: 'Manager actualizado.' });
         setEditingManager(null);
+        window.location.reload();
     } catch (e: any) {
          toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
         setIsPending(false);
     }
-  }
-
-  if (isLoadingManagers || isLoadingServers) {
-    return (
-        <div className="space-y-6">
-             <Card className="w-full max-w-5xl mx-auto shadow-lg">
-                <CardHeader><div className="h-24 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></CardHeader>
-             </Card>
-        </div>
-    )
   }
 
   return (
@@ -330,7 +327,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                                     <AlertDialogHeader>
                                     <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        Esto eliminará permanentemente al manager <strong className="font-mono">{manager.username}</strong> de Firebase y revocará su acceso.
+                                        Esto eliminará permanentemente al manager <strong className="font-mono">{manager.username}</strong> y revocará su acceso.
                                     </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -409,8 +406,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                 </div>
                 
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="newPassword" className="text-right">Nueva Contraseña</Label>
-                    <Input
+                    <Label htmlFor="newPassword" className="text-right">Nueva Contraseña</Label>                    <Input
                       id="newPassword"
                       name="newPassword"
                       type="password"
