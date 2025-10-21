@@ -37,7 +37,7 @@ import {
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 
 type Server = {
     id: string;
@@ -48,8 +48,8 @@ type Manager = {
   id: string;
   email: string;
   assignedServerId?: string | null;
-  createdAt?: { seconds: number };
-  expiresAt?: { seconds: number };
+  createdAt?: Timestamp;
+  expiresAt?: Timestamp;
 }
 
 type ManagerWithStatus = Manager & {
@@ -60,11 +60,11 @@ type ManagerWithStatus = Manager & {
     }
 }
 
-const getStatus = (expiresAt: { seconds: number } | undefined): ManagerWithStatus['status'] => {
+const getStatus = (expiresAt: Timestamp | undefined): ManagerWithStatus['status'] => {
     if (!expiresAt) {
       return { label: 'Permanente', daysLeft: null, variant: 'outline' };
     }
-    const expirationDate = new Date(expiresAt.seconds * 1000);
+    const expirationDate = expiresAt.toDate();
     const now = new Date();
     const diffTime = expirationDate.getTime() - now.getTime();
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -95,7 +95,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
   const managersQuery = useMemoFirebase(() => query(collection(firestore, 'users'), where('role', '==', 'manager')), [firestore]);
   const { data: managersData, isLoading: isLoadingManagers } = useCollection<Manager>(managersQuery);
 
-  const managers = (managersData || []).map(m => ({...m, status: getStatus(m.expiresAt)}));
+  const managers = useMemo(() => (managersData || []).map(m => ({...m, status: getStatus(m.expiresAt)})), [managersData]);
   
   const handleAddManager = async (formData: FormData) => {
     setIsPending(true);
@@ -109,8 +109,6 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
       return;
     }
 
-    // We need a server action or an API route to create a user and set custom claims.
-    // This is a placeholder for that logic.
     try {
         const response = await fetch('/api/create-user', {
             method: 'POST',
@@ -271,12 +269,17 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                                     <Shield className="mr-2 h-4 w-4" />
                                     Manager
                                 </Badge>
-                                <Badge variant={variant} className="w-fit">{label}</Badge>
-                                {daysLeft !== null && (
-                                   <span className="text-xs text-muted-foreground">
-                                      {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
-                                   </span>
+                                {manager.expiresAt && (
+                                    <>
+                                        <Badge variant={variant} className="w-fit">{label}</Badge>
+                                        {daysLeft !== null && (
+                                        <span className="text-xs text-muted-foreground">
+                                            {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
+                                        </span>
+                                        )}
+                                    </>
                                 )}
+                                {!manager.expiresAt && <Badge variant="outline">Permanente</Badge>}
                              </div>
                           </TableCell>
                           <TableCell>
@@ -394,3 +397,5 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     </div>
   );
 }
+
+    
