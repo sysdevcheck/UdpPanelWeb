@@ -1,3 +1,4 @@
+
 'use server';
 
 import { cookies } from 'next/headers';
@@ -36,12 +37,21 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             cache: 'no-store',
         });
 
+        // Don't try to parse JSON if the response is not ok and not JSON
         if (!response.ok) {
+            const contentType = response.headers.get('content-type');
             let errorBody;
-            try {
-                errorBody = await response.json();
-            } catch (e) {
-                return {
+             if (contentType && contentType.indexOf('application/json') !== -1) {
+                try {
+                    errorBody = await response.json();
+                } catch (e) {
+                     return {
+                        success: false,
+                        error: `La petición a la API falló con estado ${response.status}: ${response.statusText}`,
+                    };
+                }
+            } else {
+                 return {
                     success: false,
                     error: `La petición a la API falló con estado ${response.status}: ${response.statusText}`,
                 };
@@ -52,8 +62,17 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
                 log: errorBody.log,
             };
         }
+        
+        // Handle empty responses for certain actions like testConnection
+        const textResponse = await response.text();
+        if (!textResponse) {
+             if (action === 'testConnection') {
+                return { success: response.status === 200 };
+            }
+            return { success: true }; // Assume success for other actions with empty body
+        }
 
-        return await response.json();
+        return JSON.parse(textResponse);
 
     } catch (e: any) {
         console.error(`Fallo al conectar con el endpoint de la API SSH. URL: ${baseUrl}/api/ssh`, e);
@@ -118,7 +137,7 @@ export async function logout() {
 
 export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
   const result = await sshApiRequest('testConnection', {}, serverConfig);
-  // Ensure we always return an object
+  // Ensure we always return an object with a success property
   return { success: result?.success || false };
 }
 

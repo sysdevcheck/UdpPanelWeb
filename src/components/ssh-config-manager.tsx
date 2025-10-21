@@ -140,6 +140,13 @@ export function SshConfigManager() {
         }
         
         try {
+            // Step 1: Explicitly test connection first
+            const testResult = await testServerConnection(serverData);
+            if (!testResult.success) {
+                throw new Error("La conexión falló. Verifica la IP, puerto, usuario y contraseña.");
+            }
+
+            // Step 2: If connection is successful, proceed to save
             const response = await fetch('/api/manage-server', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -390,5 +397,3 @@ export function SshConfigManager() {
     </>
     )
 }
-
-    
