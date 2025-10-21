@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useActionState, useTransition, useState } from 'react';
@@ -39,7 +38,14 @@ type LogEntry = {
     message: string;
 }
 
-const initialActionState = {
+type SshActionState = {
+    success: boolean;
+    error?: string;
+    message?: string;
+    log?: LogEntry[];
+}
+
+const initialActionState: SshActionState = {
     success: false,
     error: undefined,
     message: undefined,

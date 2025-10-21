@@ -56,12 +56,18 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, payload, sshConfig }),
+            cache: 'no-store', // Ensure fresh data for every request
         });
 
         const responseBody: SshApiResponse = await response.json();
 
         if (!response.ok) {
-            throw new Error(responseBody.error || `API request failed with status ${response.status}`);
+            // Even if response is not ok, the body might contain a useful log.
+            return {
+                success: false,
+                error: responseBody.error || `API request failed with status ${response.status}`,
+                log: responseBody.log || [{ level: 'ERROR', message: `API request failed with status ${response.status}` }]
+            };
         }
 
         return responseBody;
@@ -131,7 +137,15 @@ async function writeFile(filePath: string, data: string, sshConfig: any): Promis
 async function readRawConfig(sshConfig: any): Promise<any> {
     await ensureDirExists(sshConfig);
     const configData = await readFile(sshConfig ? remoteConfigPath : localConfigPath, sshConfig);
-    return configData.trim() ? JSON.parse(configData) : { ...defaultConfig };
+    if (!configData || !configData.trim()) {
+        return { ...defaultConfig };
+    }
+    try {
+        return JSON.parse(configData);
+    } catch (e) {
+        console.error("Failed to parse config.json, returning default. Content:", configData);
+        return { ...defaultConfig };
+    }
 }
 
 async function readUsersMetadata(sshConfig: any): Promise<any[]> {
@@ -166,7 +180,6 @@ export async function readConfig(managerUsername: string): Promise<any> {
     redirect('/login');
   }
 
-  const manager = await getManager(managerUsername);
   const owner = await getOwnerManager();
   const sshConfig = owner?.ssh;
 
@@ -375,10 +388,16 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 async function readManagersFile(): Promise<any[]> {
     await ensureDirExists(null); // Ensure local-dev dir exists
     const managersData = await readFile(localManagersConfigPath, null); // Always reads local file system
-    const managers = managersData.trim() ? JSON.parse(managersData) : [];
-    
-    if (managers.length === 0) {
+    if (!managersData.trim()) {
         console.log('No managers found. Creating default admin user.');
+        const defaultManager = { username: 'admin', password: 'password', createdAt: new Date().toISOString() };
+        await saveManagersFile([defaultManager]);
+        return [defaultManager];
+    }
+    
+    const managers = JSON.parse(managersData);
+    if (managers.length === 0) {
+        console.log('Managers file is empty. Creating default admin user.');
         const defaultManager = { username: 'admin', password: 'password', createdAt: new Date().toISOString() };
         await saveManagersFile([defaultManager]);
         return [defaultManager];
@@ -452,6 +471,9 @@ async function isOwner(username: string): Promise<boolean> {
 export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
     try {
       let managers = await readManagersFile();
+      const owner = await getOwnerManager();
+      const sshConfig = owner?.ssh;
+
       // Expiry logic only applies to non-owner managers
       const now = new Date();
       if (managers.length > 1) {
@@ -632,7 +654,9 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
 
     if (ownerIndex === -1) {
-        return { success: false, error: "Owner account not found.", log: testResult.log };
+        const log = testResult.log || [];
+        log.push({ level: 'ERROR', message: "Owner account not found after successful SSH test."});
+        return { success: false, error: "Owner account not found.", log };
     }
 
     managers[ownerIndex].ssh = newSshConfig;
@@ -640,7 +664,7 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     const result = await saveManagersFile(managers);
     if(result.success) {
         revalidatePath('/');
-        return { success: true, message: "SSH Connection Successful!", log: testResult.log };
+        return { success: true, message: "SSH Connection Verified & Saved!", log: testResult.log };
     }
 
     const finalLog = testResult.log || [];

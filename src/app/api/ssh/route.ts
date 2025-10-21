@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import SSH2Promise from 'ssh2-promise';
 
+type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
+
 async function getSshConnection(sshConfig: any) {
     const ssh = new SSH2Promise(sshConfig);
     await ssh.connect();
@@ -9,21 +11,22 @@ async function getSshConnection(sshConfig: any) {
 }
 
 export async function POST(request: Request) {
-    const log: { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string }[] = [];
+    const log: LogEntry[] = [];
     
     try {
         const { action, payload, sshConfig } = await request.json();
 
         if (!sshConfig || !sshConfig.host || !sshConfig.username || !sshConfig.password) {
-            return NextResponse.json({ success: false, error: 'SSH credentials are required.' }, { status: 400 });
+            log.push({ level: 'ERROR', message: 'SSH credentials are required in the request.' });
+            return NextResponse.json({ success: false, error: 'SSH credentials are required.', log }, { status: 400 });
         }
         
         if (action === 'testConnection') {
             try {
-                log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.host} on port ${sshConfig.port || 22}...` });
+                log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.username}@${sshConfig.host}:${sshConfig.port || 22}...` });
                 const ssh = await getSshConnection(sshConfig);
                 log.push({ level: 'SUCCESS', message: 'Connection established.' });
-                // We can consider authentication successful if connect() doesn't throw.
+                // connect() already implies authentication was successful
                 log.push({ level: 'SUCCESS', message: 'Authentication successful.' });
                 await ssh.close();
                 log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
@@ -34,8 +37,8 @@ export async function POST(request: Request) {
                     errorMessage = `Host not found. Could not resolve DNS for ${sshConfig.host}.`;
                 } else if (e.message.includes('All configured authentication methods failed')) {
                     errorMessage = 'Authentication failed. Please check your username and password.';
-                } else if (e.level === 'client-timeout') {
-                    errorMessage = `Connection timed out. Check if the host IP and port are correct, and if the port is open in the server's firewall.`;
+                } else if (e.level === 'client-timeout' || e.message.includes('Timed out')) {
+                    errorMessage = `Connection timed out. Check the host IP and port. Ensure the port is open and not blocked by a firewall.`;
                 }
                 log.push({ level: 'ERROR', message: errorMessage });
                 return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
@@ -90,12 +93,13 @@ export async function POST(request: Request) {
 
             default:
                 await ssh.close();
-                return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+                log.push({ level: 'ERROR', message: `Invalid action specified: '${action}'` });
+                return NextResponse.json({ success: false, error: 'Invalid action', log }, { status: 400 });
         }
 
     } catch (error: any) {
         console.error('API SSH Route Error:', error);
-        log.push({ level: 'ERROR', message: `An unexpected error occurred: ${error.message}` });
+        log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${error.message}` });
         return NextResponse.json({ success: false, error: error.message, log }, { status: 500 });
     }
 }
