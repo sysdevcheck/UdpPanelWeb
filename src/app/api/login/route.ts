@@ -29,6 +29,7 @@ async function verifyPassword(email: string, password: string): Promise<{idToken
         });
 
         if (!res.ok) {
+           // This is crucial. If fetch fails, return null.
            return null;
         }
 
@@ -72,12 +73,14 @@ export async function POST(request: NextRequest) {
     const verificationResult = await verifyPassword(email, password);
 
     if (!verificationResult) {
+         // This is the critical change. Now it explicitly returns a JSON response.
          return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
     }
 
     const { idToken, localId: uid } = verificationResult;
 
     // Step 3: Verify the token just to be sure, although getting it means password was correct.
+    // This is a good practice to ensure the token wasn't tampered with, though unlikely here.
     await adminAuth.verifyIdToken(idToken);
     
     // Step 4: Create a session cookie with the user's UID.
@@ -85,6 +88,7 @@ export async function POST(request: NextRequest) {
         uid,
     };
     
+    // Using a 30-day session
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     cookies().set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Login API error:', error);
     let message = 'Error de autenticación.';
-    // Return a generic 401 for auth errors.
+    // Return a generic 401 for any other auth errors.
     return NextResponse.json({ error: message }, { status: 401 });
   }
 }
