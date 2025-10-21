@@ -114,7 +114,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
-        // If password is not provided directly, try to fetch it from Secret Manager
+        // If password is not provided directly, try to fetch it from Secret Manager for existing servers
         if (!sshConfig.password && sshConfig.id) {
             const projectId = process.env.GCLOUD_PROJECT;
             if (projectId) {
@@ -128,8 +128,11 @@ export async function POST(request: Request) {
                 }
             }
         } else if (!sshConfig.password) {
-            log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
-            return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
+             // For actions that require a password (like testConnection on a new server), this check remains.
+            if (action === 'testConnection') {
+                log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
+                return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
+            }
         }
 
         if (action === 'testConnection') {
