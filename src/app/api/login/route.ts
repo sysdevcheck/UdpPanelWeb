@@ -1,11 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { initializeAdminApp } from '@/firebase/admin';
+import { getAuth } from 'firebase-admin/auth';
+import { adminApp } from '@/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
-    initializeAdminApp();
     const body = await request.json();
     const { idToken } = body;
 
@@ -13,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ID token is required' }, { status: 400 });
     }
 
-    const adminAuth = getAdminAuth();
+    const adminAuth = getAuth(adminApp);
     const decodedToken = await adminAuth.verifyIdToken(idToken);
     
     const userRecord = await adminAuth.getUser(decodedToken.uid);

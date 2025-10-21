@@ -1,13 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { initializeAdminApp } from '@/firebase/admin';
+import { adminApp } from '@/firebase/admin';
 
 export async function POST(request: NextRequest) {
   try {
-    initializeAdminApp();
-    const adminAuth = getAdminAuth();
-    const firestore = getFirestore();
+    const adminAuth = getAuth(adminApp);
+    const firestore = getFirestore(adminApp);
     
     const body = await request.json();
     const { email, password, role, assignedServerId } = body;
@@ -61,5 +60,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-    
