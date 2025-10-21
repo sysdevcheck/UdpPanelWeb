@@ -50,7 +50,7 @@ type SshApiResponse = {
     data?: any;
 }
 
-async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
+async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse | undefined> {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
     
     try {
@@ -105,6 +105,7 @@ async function restartVpnService(sshConfig: any | null): Promise<{ success: bool
     }
 
     const result = await sshApiRequest('restartService', {}, sshConfig);
+    if (!result) return { success: false, error: "Fallo en la comunicación con la API SSH." };
     return { success: result.success, error: result.error };
 }
 
@@ -132,7 +133,7 @@ async function readFile(filePath: string, sshConfig: any | null): Promise<string
     }
     // Remote mode
     const result = await sshApiRequest('readFile', { path: filePath }, sshConfig);
-    if (!result.success) throw new Error(result.error);
+    if (!result || !result.success) throw new Error(result?.error || "Fallo al leer archivo remoto");
     return result.data;
 }
 
@@ -145,7 +146,7 @@ async function writeFile(filePath: string, data: string, sshConfig: any | null):
     // Remote mode
     await ensureDirExists(sshConfig, filePath);
     const result = await sshApiRequest('writeFile', { path: filePath, data }, sshConfig);
-     if (!result.success) return { success: false, error: result.error };
+    if (!result || !result.success) return { success: false, error: result?.error || "Fallo al escribir archivo remoto" };
     return { success: true };
 }
 
@@ -688,6 +689,10 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
 
 export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
   const result = await sshApiRequest('testConnection', {}, serverConfig);
+  // Ensure we always return an object, even if the API call itself fails.
+  if (!result) {
+    return { success: false };
+  }
   return { success: result.success };
 }
 
@@ -715,8 +720,8 @@ export async function saveServerConfig(prevState: any, formData: FormData): Prom
     };
 
     const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
-    if (!testResult.success) {
-        return { success: false, error: testResult.error || 'Conexión fallida', log: testResult.log };
+    if (!testResult || !testResult.success) {
+        return { success: false, error: testResult?.error || 'Conexión fallida', log: testResult?.log };
     }
 
     const data = await readManagersFile();
@@ -790,12 +795,12 @@ export async function resetServerConfig(prevState: any, formData: FormData): Pro
     
     const result = await sshApiRequest('resetConfig', { host: sshConfig.host }, sshConfig);
 
-    if (result.success) {
+    if (result && result.success) {
         revalidatePath('/');
         return { success: true, message: `El servidor ${sshConfig.name} ha sido reseteado exitosamente.` };
     }
 
-    return { success: false, error: result.error || "Ocurrió un error desconocido durante el reseteo del servidor." };
+    return { success: false, error: result?.error || "Ocurrió un error desconocido durante el reseteo del servidor." };
 }
 
 export async function restartService(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
