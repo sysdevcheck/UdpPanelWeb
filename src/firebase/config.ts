@@ -1,8 +1,8 @@
 export const firebaseConfig = {
-  "projectId": "studio-9050905400-958f5",
-  "appId": "1:760539597327:web:9cab9ca2be6d47f689f17a",
-  "apiKey": "AIzaSyDx3_ThilWSGRkpqq_vE4lqgrmw69rHXd8",
-  "authDomain": "studio-9050905400-958f5.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "760539597327"
+  "projectId": "zivpn-panel-3c66f",
+  "appId": "1:786630762147:web:2d3122c60233b8606c3a1b",
+  "storageBucket": "zivpn-panel-3c66f.appspot.com",
+  "apiKey": "AIzaSyCV_MvLh1E2m_a9rR3yHkIbt5C7iDtM8Gk",
+  "authDomain": "zivpn-panel-3c66f.firebaseapp.com",
+  "messagingSenderId": "786630762147"
 };
