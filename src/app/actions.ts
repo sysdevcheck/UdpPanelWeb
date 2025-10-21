@@ -634,8 +634,7 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
     return { success: false, error: result.error || "Failed to save SSH configuration." };
 }
 
-export async function clearSshConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
-    const ownerUsername = formData.get('ownerUsername') as string;
+export async function clearSshConfig(ownerUsername: string): Promise<{ success: boolean; error?: string; message?: string }> {
     if (!ownerUsername) {
         return { success: false, error: "Authentication required." };
     }
@@ -666,4 +665,3 @@ export async function clearSshConfig(prevState: any, formData: FormData): Promis
     revalidatePath('/');
     return { success: true, message: "SSH configuration has been cleared." };
 }
-

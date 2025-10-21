@@ -1,8 +1,7 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useActionState } from 'react';
+import { useEffect, useActionState, useTransition } from 'react';
 import { saveSshConfig, clearSshConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -43,7 +42,20 @@ const initialActionState = {
 export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | null, ownerUsername: string }) {
     const { toast } = useToast();
     const [sshState, sshAction, isSshPending] = useActionState(saveSshConfig, initialActionState);
-    const [clearState, clearAction, isClearingPending] = useActionState(clearSshConfig, initialActionState);
+    
+    // For the clear action, we'll handle it with useTransition as it's not a form action
+    const [isClearingPending, startTransition] = useTransition();
+
+    const handleClearConfig = () => {
+        startTransition(async () => {
+            const result = await clearSshConfig(ownerUsername);
+            if (result.success) {
+                toast({ title: 'Success', description: result.message });
+            } else if (result.error) {
+                toast({ variant: 'destructive', title: 'Error Clearing Config', description: result.error });
+            }
+        });
+    };
 
     useEffect(() => {
         if (!sshState) return;
@@ -58,20 +70,6 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sshState]);
-
-    useEffect(() => {
-        if (!clearState) return;
-        if(clearState.success || clearState.error) {
-            if (clearState.success) {
-                if (clearState.message) {
-                    toast({ title: 'Success', description: clearState.message });
-                }
-            } else if (clearState.error) {
-                toast({ variant: 'destructive', title: 'Error Clearing Config', description: clearState.error });
-            }
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [clearState]);
 
     const isPending = isSshPending || isClearingPending;
     const isConnected = owner?.ssh && owner.ssh.host;
@@ -105,22 +103,19 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
-                                <form action={clearAction}>
-                                    <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you sure you want to disconnect?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This will clear your saved SSH credentials. You will need to enter them again to manage the remote server.
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction type="submit" variant="destructive" disabled={isPending}>
-                                            {isClearingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                            Disconnect
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </form>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure you want to disconnect?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will clear your saved SSH credentials. You will need to enter them again to manage the remote server.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleClearConfig} variant="destructive" disabled={isPending}>
+                                        {isClearingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                        Disconnect
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
                     </div>
