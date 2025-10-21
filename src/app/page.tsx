@@ -1,5 +1,6 @@
 
-import { getLoggedInUser, logout } from './actions';
+import { cookies } from 'next/headers';
+import { logout } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
@@ -19,23 +20,52 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { adminApp } from '@/firebase/admin';
 
 async function getServers() {
-    const firestore = getFirestore(adminApp);
-    const serversSnapshot = await firestore.collection('servers').get();
-    if (serversSnapshot.empty) return [];
-    return serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    try {
+        const firestore = getFirestore(adminApp);
+        const serversSnapshot = await firestore.collection('servers').get();
+        if (serversSnapshot.empty) return [];
+        return serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch servers:", error);
+        return [];
+    }
 }
 
 async function getManagers() {
-    const firestore = getFirestore(adminApp);
-    // Fetch all users with role 'manager'
-    const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
-    if (managersSnapshot.empty) return [];
-    return managersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    try {
+        const firestore = getFirestore(adminApp);
+        // Fetch all users with role 'manager'
+        const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
+        if (managersSnapshot.empty) return [];
+        return managersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Failed to fetch managers:", error);
+        return [];
+    }
 }
 
 
 export default async function Home() {
-  const user = await getLoggedInUser();
+  const cookieStore = cookies();
+  const sessionCookie = cookieStore.get('session');
+  let user = null;
+
+  if (sessionCookie) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+         if (session.username && session.role) {
+             user = {
+                uid: session.username, // Use username as unique ID for session purposes
+                username: session.username,
+                role: session.role,
+                assignedServerId: session.assignedServerId || null,
+            };
+         }
+      } catch (e) {
+          console.error("Failed to parse session cookie", e);
+      }
+  }
+
 
   if (!user) {
     redirect('/login');

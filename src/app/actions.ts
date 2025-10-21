@@ -103,34 +103,6 @@ export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnU
 // Authentication
 // ====================================================================
 
-export async function getLoggedInUser() {
-  const cookieStore = cookies();
-  const sessionCookie = cookieStore.get('session');
-  if (!sessionCookie) return null;
-
-  try {
-    const session = JSON.parse(sessionCookie.value);
-    
-    // La sesión ahora contiene directamente el username y el rol
-    if (!session.username || !session.role) return null;
-    
-    // Devolvemos los datos de la sesión directamente.
-    // El 'uid' ya no es relevante para la sesión, pero podemos mantener la consistencia si es necesario.
-    return {
-        uid: session.username, // Usar username como identificador único para la sesión.
-        username: session.username,
-        role: session.role,
-        assignedServerId: session.assignedServerId || null,
-    };
-
-  } catch (e){
-    console.error("Failed to parse session cookie", e);
-    // Borramos la cookie si está corrupta
-    cookies().delete('session');
-    return null;
-  }
-}
-
 export async function logout() {
   cookies().delete('session');
   redirect('/login');
