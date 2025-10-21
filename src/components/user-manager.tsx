@@ -262,10 +262,9 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     if (!selectedServerId) return;
     setIsActionPending(true);
     try {
-        const response = await fetch('/api/vpn-users', {
+        const response = await fetch(`/api/vpn-users?docId=${userId}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ docId: userId })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Failed to delete user');

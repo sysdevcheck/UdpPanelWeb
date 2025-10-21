@@ -124,7 +124,8 @@ export async function PUT(request: NextRequest) {
 // DELETE handler to remove a user
 export async function DELETE(request: NextRequest) {
     try {
-        const { docId } = await request.json();
+        const { searchParams } = new URL(request.url);
+        const docId = searchParams.get('docId');
 
         if (!docId) {
             return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
