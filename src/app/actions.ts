@@ -4,8 +4,6 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Client } from 'ssh2';
-import { getFirestore } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
 
 
 // ====================================================================
@@ -102,6 +100,11 @@ export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnU
 // ====================================================================
 // Authentication
 // ====================================================================
+
+export async function getSession() {
+    const cookieStore = cookies();
+    return cookieStore.get('session');
+}
 
 export async function logout() {
   cookies().delete('session');

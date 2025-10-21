@@ -1,6 +1,5 @@
 
-import { cookies } from 'next/headers';
-import { logout } from './actions';
+import { getSession, logout } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
@@ -19,20 +18,19 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 
 export default async function Home() {
-  const cookieStore = cookies();
-  const sessionCookie = cookieStore.get('session');
+  const session = await getSession();
   let user = null;
 
-  if (sessionCookie) {
+  if (session?.value) {
       try {
-        const session = JSON.parse(sessionCookie.value);
-         if (session.username && session.role) {
+        const sessionData = JSON.parse(session.value);
+         if (sessionData.username && sessionData.role) {
              user = {
                 // For local user, we can use username as a unique key or a generated ID
-                uid: session.username, 
-                username: session.username,
-                role: session.role,
-                assignedServerId: session.assignedServerId || null,
+                uid: sessionData.username, 
+                username: sessionData.username,
+                role: sessionData.role,
+                assignedServerId: sessionData.assignedServerId || null,
             };
          }
       } catch (e) {
