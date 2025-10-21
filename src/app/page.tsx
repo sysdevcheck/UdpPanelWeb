@@ -18,10 +18,8 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { getFirestore } from 'firebase-admin/firestore';
 import { adminApp } from '@/firebase/admin';
 
-async function getServers(ownerUid: string) {
+async function getServers() {
     const firestore = getFirestore(adminApp);
-    // There is no ownerUid on servers anymore as we have only one owner.
-    // For now, let's just fetch all servers.
     const serversSnapshot = await firestore.collection('servers').get();
     if (serversSnapshot.empty) return [];
     return serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -48,7 +46,7 @@ export default async function Home() {
   const defaultTab = isOwner ? "servers" : "vpn-users";
 
   // Fetch all necessary data on the server side
-  const servers = isOwner ? await getServers(uid) : [];
+  const servers = isOwner ? await getServers() : [];
   const managers = isOwner ? await getManagers() : [];
 
   return (
