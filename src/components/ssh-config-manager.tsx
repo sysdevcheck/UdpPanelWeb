@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { testServerConnection, resetServerConfig, restartService } from '@/app/actions';
+import { ConsoleOutput, LogEntry } from './console-output';
 
 
 type SshConfig = {
@@ -41,11 +42,6 @@ type SshConfig = {
     port: number;
     username: string;
     password?: string;
-}
-
-type LogEntry = {
-    level: 'INFO' | 'SUCCESS' | 'ERROR';
-    message: string;
 }
 
 type ServerStatus = 'online' | 'offline' | 'comprobando' | 'unknown';
@@ -59,7 +55,7 @@ export function SshConfigManager() {
     const [isLoading, setIsLoading] = useState(true);
     const [editingServer, setEditingServer] = useState<Partial<SshConfig> | null>(null);
     const [log, setLog] = useState<LogEntry[]>([]);
-    const [isSavingPending, setIsSavingPending] = useState(false);
+    const [isSavingPending, setIsSavingPending] = useState(isSavingPending);
     const [isDeletingPending, setIsDeletingPending] = useState(false);
     const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
 
@@ -381,23 +377,8 @@ export function SshConfigManager() {
                         </div>
 
                          {log.length > 0 && (
-                            <div className="mt-4 p-4 bg-black rounded-md font-mono text-sm text-white space-y-2 max-h-48 overflow-y-auto">
-                                <div className="flex items-center gap-2 border-b border-gray-700 pb-2 mb-2">
-                                    <Terminal className="w-5 h-5 text-gray-400" />
-                                    <h3 className="font-semibold">Log de Conexión</h3>
-                                </div>
-                                {log.map((entry, index) => (
-                                    <div key={index} className="flex items-start">
-                                        <span className={cn('mr-2 font-bold', {
-                                            'text-cyan-400': entry.level === 'INFO',
-                                            'text-green-400': entry.level === 'SUCCESS',
-                                            'text-red-400': entry.level === 'ERROR',
-                                        })}>
-                                            [{entry.level}]
-                                        </span>
-                                        <span className="flex-1 whitespace-pre-wrap break-words">{entry.message}</span>
-                                    </div>
-                                ))}
+                            <div className="mt-4">
+                                <ConsoleOutput logs={log} title="Log de Conexión" />
                             </div>
                         )}
                     </div>
@@ -419,3 +400,5 @@ export function SshConfigManager() {
     </>
     )
 }
+
+    
