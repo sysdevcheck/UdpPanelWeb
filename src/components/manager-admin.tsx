@@ -47,7 +47,6 @@ type Manager = {
   id: string; // Firestore document ID
   uid: string; // Firebase Auth UID
   username: string;
-  email?: string;
   assignedServerId?: string | null;
   createdAt?: { seconds: number, nanoseconds: number }; // Firestore Timestamp structure
   expiresAt?: { seconds: number, nanoseconds: number };
@@ -136,11 +135,10 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
     const formData = new FormData(event.currentTarget);
     const username = formData.get('username') as string;
-    const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
     
-    if (!username || !email || !password || !assignedServerId) {
+    if (!username || !password || !assignedServerId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Todos los campos son requeridos.' });
       setIsPending(false);
       return;
@@ -150,7 +148,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
         const response = await fetch('/api/create-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email, password, role: 'manager', assignedServerId })
+            body: JSON.stringify({ username, password, role: 'manager', assignedServerId })
         });
         const result = await response.json();
 
@@ -174,7 +172,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
         const response = await fetch('/api/delete-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ authUid: manager.uid, docId: manager.id })
+            body: JSON.stringify({ docId: manager.id })
         });
         const result = await response.json();
 
@@ -196,9 +194,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
     const formData = new FormData(event.currentTarget);
     const docId = formData.get('docId') as string;
-    const authUid = formData.get('authUid') as string;
     const username = formData.get('username') as string;
-    const email = formData.get('email') as string;
     const newPassword = formData.get('newPassword') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
 
@@ -206,7 +202,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
        const response = await fetch('/api/update-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ docId, authUid, username, email, password: newPassword, assignedServerId })
+            body: JSON.stringify({ docId, username, password: newPassword, assignedServerId })
         });
         const result = await response.json();
 
@@ -245,20 +241,16 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             </div>
         </CardHeader>
         <CardContent>
-          <form ref={addFormRef} onSubmit={handleAddManager} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-            <div className="grid w-full gap-1.5 md:col-span-1">
+          <form ref={addFormRef} onSubmit={handleAddManager} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+            <div className="grid w-full gap-1.5">
                 <Label htmlFor="username-manager">Usuario</Label>
                 <Input name="username" id="username-manager" type="text" placeholder="nombre.usuario" required disabled={isPending} />
             </div>
-            <div className="grid w-full gap-1.5 md:col-span-1">
-                <Label htmlFor="email-manager">Correo</Label>
-                <Input name="email" id="email-manager" type="email" placeholder="usuario@correo.com" required disabled={isPending} />
-            </div>
-             <div className="grid w-full gap-1.5 md:col-span-1">
+             <div className="grid w-full gap-1.5">
                 <Label htmlFor="password-manager">Contraseña</Label>
                 <Input name="password" id="password-manager" type="password" placeholder="Contraseña" required disabled={isPending} />
             </div>
-             <div className="grid w-full gap-1.5 md:col-span-1">
+             <div className="grid w-full gap-1.5">
                 <Label htmlFor="server-select-add">Asignar a Servidor</Label>
                 <Select name="assignedServerId" required disabled={isPending || !allServers || allServers.length === 0}>
                   <SelectTrigger id="server-select-add">
@@ -271,7 +263,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                   </SelectContent>
                 </Select>
             </div>
-            <div className='flex justify-end md:col-span-1'>
+            <div className='flex justify-end'>
                 <Button type="submit" disabled={isPending || !allServers || allServers.length === 0} className='w-full sm:w-auto'>
                     {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                     <span>Añadir</span>
@@ -291,7 +283,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Usuario / Correo</TableHead>
+                    <TableHead>Usuario</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Servidor Asignado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -306,15 +298,9 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                         <TableRow key={manager.id}>
                           <TableCell className="min-w-[200px]">
                             <div className="flex items-center gap-3">
-                              <div className='flex flex-col'>
-                                <div className="flex items-center gap-2">
-                                  <User className="w-4 h-4 text-muted-foreground" />
-                                  <span className="font-mono text-base">{manager.username}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                   <Mail className="w-4 h-4" />
-                                  <span>{manager.email}</span>
-                                </div>
+                              <div className='flex items-center gap-2'>
+                                <User className="w-4 h-4 text-muted-foreground" />
+                                <span className="font-mono text-base">{manager.username}</span>
                               </div>
                             </div>
                           </TableCell>
@@ -382,7 +368,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                     })}
                     {managers.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center">
+                            <TableCell colSpan={4} className="text-center h-24">
                                 No hay managers creados.
                             </TableCell>
                         </TableRow>
@@ -404,7 +390,6 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <input type="hidden" name="docId" value={editingManager?.id || ''} />
-                <input type="hidden" name="authUid" value={editingManager?.uid || ''} />
                 
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="username" className="text-right">Usuario</Label>
@@ -412,17 +397,6 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                     id="username"
                     name="username"
                     defaultValue={editingManager?.username}
-                    className="col-span-3"
-                    disabled={isPending}
-                    required
-                    />
-                </div>
-                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="email" className="text-right">Correo</Label>
-                    <Input
-                    id="email"
-                    name="email"
-                    defaultValue={editingManager?.email}
                     className="col-span-3"
                     disabled={isPending}
                     required

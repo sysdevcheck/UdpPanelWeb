@@ -1,12 +1,10 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const firestore = getFirestore(adminApp);
-const auth = getAuth(adminApp);
 const secretManager = new SecretManagerServiceClient();
 const projectId = process.env.GCLOUD_PROJECT;
 
@@ -109,17 +107,8 @@ export async function POST(request: NextRequest) {
         // Restore owner
         if (backup.owner) {
             console.log(`[${transactionId}] Restoring owner...`);
-            let ownerRecord;
-            try {
-                ownerRecord = await auth.getUserByEmail(backup.owner.email);
-            } catch (e: any) {
-                if (e.code === 'auth/user-not-found') {
-                    ownerRecord = await auth.createUser({ email: backup.owner.email, password: backup.owner.password || 'password123' });
-                } else { throw e; }
-            }
-            await auth.setCustomUserClaims(ownerRecord.uid, { role: 'owner' });
             const ownerDocRef = firestore.collection('users').doc('owner');
-            batch.set(ownerDocRef, { ...backup.owner, uid: ownerRecord.uid, role: 'owner' });
+            batch.set(ownerDocRef, { ...backup.owner, role: 'owner' });
         }
 
         // Restore servers and secrets
@@ -140,25 +129,15 @@ export async function POST(request: NextRequest) {
         if (backup.managers) {
             console.log(`[${transactionId}] Restoring ${backup.managers.length} managers...`);
             for (const manager of backup.managers) {
-                let managerRecord;
-                try {
-                    managerRecord = await auth.getUserByEmail(manager.email);
-                } catch (e: any) {
-                    if (e.code === 'auth/user-not-found') {
-                        managerRecord = await auth.createUser({ email: manager.email, password: manager.password || 'password123', displayName: manager.username });
-                    } else { throw e; }
-                }
-                 await auth.setCustomUserClaims(managerRecord.uid, { role: 'manager' });
                  const managerDocRef = firestore.collection('users').doc(); // New doc id
                  const managerData = {
                      ...manager,
-                     uid: managerRecord.uid,
                      role: 'manager',
+                     uid: managerDocRef.id,
                      createdAt: manager.createdAt ? Timestamp.fromDate(new Date(manager.createdAt)) : Timestamp.now(),
                      expiresAt: manager.expiresAt ? Timestamp.fromDate(new Date(manager.expiresAt)) : null,
                  };
                  delete managerData.id; // don't need old doc id
-                 delete managerData.password;
                  batch.set(managerDocRef, managerData);
             }
         }

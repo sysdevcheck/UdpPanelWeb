@@ -1,11 +1,9 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from '@/firebase/admin';
 
 const firestore = getFirestore(adminApp);
-const auth = getAuth(adminApp);
 
 export async function GET(request: NextRequest) {
     try {
@@ -25,32 +23,28 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { username, email, password, role, assignedServerId } = body;
+    const { username, password, role, assignedServerId } = body;
 
-    if (!username || !email || !password || !role) {
-      return NextResponse.json({ error: 'Username, email, password, and role are required.' }, { status: 400 });
+    if (!username || !password || !role) {
+      return NextResponse.json({ error: 'Username, password, and role are required.' }, { status: 400 });
     }
     if (role === 'manager' && !assignedServerId) {
         return NextResponse.json({ error: 'A server must be assigned to a manager.' }, { status: 400 });
     }
     
-    // Create user in Firebase Authentication
-    const userRecord = await auth.createUser({
-        email,
-        password,
-        displayName: username,
-    });
-    
-    await auth.setCustomUserClaims(userRecord.uid, { role: 'manager' });
-    
+    // Check if username already exists
+    const existingUserQuery = await firestore.collection('users').where('username', '==', username).limit(1).get();
+    if (!existingUserQuery.empty) {
+      return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
+    }
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
     const userDocRef = firestore.collection('users').doc();
     await userDocRef.set({
-        uid: userRecord.uid, // Link to the auth user
+        uid: userDocRef.id, // Self-reference ID as UID
         username,
-        email,
         password, 
         role,
         assignedServerId: assignedServerId || null,
@@ -65,9 +59,6 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Create User API error:', error);
     let message = 'Error creating user.';
-    if(error.code === 'auth/email-already-exists') {
-        message = 'Este correo electrónico ya está en uso.';
-    }
     return NextResponse.json({ error: message, details: error.message }, { status: 500 });
   }
 }
