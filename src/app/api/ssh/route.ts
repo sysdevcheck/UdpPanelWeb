@@ -134,17 +134,7 @@ export async function POST(request: Request) {
         if (action === 'testConnection') {
             try {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${finalSshConfig.username}@${finalSshConfig.host}:${finalSshConfig.port || 22}...` });
-                const testConn = new Client();
-                await new Promise<void>((resolve, reject) => {
-                    testConn.on('ready', () => {
-                        testConn.end();
-                        resolve();
-                    })
-                    .on('error', reject)
-                    .on('timeout', () => reject(new Error('Connection timed out')))
-                    .connect(finalSshConfig);
-                });
-                
+                ssh = await getSshConnection(finalSshConfig);
                 log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
                 log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
                 return NextResponse.json({ success: true, message: 'Connection successful', log });
@@ -217,6 +207,18 @@ export async function POST(request: Request) {
     } catch (error: any) {
         console.error('API SSH Route Error:', error);
         let errorMessage = error.message;
+        // Check for specific error types to give better feedback
+        const contentType = request.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            errorMessage = `Invalid request format. Expected JSON.`;
+            return NextResponse.json({ success: false, error: errorMessage }, { status: 415 });
+        }
+
+        if (error instanceof SyntaxError) { // JSON parsing error
+            errorMessage = 'Invalid JSON in request body.';
+            return NextResponse.json({ success: false, error: errorMessage }, { status: 400 });
+        }
+        
         if (error.code === 'ENOTFOUND' || error.message.includes('ENOTFOUND')) {
             errorMessage = `Host not found. Could not resolve DNS.`;
         } else if (error.message.includes('All configured authentication methods failed')) {

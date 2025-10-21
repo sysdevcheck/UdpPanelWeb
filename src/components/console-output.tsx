@@ -21,6 +21,8 @@ interface ConsoleOutputProps {
 
 export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bash", prompt = "$", className, isExecuting, onCommandSubmit }) => {
   const [command, setCommand] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -35,10 +37,38 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bas
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!command.trim() || isExecuting) return;
-    onCommandSubmit(command);
+    const trimmedCommand = command.trim();
+    if (!trimmedCommand || isExecuting) return;
+
+    onCommandSubmit(trimmedCommand);
+    setHistory(prev => {
+        const newHistory = [trimmedCommand, ...prev.filter(h => h !== trimmedCommand)];
+        return newHistory.slice(0, 50); // Keep last 50 commands
+    });
+    setHistoryIndex(-1);
     setCommand('');
   };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (history.length === 0) return;
+
+      if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const newIndex = Math.min(historyIndex + 1, history.length - 1);
+          setHistoryIndex(newIndex);
+          setCommand(history[newIndex] || '');
+      } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (historyIndex > 0) {
+              const newIndex = historyIndex - 1;
+              setHistoryIndex(newIndex);
+              setCommand(history[newIndex] || '');
+          } else {
+              setHistoryIndex(-1);
+              setCommand('');
+          }
+      }
+  }
 
   const handleWrapperClick = () => {
     inputRef.current?.focus();
@@ -75,27 +105,22 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ logs, title = "bas
           </div>
         ))}
          <form onSubmit={handleFormSubmit} className="flex items-center">
-            {!isExecuting && (
-                <>
-                    <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>
-                    <Input
-                        ref={inputRef}
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        className="bg-transparent border-none text-white p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 font-mono flex-1"
-                        autoFocus
-                        disabled={isExecuting}
-                        spellCheck="false"
-                        autoComplete="off"
-                    />
-                </>
-            )}
-            {isExecuting && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin"/>
-                    <span>Ejecutando...</span>
-                </div>
-            )}
+            <span className="text-cyan-400 mr-2 shrink-0">{prompt}</span>
+            {isExecuting && <Loader2 className="w-4 h-4 animate-spin absolute" />}
+            <Input
+                ref={inputRef}
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className={cn(
+                  "bg-transparent border-none text-white p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 font-mono flex-1",
+                   isExecuting && "pl-6"
+                )}
+                autoFocus
+                disabled={isExecuting}
+                spellCheck="false"
+                autoComplete="off"
+            />
          </form>
       </div>
     </div>
