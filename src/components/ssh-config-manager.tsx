@@ -2,13 +2,13 @@
 'use client';
 
 import { useEffect, useActionState, useState, useRef } from 'react';
-import { saveServerConfig, deleteServer, testServerConnection, resetServerConfig } from '@/app/actions';
+import { saveServerConfig, deleteServer, testServerConnection, resetServerConfig, restartService } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2 } from 'lucide-react';
+import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2, Power } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +72,8 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     const [saveState, saveAction, isSavingPending] = useActionState(saveServerConfig, initialActionState);
     const [deleteState, deleteAction, isDeletingPending] = useActionState(deleteServer, {success: false});
     const [resetState, resetAction, isResettingPending] = useActionState(resetServerConfig, {success: false});
+    const [restartState, restartAction, isRestartingPending] = useActionState(restartService, {success: false});
+
 
     const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
 
@@ -138,12 +140,22 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resetState]);
+
+    useEffect(() => {
+        if (!restartState) return;
+        if (restartState.success && restartState.message) {
+            toast({ title: 'Success', description: restartState.message });
+        } else if (restartState.error) {
+            toast({ variant: 'destructive', title: 'Restart Failed', description: restartState.error });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restartState]);
     
-    const isPending = isSavingPending || isDeletingPending || isResettingPending;
+    const isPending = isSavingPending || isDeletingPending || isResettingPending || isRestartingPending;
 
     return (
     <>
-        <Card className="w-full max-w-4xl mx-auto shadow-lg mt-6">
+        <Card className="w-full max-w-5xl mx-auto shadow-lg mt-6">
              <CardHeader>
                 <div className='flex justify-between items-start'>
                     <div>
@@ -188,9 +200,16 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                                   <TableCell className="font-medium">{server.name}</TableCell>
                                   <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
                                   <TableCell className="text-right">
+                                    <form action={restartAction} className='inline-flex'>
+                                        <input type="hidden" name="serverId" value={server.id} />
+                                        <input type="hidden" name="ownerUsername" value={ownerUsername} />
+                                        <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending || status !== 'online'}>
+                                            <Power className="h-4 w-4" />
+                                        </Button>
+                                    </form>
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500" disabled={isPending}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500" disabled={isPending || status !== 'online'}>
                                                 <Settings2 className="h-4 w-4" />
                                             </Button>
                                         </AlertDialogTrigger>
@@ -341,3 +360,5 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     </>
     )
 }
+
+    

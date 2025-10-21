@@ -3,14 +3,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { addManager, deleteManager, editManager } from '@/app/actions';
+import { addManager, deleteManager, editManager, exportBackup } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server, AlertCircle, Upload, Download } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,7 +111,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
     if (!state) return false;
     if (state.success) {
         if(state.managersData?.managers) {
-             setManagers(state.managersData.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+             setManagers(state.managersData.managers.map((m: any) => ({...m, status: getStatus(m.expiresAt)})));
         }
         if (state.message) {
              toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
@@ -152,6 +151,24 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteManagerState]);
 
+  const handleExport = async () => {
+    const result = await exportBackup();
+    if (result.success && result.data) {
+        const blob = new Blob([result.data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'zivpn-panel-backup.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({ title: 'Success', description: 'Backup has been downloaded.' });
+    } else {
+        toast({ variant: 'destructive', title: 'Export Failed', description: result.error });
+    }
+  }
+
   const isPending = isAddingPending || isEditingPending || isDeletingPending;
   const ownerData = { username: ownerUsername, createdAt: undefined, expiresAt: undefined };
 
@@ -169,10 +186,20 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
     <div className="space-y-6">
       <Card className="w-full max-w-5xl mx-auto shadow-lg">
         <CardHeader>
-          <CardTitle>Add New Manager</CardTitle>
-          <CardDescription>
-            Create accounts that can manage users on a specific server.
-          </CardDescription>
+            <div className='flex justify-between items-start'>
+                <div>
+                    <CardTitle>Add New Manager</CardTitle>
+                    <CardDescription>
+                        Create accounts that can manage users on a specific server.
+                    </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Export Backup
+                    </Button>
+                </div>
+            </div>
         </CardHeader>
         <CardContent>
           <form ref={addFormRef} action={addManagerAction} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">

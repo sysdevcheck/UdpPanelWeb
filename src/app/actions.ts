@@ -100,14 +100,8 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 // ====================================================================
 
 async function restartVpnService(sshConfig: any | null): Promise<{ success: boolean; error?: string }> {
-    if (!isProduction) {
-        console.log("DEV-MODE: Simulated service restart.");
-        return { success: true };
-    }
-    // In production, we assume local execution if no sshConfig is provided.
-    // However, with the new model, only remote execution should restart services.
     if (!sshConfig) {
-        return { success: false, error: "Cannot restart service without SSH config in production." };
+        return { success: false, error: "Cannot restart service without SSH config." };
     }
 
     const result = await sshApiRequest('restartService', {}, sshConfig);
@@ -165,16 +159,16 @@ async function getSshConfig(managerUsername: string, serverId?: string): Promise
 
     if (isOwner) {
         if (!serverId) return null; // Owner must specify a server
-        return managersData.servers.find(s => s.id === serverId) || null;
+        return managersData.servers.find((s:any) => s.id === serverId) || null;
     }
 
     // It's a manager
-    const manager = managersData.managers.find(m => m.username === managerUsername);
+    const manager = managersData.managers.find((m:any) => m.username === managerUsername);
     if (!manager || !manager.assignedServerId) {
         return null; // Manager not found or not assigned to a server
     }
 
-    return managersData.servers.find(s => s.id === manager.assignedServerId) || null;
+    return managersData.servers.find((s:any) => s.id === manager.assignedServerId) || null;
 }
 
 async function readRawConfig(sshConfig: any): Promise<any> {
@@ -495,6 +489,9 @@ async function readManagersFile(): Promise<any> {
     
     try {
       const data = JSON.parse(managersData);
+      // Ensure servers and managers are arrays if they don't exist
+      if (!data.servers) data.servers = [];
+      if (!data.managers) data.managers = [];
       return data;
     } catch(e) {
       console.error("Failed to parse managers.json, creating default. Error:", e);
@@ -798,3 +795,35 @@ export async function resetServerConfig(prevState: any, formData: FormData): Pro
 
     return { success: false, error: result.error || "An unknown error occurred during server reset." };
 }
+
+export async function restartService(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    const ownerUsername = formData.get('ownerUsername') as string;
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+
+    const serverId = formData.get('serverId') as string;
+    if (!serverId) return { success: false, error: "Server ID is missing." };
+    
+    const sshConfig = await getSshConfig(ownerUsername, serverId);
+    if (!sshConfig) {
+        return { success: false, error: "Could not find SSH configuration for this server." };
+    }
+
+    const result = await restartVpnService(sshConfig);
+
+    if (result.success) {
+        return { success: true, message: `Service on ${sshConfig.name} has been restarted.` };
+    }
+    return { success: false, error: result.error || "An unknown error occurred during service restart." };
+}
+
+
+export async function exportBackup(): Promise<{ success: boolean; data?: string; error?: string; }> {
+    try {
+        const data = await readManagersFile();
+        return { success: true, data: JSON.stringify(data, null, 2) };
+    } catch(e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+    
