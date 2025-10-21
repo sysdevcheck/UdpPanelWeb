@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { Client, SFTPWrapper } from 'ssh2';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import { getFirestore } from 'firebase-admin/firestore';
+import { adminApp } from '@/firebase/admin';
+
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
@@ -84,6 +88,19 @@ async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Pro
     });
 }
 
+async function getSecret(secretName: string): Promise<string | null> {
+    try {
+        const secretManager = new SecretManagerServiceClient();
+        const [version] = await secretManager.accessSecretVersion({
+            name: `${secretName}/versions/latest`,
+        });
+        const payload = version.payload?.data?.toString();
+        return payload || null;
+    } catch (e) {
+        console.error(`Could not access secret: ${secretName}`, e);
+        return null;
+    }
+}
 
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
@@ -92,11 +109,29 @@ export async function POST(request: Request) {
     try {
         const { action, payload, sshConfig } = await request.json();
 
-        if (!sshConfig || !sshConfig.host || !sshConfig.username || !sshConfig.password) {
-            log.push({ level: 'ERROR', message: 'SSH credentials are required in the request.' });
-            return NextResponse.json({ success: false, error: 'SSH credentials are required.', log }, { status: 400 });
+        if (!sshConfig || !sshConfig.host || !sshConfig.username) {
+            log.push({ level: 'ERROR', message: 'SSH host and username are required.' });
+            return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
+        // If password is not provided directly, try to fetch it from Secret Manager
+        if (!sshConfig.password && sshConfig.id) {
+            const projectId = process.env.GCLOUD_PROJECT;
+            if (projectId) {
+                const secretName = `projects/${projectId}/secrets/ssh-password-${sshConfig.id}`;
+                const secretPassword = await getSecret(secretName);
+                if (secretPassword) {
+                    sshConfig.password = secretPassword;
+                } else {
+                     log.push({ level: 'ERROR', message: 'SSH password not provided and not found in Secret Manager.' });
+                     return NextResponse.json({ success: false, error: 'SSH password not available.', log }, { status: 400 });
+                }
+            }
+        } else if (!sshConfig.password) {
+            log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
+            return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
+        }
+
         if (action === 'testConnection') {
             try {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.username}@${sshConfig.host}:${sshConfig.port || 22}...` });

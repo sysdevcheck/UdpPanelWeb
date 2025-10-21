@@ -10,18 +10,6 @@ import { Client } from 'ssh2';
 // ====================================================================
 
 const isProduction = process.env.NODE_ENV === 'production';
-const remoteBasePath = '/etc/zivpn';
-const remoteConfigPath = '/etc/zivpn/config.json';
-const defaultConfig = {
-  "listen": ":5667",
-  "cert": "/etc/zivpn/zivpn.crt",
-  "key": "/etc/zivpn/zivpn.key",
-  "obfs": "zivpn",
-  "auth": {
-    "mode": "passwords",
-    "config": []
-  }
-};
 
 
 // ====================================================================
@@ -138,7 +126,8 @@ export async function logout() {
 
 export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
   const result = await sshApiRequest('testConnection', {}, serverConfig);
-  return { success: result.success };
+  // Ensure we always return an object
+  return { success: result?.success || false };
 }
 
 export async function resetServerConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {

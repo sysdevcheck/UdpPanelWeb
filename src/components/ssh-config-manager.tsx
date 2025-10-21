@@ -78,8 +78,8 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
         });
 
         const statusPromises = servers.map(async (server) => {
-            const { success } = await testServerConnection(server);
-            return { serverId: server.id, status: success ? 'online' : 'offline' as ServerStatus };
+            const result = await testServerConnection(server);
+            return { serverId: server.id, status: result.success ? 'online' : 'offline' as ServerStatus };
         });
 
         const results = await Promise.all(statusPromises);
@@ -100,10 +100,12 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [servers]);
 
-    const handleSaveServer = async (formData: FormData) => {
+    const handleSaveServer = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
         setIsSavingPending(true);
         setLog([]);
         
+        const formData = new FormData(e.currentTarget);
         const serverId = formData.get('serverId') as string | null;
         const name = formData.get('name') as string;
         const host = formData.get('host') as string;
@@ -128,9 +130,6 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
             serverData.password = password;
         }
         
-        // We can't send password to Firestore, so we need an API route/server action
-        // to handle SSH connection testing and saving secrets.
-        // This is a placeholder for that logic.
         try {
             const response = await fetch('/api/manage-server', {
                 method: 'POST',
@@ -322,7 +321,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
 
         <Dialog open={!!editingServer} onOpenChange={(isOpen) => { if (!isOpen) { setEditingServer(null); setLog([])} }}>
             <DialogContent className="sm:max-w-2xl">
-                <form ref={formRef} action={handleSaveServer}>
+                <form ref={formRef} onSubmit={handleSaveServer}>
                      <DialogHeader>
                         <DialogTitle>{editingServer?.id ? 'Editar Servidor' : 'Añadir Nuevo Servidor'}</DialogTitle>
                         <DialogDescription>

@@ -50,6 +50,7 @@ type Server = {
     host: string;
     username: string;
     port: number;
+    password?: string;
 }
 
 type UserWithStatus = User & {
@@ -117,19 +118,8 @@ export function UserManager({ user }: { user: { uid: string; email: string; role
   const handleVpsSync = async () => {
     if (!currentServer || !vpnUsersData) return;
     setIsActionPending(true);
-    // Fetch server secret from API
-    const response = await fetch('/api/get-server-secret', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ serverId: currentServer.id })
-    });
-    if (!response.ok) {
-      toast({variant: 'destructive', title: 'Error', description: 'No se pudo obtener la configuración del servidor.'});
-      setIsActionPending(false);
-      return;
-    }
-    const { password } = await response.json();
-    const sshConfig = { ...currentServer, password };
+
+    const sshConfig = currentServer; // The password should already be here if needed by the action
 
     await syncVpnUsersWithVps(currentServer.id, sshConfig, vpnUsersData);
     setIsActionPending(false);
@@ -218,21 +208,8 @@ export function UserManager({ user }: { user: { uid: string; email: string; role
       const formData = new FormData();
       formData.set('serverId', currentServer.id);
       
-      // We need to get password from a secure backend endpoint
-      const response = await fetch('/api/get-server-secret', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ serverId: currentServer.id })
-      });
-      if (!response.ok) {
-        toast({variant: 'destructive', title: 'Error', description: 'No se pudo obtener la configuración del servidor.'});
-        setIsActionPending(false);
-        return;
-      }
-      const { password } = await response.json();
-      const sshConfig = { ...currentServer, password };
-      formData.set('sshConfig', JSON.stringify(sshConfig));
-
+      // The server config now needs to be passed in stringified form
+      formData.set('sshConfig', JSON.stringify(currentServer));
 
       const result = await actionFn({ success: false }, formData);
 
