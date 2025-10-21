@@ -4,7 +4,8 @@ import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
 import { BackupManager } from '@/components/backup-manager';
-import { Users, LogOut, UserCog, Server, Database } from 'lucide-react';
+import { ConsoleManager } from '@/components/console-manager';
+import { Users, LogOut, UserCog, Server, Database, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import {
@@ -26,7 +27,6 @@ export default async function Home() {
         const sessionData = JSON.parse(session.value);
          if (sessionData.username && sessionData.role) {
              user = {
-                // For local user, we can use username as a unique key or a generated ID
                 uid: sessionData.username, 
                 username: sessionData.username,
                 role: sessionData.role,
@@ -35,12 +35,9 @@ export default async function Home() {
          }
       } catch (e) {
           console.error("Failed to parse session cookie", e);
-          // Fall through to redirect
       }
   }
 
-  // This check now relies on the middleware to have done the primary redirection.
-  // This is a secondary safeguard.
   if (!user) {
     redirect('/login');
   }
@@ -78,7 +75,7 @@ export default async function Home() {
       </header>
       <div className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
          <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-1'} max-w-2xl mx-auto`}>
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-5' : 'grid-cols-1'} max-w-3xl mx-auto`}>
             {isOwner && (
                 <TabsTrigger value="servers">
                     <Server className="mr-2 h-4 w-4" />
@@ -89,6 +86,12 @@ export default async function Home() {
               <Users className="mr-2 h-4 w-4" />
               Usuarios VPN
             </TabsTrigger>
+             {isOwner && (
+                <TabsTrigger value="console">
+                    <Terminal className="mr-2 h-4 w-4" />
+                    Consola
+                </TabsTrigger>
+            )}
             {isOwner && (
               <TabsTrigger value="managers">
                 <UserCog className="mr-2 h-4 w-4" />
@@ -123,6 +126,11 @@ export default async function Home() {
               />
             )}
           </TabsContent>
+           {isOwner && (
+              <TabsContent value="console">
+                  <ConsoleManager />
+              </TabsContent>
+            )}
           {isOwner && (
             <TabsContent value="managers">
                <ManagerAdmin />
