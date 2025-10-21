@@ -107,6 +107,7 @@ export function ManagerAdmin() {
               const expiresAtDate = m.expiresAt ? new Date(m.expiresAt) : undefined;
               return {
                   ...m,
+                  id: m.id || `manager_${m.username}_${Date.now()}`,
                   createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
                   expiresAt: expiresAtDate,
                   status: getStatus(expiresAtDate)
@@ -444,5 +445,3 @@ export function ManagerAdmin() {
     </div>
   );
 }
-
-    

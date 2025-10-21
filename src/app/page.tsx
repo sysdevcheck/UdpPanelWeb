@@ -37,10 +37,12 @@ export default async function Home() {
          }
       } catch (e) {
           console.error("Failed to parse session cookie", e);
+          // Fall through to redirect
       }
   }
 
-
+  // This check now relies on the middleware to have done the primary redirection.
+  // This is a secondary safeguard.
   if (!user) {
     redirect('/login');
   }
