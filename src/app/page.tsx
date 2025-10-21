@@ -1,9 +1,9 @@
 
-import { readConfig, getLoggedInUser, logout, readFullConfig } from './actions';
+import { getLoggedInUser, logout } from './actions';
 import { UserManager } from '@/components/user-manager';
 import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
-import { Users, LogOut, UserCog, Server, Send } from 'lucide-react';
+import { Users, LogOut, UserCog, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import {
@@ -17,29 +17,14 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 
 export default async function Home() {
-  const loggedInUser = await getLoggedInUser();
-  if (!loggedInUser) {
+  const user = await getLoggedInUser();
+
+  if (!user) {
     redirect('/login');
   }
 
-  const configData = await readFullConfig();
-  if (configData.error || !configData.managersData) {
-    console.error("Estado Crítico: No se pudo leer el archivo de managers.", configData.error);
-    // You might want to log the user out or show a more graceful error page
-    return <div>Error al cargar la configuración: {configData.error}. Por favor, revisa los permisos del archivo o inicia sesión de nuevo.</div>;
-  }
-  const { owner, servers, managers } = configData.managersData;
-
-  const isOwner = loggedInUser === owner.username;
-  const managerInfo = !isOwner ? managers.find(m => m.username === loggedInUser) : null;
-  
-  // For a manager, find their specific assigned server
-  const assignedServer = managerInfo ? servers.find(s => s.id === managerInfo.assignedServerId) : null;
-
-  // For managers, we pre-load their users. For owners, this will be empty initially.
-  const initialVpnUsersData = !isOwner && assignedServer ? await readConfig(loggedInUser) : { auth: { config: [] } };
-  const vpnUsers = initialVpnUsersData.auth?.config || [];
-
+  const { uid, email, role, assignedServerId } = user;
+  const isOwner = role === 'owner';
   const defaultTab = isOwner ? "servers" : "vpn-users";
 
   return (
@@ -56,9 +41,8 @@ export default async function Home() {
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-sm text-muted-foreground">
                 <span className="hidden sm:inline">Bienvenido, </span>
-                <strong className="font-medium text-foreground">{loggedInUser}</strong>
+                <strong className="font-medium text-foreground">{email}</strong>
                  {isOwner && <span className="text-amber-500 ml-1">(Dueño)</span>}
-                 {!isOwner && assignedServer && <span className="text-muted-foreground ml-1 hidden sm:inline">({assignedServer.name})</span>}
               </span>
               <form action={logout}>
                 <Button variant="outline" size="sm">
@@ -92,11 +76,11 @@ export default async function Home() {
           </TabsList>
            {isOwner && (
             <TabsContent value="servers">
-               <SshConfigManager ownerUsername={owner.username} initialServers={servers} />
+               <SshConfigManager ownerUid={uid} />
             </TabsContent>
           )}
           <TabsContent value="vpn-users">
-            {!isOwner && !assignedServer && (
+            {!isOwner && !assignedServerId && (
                  <Alert variant="destructive" className="max-w-xl mx-auto">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>No Asignado a un Servidor</AlertTitle>
@@ -105,18 +89,15 @@ export default async function Home() {
                   </AlertDescription>
                 </Alert>
             )}
-            {(assignedServer || isOwner) && (
+            {(isOwner || assignedServerId) && (
               <UserManager 
-                initialUsers={vpnUsers} 
-                managerUsername={loggedInUser} 
-                isOwner={isOwner}
-                servers={isOwner ? servers : (assignedServer ? [assignedServer] : [])}
+                user={user}
               />
             )}
           </TabsContent>
           {isOwner && (
             <TabsContent value="managers">
-               <ManagerAdmin ownerUsername={owner.username} initialManagers={managers} allServers={servers} />
+               <ManagerAdmin ownerUid={uid} />
             </TabsContent>
           )}
         </Tabs>

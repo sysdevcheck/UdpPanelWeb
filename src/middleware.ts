@@ -1,29 +1,40 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// This function can be marked `async` if using `await` inside
 export function middleware(request: NextRequest) {
-  const session = request.cookies.get('session')?.value;
+  const sessionCookie = request.cookies.get('session');
   const { pathname } = request.nextUrl;
 
-  // Allow access to the login page
-  if (pathname === '/login') {
-    // If logged in, redirect to home
-    if (session) {
+  // If the user is trying to access the login page
+  if (pathname.startsWith('/login')) {
+    // If they are already logged in, redirect to home
+    if (sessionCookie) {
       return NextResponse.redirect(new URL('/', request.url));
     }
-    // If not logged in, allow access
+    // Otherwise, let them access the login page
     return NextResponse.next();
   }
 
-  // For all other pages, require a session
-  if (!session) {
+  // For any other page, if there is no session cookie, redirect to login
+  if (!sessionCookie) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // If they have a session, let them proceed
   return NextResponse.next();
 }
 
+// See "Matching Paths" below to learn more
 export const config = {
-  // Match all paths except for static files and internal Next.js paths
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
 };

@@ -1,8 +1,22 @@
-
 import { NextResponse } from 'next/server';
 import { Client, SFTPWrapper } from 'ssh2';
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
+
+const remoteBasePath = '/etc/zivpn';
+const remoteConfigPath = `${remoteBasePath}/config.json`;
+
+const defaultConfig = {
+  "listen": ":5667",
+  "cert": `${remoteBasePath}/zivpn.crt`,
+  "key": `${remoteBasePath}/zivpn.key`,
+  "obfs": "zivpn",
+  "auth": {
+    "mode": "passwords",
+    "config": []
+  }
+};
+
 
 async function getSshConnection(sshConfig: any): Promise<Client> {
     const conn = new Client();
@@ -58,10 +72,15 @@ async function readFileSftp(sftp: SFTPWrapper, path: string): Promise<string> {
 
 async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Promise<void> {
     return new Promise((resolve, reject) => {
-        sftp.writeFile(path, data, 'utf8', (err: any) => {
-            if (err) reject(err);
-            else resolve();
-        });
+        // Ensure directory exists before writing
+        const dirname = path.substring(0, path.lastIndexOf('/'));
+        const ssh = sftp.getClient();
+        execCommand(ssh, `mkdir -p ${dirname}`).then(() => {
+            sftp.writeFile(path, data, 'utf8', (err: any) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        }).catch(reject);
     });
 }
 
@@ -106,24 +125,20 @@ export async function POST(request: Request) {
         const sftp = await getSftp(ssh);
 
         switch (action) {
-            case 'readFile': {
-                const { path } = payload;
-                const data = await readFileSftp(sftp, path);
-                return NextResponse.json({ success: true, data });
+            case 'updateVpnConfig': {
+                const { usernames } = payload;
+                const configStr = await readFileSftp(sftp, remoteConfigPath);
+                let config;
+                try {
+                    config = configStr ? JSON.parse(configStr) : { ...defaultConfig };
+                } catch {
+                    config = { ...defaultConfig };
+                }
+                config.auth.config = usernames;
+                await writeFileSftp(sftp, remoteConfigPath, JSON.stringify(config, null, 2));
+                return NextResponse.json({ success: true, message: "Config updated on VPS" });
             }
             
-            case 'writeFile': {
-                const { path, data } = payload;
-                await writeFileSftp(sftp, path, data);
-                return NextResponse.json({ success: true });
-            }
-
-            case 'ensureDir': {
-                 const { path } = payload;
-                 await execCommand(ssh, `mkdir -p ${path}`);
-                 return NextResponse.json({ success: true });
-            }
-
             case 'restartService': {
                  const { stdout, stderr } = await execCommand(ssh, 'sudo /usr/bin/systemctl restart zivpn');
                  if (stderr) {
@@ -133,38 +148,17 @@ export async function POST(request: Request) {
             }
             
             case 'resetConfig': {
-                const { host } = payload;
-                const metadataPath = `/etc/zivpn/users-metadata.${host}.json`;
-                const configPath = `/etc/zivpn/config.json`;
-
-                // 1. Backup
-                const metadataBackup = await readFileSftp(sftp, metadataPath);
-                const configBackup = await readFileSftp(sftp, configPath);
-                
-                // 2. Execute script
+                // This action doesn't back up anymore, as Firestore is the source of truth.
+                // It just runs the reinstall script.
                 const scriptCommand = 'wget -O zi.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi.sh && sudo chmod +x zi.sh && sudo ./zi.sh';
                 const { stderr: scriptErr } = await execCommand(ssh, scriptCommand);
                 if (scriptErr) {
-                    // Even if there's an error, we might want to continue to restore.
-                    // Depending on what the script does, this might be desirable.
                     console.warn("Error during script execution:", scriptErr);
+                    return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
                 }
 
-                // 3. Restore
-                if (metadataBackup) {
-                    await writeFileSftp(sftp, metadataPath, metadataBackup);
-                }
-                if (configBackup) {
-                    await writeFileSftp(sftp, configPath, configBackup);
-                }
-
-                // 4. Restart service
-                const { stderr: restartErr } = await execCommand(ssh, 'sudo /usr/bin/systemctl restart zivpn');
-                if (restartErr) {
-                     return NextResponse.json({ success: false, error: `Failed to restart service: ${restartErr}` }, { status: 500 });
-                }
-
-                return NextResponse.json({ success: true });
+                // We expect the calling function to re-sync users and restart the service.
+                return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
             }
 
             default:
