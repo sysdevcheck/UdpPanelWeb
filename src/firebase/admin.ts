@@ -1,14 +1,14 @@
-import { initializeApp, getApps, App } from 'firebase-admin/app';
-import { credential } from 'firebase-admin';
+import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
 
 // This is a server-side only file.
 
-// Create a singleton instance of the Firebase Admin App
 let adminApp: App;
 
 if (!getApps().length) {
+  // This initializes the Admin SDK using the service account credentials
+  // automatically provided by the App Hosting environment.
   adminApp = initializeApp({
-    credential: credential.applicationDefault(),
+    credential: applicationDefault(),
   });
 } else {
   adminApp = getApps()[0];

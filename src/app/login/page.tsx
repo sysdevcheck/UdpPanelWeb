@@ -24,6 +24,12 @@ export default function LoginPage() {
     setIsPending(true);
     setError(null);
 
+    if (!auth) {
+      setError('El servicio de autenticación no está disponible.');
+      setIsPending(false);
+      return;
+    }
+
     if (!email || !password) {
       setError('Se requieren correo y contraseña.');
       setIsPending(false);
@@ -41,23 +47,27 @@ export default function LoginPage() {
         body: JSON.stringify({ idToken }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         router.push('/');
       } else {
-        const data = await response.json();
         setError(data.error || 'Fallo al iniciar sesión.');
       }
 
     } catch (e: any) {
-      console.error(e);
+      console.error("Login page error:", e);
       switch (e.code) {
         case 'auth/user-not-found':
         case 'auth/wrong-password':
         case 'auth/invalid-credential':
           setError('Usuario o contraseña inválidos.');
           break;
+        case 'auth/too-many-requests':
+          setError('Demasiados intentos fallidos. Por favor, intenta de nuevo más tarde.');
+          break;
         default:
-          setError('Ocurrió un error inesperado.');
+          setError('Ocurrió un error inesperado durante el inicio de sesión.');
           break;
       }
     } finally {
@@ -66,7 +76,7 @@ export default function LoginPage() {
   };
   
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center bg-background">
       <form onSubmit={handleLogin}>
         <Card className="w-full max-w-sm">
           <CardHeader>
