@@ -37,7 +37,7 @@ async function execCommand(ssh: Client, command: string, timeout = 15000): Promi
         let stderr = '';
         
         const timer = setTimeout(() => {
-            reject(new Error(`Command timed out after ${timeout / 1000}s. The command may be interactive and is not supported.`));
+            reject(new Error(`El comando ha superado el tiempo de espera de ${timeout / 1000}s. Posiblemente es un comando interactivo no soportado.`));
         }, timeout);
 
         ssh.exec(command, (err, stream) => {
@@ -110,7 +110,8 @@ export async function POST(request: Request) {
     let ssh: Client | null = null;
     
     try {
-        const { action, payload, sshConfig } = await request.json();
+        const body = await request.json();
+        const { action, payload, sshConfig } = body;
         
         let finalSshConfig = { ...sshConfig };
 
@@ -190,15 +191,6 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
             }
 
-            case 'executeCommand': {
-                const { command } = payload;
-                if (!command) {
-                    return NextResponse.json({ success: false, error: 'Command is required.' }, { status: 400 });
-                }
-                const { stdout, stderr } = await execCommand(ssh, command);
-                return NextResponse.json({ success: true, data: { stdout, stderr } });
-            }
-
             default:
                 log.push({ level: 'ERROR', message: `Invalid action specified: '${action}'` });
                 return NextResponse.json({ success: false, error: 'Invalid action', log }, { status: 400 });
@@ -207,16 +199,21 @@ export async function POST(request: Request) {
     } catch (error: any) {
         console.error('API SSH Route Error:', error);
         let errorMessage = error.message;
-        // Check for specific error types to give better feedback
-        const contentType = request.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            errorMessage = `Invalid request format. Expected JSON.`;
-            return NextResponse.json({ success: false, error: errorMessage }, { status: 415 });
-        }
 
-        if (error instanceof SyntaxError) { // JSON parsing error
-            errorMessage = 'Invalid JSON in request body.';
-            return NextResponse.json({ success: false, error: errorMessage }, { status: 400 });
+        const contentType = request.headers.get('content-type');
+        let isJsonRequest = contentType && contentType.includes('application/json');
+
+        if (!isJsonRequest) {
+            // If it's not a JSON request, it might not be a SyntaxError we can recover from.
+            // But we can check if the body is parseable as JSON.
+             try {
+                await request.json(); // try to parse
+            } catch(e) {
+                 if (e instanceof SyntaxError) {
+                    errorMessage = 'Invalid JSON in request body.';
+                    return NextResponse.json({ success: false, error: errorMessage, log }, { status: 400 });
+                }
+            }
         }
         
         if (error.code === 'ENOTFOUND' || error.message.includes('ENOTFOUND')) {
@@ -227,7 +224,12 @@ export async function POST(request: Request) {
             errorMessage = `Connection timed out. Check the host IP and port.`;
         }
         log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${errorMessage}` });
-        return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
+        
+        return new Response(`<html><body><h1>Server Error</h1><p>${errorMessage}</p></body></html>`, {
+            status: 500,
+            headers: { 'Content-Type': 'text/html' }
+        });
+
     } finally {
         if(ssh && ssh.readable) {
             ssh.end();

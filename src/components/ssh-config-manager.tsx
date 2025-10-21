@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Server, Terminal, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2, Power } from 'lucide-react';
+import { Loader2, Server, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2, Power } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +32,6 @@ import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { testServerConnection, resetServerConfig, restartService } from '@/app/actions';
-import { ConsoleOutput, LogEntry } from './console-output';
 
 
 type SshConfig = {
@@ -54,10 +53,6 @@ export function SshConfigManager() {
     const [servers, setServers] = useState<SshConfig[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [editingServer, setEditingServer] = useState<Partial<SshConfig> | null>(null);
-    const [commandServer, setCommandServer] = useState<SshConfig | null>(null);
-    const [commandOutput, setCommandOutput] = useState<LogEntry[]>([]);
-    const [isExecutingCommand, setIsExecutingCommand] = useState(false);
-    const [log, setLog] = useState<LogEntry[]>([]);
     const [isSavingPending, setIsSavingPending] = useState(false);
     const [isDeletingPending, setIsDeletingPending] = useState(false);
     const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
@@ -117,7 +112,6 @@ export function SshConfigManager() {
     const handleSaveServer = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsSavingPending(true);
-        setLog([]);
         
         const formData = new FormData(e.currentTarget);
         const serverId = formData.get('serverId') as string | null;
@@ -153,7 +147,6 @@ export function SshConfigManager() {
             });
 
             const result = await response.json();
-            if (result.log) setLog(result.log);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Fallo al guardar el servidor');
@@ -211,58 +204,6 @@ export function SshConfigManager() {
         
         setIsActionPending(prev => ({...prev, [server.id]: false}));
     }
-
-    const handleExecuteCommand = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!commandServer) return;
-        
-        const formData = new FormData(e.currentTarget);
-        const command = formData.get('command') as string;
-
-        if (!command) {
-            toast({ variant: 'destructive', title: 'Error', description: 'El comando no puede estar vacío.' });
-            return;
-        }
-
-        setIsExecutingCommand(true);
-        setCommandOutput([{ level: 'INFO', message: `Executing: ${command}` }]);
-
-        try {
-            const response = await fetch('/api/ssh', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'executeCommand',
-                    payload: { command },
-                    sshConfig: commandServer
-                })
-            });
-
-            const result = await response.json();
-            if (!response.ok) {
-                 throw new Error(result.error || 'Fallo al ejecutar el comando.');
-            }
-
-            const output: LogEntry[] = [];
-            if(result.data.stdout) {
-                output.push({ level: 'SUCCESS', message: result.data.stdout });
-            }
-            if(result.data.stderr) {
-                output.push({ level: 'ERROR', message: result.data.stderr });
-            }
-            if(output.length === 0) {
-                output.push({ level: 'INFO', message: 'El comando no produjo ninguna salida.' });
-            }
-
-            setCommandOutput(prev => [...prev, ...output]);
-
-        } catch (e: any) {
-            setCommandOutput(prev => [...prev, { level: 'ERROR', message: e.message }]);
-        } finally {
-            setIsExecutingCommand(false);
-        }
-    };
-
 
     const isPending = isSavingPending || isDeletingPending || Object.values(isActionPending).some(p => p);
     
@@ -323,9 +264,6 @@ export function SshConfigManager() {
                                   <TableCell className="font-medium">{server.name}</TableCell>
                                   <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
                                   <TableCell className="text-right">
-                                    <Button onClick={() => setCommandServer(server)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-purple-500/10 hover:text-purple-500" disabled={isPending || status !== 'online'} title="Ejecutar Comando">
-                                        <Terminal className="h-4 w-4" />
-                                    </Button>
                                     <Button onClick={() => handleServerAction('restart', server)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending || status !== 'online'} title="Reiniciar Servicio">
                                         {pending ? <Loader2 className='h-4 w-4 animate-spin'/> : <Power className="h-4 w-4" />}
                                     </Button>
@@ -396,7 +334,7 @@ export function SshConfigManager() {
             </CardContent>
         </Card>
 
-        <Dialog open={!!editingServer} onOpenChange={(isOpen) => { if (!isOpen) { setEditingServer(null); setLog([])} }}>
+        <Dialog open={!!editingServer} onOpenChange={(isOpen) => { if (!isOpen) { setEditingServer(null)} }}>
             <DialogContent className="sm:max-w-2xl">
                 <form ref={formRef} onSubmit={handleSaveServer}>
                      <DialogHeader>
@@ -433,12 +371,6 @@ export function SshConfigManager() {
                                 <Input name="password" id="ssh-password" type="password" placeholder={editingServer?.id ? 'Dejar en blanco para no cambiar' : 'Introduce la contraseña SSH'} required={!editingServer?.id} disabled={isSavingPending} />
                             </div>
                         </div>
-
-                         {log.length > 0 && (
-                            <div className="mt-4">
-                                <ConsoleOutput logs={log} title="Log de Conexión" />
-                            </div>
-                        )}
                     </div>
 
                     <DialogFooter>
@@ -453,40 +385,6 @@ export function SshConfigManager() {
                         </Button>
                     </DialogFooter>
                 </form>
-            </DialogContent>
-        </Dialog>
-        <Dialog open={!!commandServer} onOpenChange={(isOpen) => { if (!isOpen) { setCommandServer(null); setCommandOutput([])} }}>
-            <DialogContent className="sm:max-w-3xl">
-                 <DialogHeader>
-                    <DialogTitle>Ejecutar Comando en <span className="font-mono text-primary">{commandServer?.name}</span></DialogTitle>
-                    <DialogDescription>
-                        Escribe un comando para ejecutarlo en el servidor remoto.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                    <form onSubmit={handleExecuteCommand} className="flex gap-2">
-                        <Input 
-                            name="command" 
-                            placeholder="Ej: ls -la /etc" 
-                            className="font-mono"
-                            disabled={isExecutingCommand}
-                        />
-                        <Button type="submit" disabled={isExecutingCommand}>
-                            {isExecutingCommand && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Ejecutar
-                        </Button>
-                    </form>
-                    {commandOutput.length > 0 && (
-                         <ConsoleOutput logs={commandOutput} title={`root@${commandServer?.host}:~#`} />
-                    )}
-                </div>
-                 <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                            Cerrar
-                        </Button>
-                    </DialogClose>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
     </>
