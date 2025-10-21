@@ -16,6 +16,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'SSH credentials are required.' }, { status: 400 });
         }
         
+        // Handle testConnection separately as it only needs to connect and disconnect
+        if (action === 'testConnection') {
+            const ssh = await getSshConnection(sshConfig);
+            await ssh.close();
+            return NextResponse.json({ success: true, message: 'Connection successful' });
+        }
+
         const ssh = await getSshConnection(sshConfig);
         const sftp = ssh.sftp();
 
@@ -63,6 +70,7 @@ export async function POST(request: Request) {
             }
 
             default:
+                await ssh.close();
                 return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
         }
 

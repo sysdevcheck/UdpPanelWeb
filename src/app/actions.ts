@@ -597,6 +597,24 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
         return { success: false, error: "Host, username, and password are required." };
     }
 
+    const newSshConfig = {
+        host,
+        port: port ? parseInt(port, 10) : 22,
+        username,
+        password
+    };
+
+    // Test the new configuration first
+    try {
+        const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
+        if (!testResult.success) {
+            return { success: false, error: `Connection failed: ${testResult.error}` };
+        }
+    } catch(e: any) {
+         return { success: false, error: `Connection failed: ${e.message}` };
+    }
+
+
     const managers = await readManagersFile();
     const ownerIndex = managers.findIndex(m => m.username === ownerUsername);
 
@@ -604,17 +622,12 @@ export async function saveSshConfig(prevState: any, formData: FormData): Promise
         return { success: false, error: "Owner account not found." };
     }
 
-    managers[ownerIndex].ssh = {
-        host,
-        port: port ? parseInt(port, 10) : 22,
-        username,
-        password
-    };
+    managers[ownerIndex].ssh = newSshConfig;
     
     const result = await saveManagersFile(managers);
     if(result.success) {
         revalidatePath('/');
-        return { success: true, message: "SSH configuration saved successfully." };
+        return { success: true, message: "SSH Connection Successful!" };
     }
 
     return { success: false, error: result.error || "Failed to save SSH configuration." };
