@@ -10,8 +10,7 @@
     "build": "next build",
     "start": "next start -p 9002",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "create-owner": "tsx src/lib/create-owner.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
