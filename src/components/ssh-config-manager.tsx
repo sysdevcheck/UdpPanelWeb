@@ -109,7 +109,7 @@ export function SshConfigManager({ owner, ownerUsername }: { owner: Manager | nu
                          <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="outline" disabled={isPending} className="gap-2">
-                                     <LogOut className="h-4 w-4" />
+                                     {isClearingPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <LogOut className="h-4 w-4" />}
                                     Disconnect
                                 </Button>
                             </AlertDialogTrigger>
