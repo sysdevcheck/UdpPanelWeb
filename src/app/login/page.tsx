@@ -8,14 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
   const router = useRouter();
-  const auth = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('sysdevcheck@gmail.com');
+  const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -24,12 +21,6 @@ export default function LoginPage() {
     setIsPending(true);
     setError(null);
 
-    if (!auth) {
-        setError("El servicio de autenticación no está disponible. Revisa la configuración de Firebase.");
-        setIsPending(false);
-        return;
-    }
-
     if (!email || !password) {
       setError('Se requieren correo y contraseña.');
       setIsPending(false);
@@ -37,13 +28,10 @@ export default function LoginPage() {
     }
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
@@ -57,11 +45,7 @@ export default function LoginPage() {
 
     } catch (e: any) {
       console.error("Login page error:", e);
-       if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
-        setError('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
-      } else {
-        setError('Ocurrió un error inesperado durante el inicio de sesión.');
-      }
+      setError('Ocurrió un error inesperado durante el inicio de sesión.');
     } finally {
       setIsPending(false);
     }
