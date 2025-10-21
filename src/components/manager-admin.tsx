@@ -119,6 +119,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }
   
   useEffect(() => {
+    if (!addManagerState) return;
     if (addManagerState.success || addManagerState.error) {
       if(handleStateUpdate(addManagerState, 'Adding Manager')) {
           addFormRef.current?.reset();
@@ -128,6 +129,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [addManagerState]);
   
   useEffect(() => {
+    if (!editManagerState) return;
     if (editManagerState.success || editManagerState.error) {
       if(handleStateUpdate(editManagerState, 'Editing Manager')) {
           setEditingManager(null);
@@ -137,6 +139,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, [editManagerState]);
 
   useEffect(() => {
+    if (!deleteManagerState) return;
     if (deleteManagerState.success || deleteManagerState.error) {
       handleStateUpdate(deleteManagerState, 'Deleting Manager');
     }
@@ -350,3 +353,5 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
     </div>
   );
 }
+
+    
