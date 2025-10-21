@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Server, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,7 +37,7 @@ import {
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
+import { collection, query, where, Timestamp } from 'firebase/firestore';
 
 type Server = {
     id: string;
@@ -61,7 +61,7 @@ type ManagerWithStatus = Manager & {
     }
 }
 
-const getStatus = (expiresAt: Timestamp | undefined): ManagerWithStatus['status'] => {
+const getStatus = (expiresAt: Timestamp | undefined | null): ManagerWithStatus['status'] => {
     if (!expiresAt) {
       return { label: 'Permanente', daysLeft: null, variant: 'outline' };
     }
@@ -87,7 +87,6 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
   const firestore = useFirestore();
   
   const addFormRef = useRef<HTMLFormElement>(null);
-  const editFormRef = useRef<HTMLFormElement>(null);
 
   // Firestore hooks
   const serversQuery = useMemoFirebase(() => collection(firestore, 'servers'), [firestore]);
@@ -98,8 +97,11 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
   const managers = useMemo(() => (managersData || []).map(m => ({...m, status: getStatus(m.expiresAt)})), [managersData]);
   
-  const handleAddManager = async (formData: FormData) => {
+  const handleAddManager = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setIsPending(true);
+
+    const formData = new FormData(event.currentTarget);
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
@@ -152,8 +154,11 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     }
   }
 
-  const handleEditManager = async (formData: FormData) => {
+  const handleEditManager = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setIsPending(true);
+
+    const formData = new FormData(event.currentTarget);
     const uid = formData.get('uid') as string;
     const username = formData.get('username') as string;
     const newPassword = formData.get('newPassword') as string;
@@ -183,7 +188,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     return (
         <div className="space-y-6">
              <Card className="w-full max-w-5xl mx-auto shadow-lg">
-                <CardHeader><div className="h-24 flex items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></CardHeader>
+                <CardHeader><div className="h-24 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></CardHeader>
              </Card>
         </div>
     )
@@ -203,7 +208,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
             </div>
         </CardHeader>
         <CardContent>
-          <form ref={addFormRef} action={handleAddManager} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <form ref={addFormRef} onSubmit={handleAddManager} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
             <div className="grid w-full gap-1.5">
                 <Label htmlFor="username-manager">Usuario</Label>
                 <Input name="username" id="username-manager" type="text" placeholder="nombre.usuario" required disabled={isPending} />
@@ -225,10 +230,10 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                   </SelectContent>
                 </Select>
             </div>
-            <div className='sm:col-span-3 flex justify-end'>
+            <div className='flex justify-end'>
                 <Button type="submit" disabled={isPending || !allServers || allServers.length === 0} className='w-full sm:w-auto'>
-                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    <span>Añadir Manager</span>
+                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    <span>Añadir</span>
                 </Button>
             </div>
           </form>
@@ -326,6 +331,13 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                         </TableRow>
                        )
                     })}
+                    {managers.length === 0 && (
+                        <TableRow>
+                            <TableCell colSpan={4} className="h-24 text-center">
+                                No hay managers creados.
+                            </TableCell>
+                        </TableRow>
+                    )}
                 </TableBody>
               </Table>
             </div>
@@ -334,7 +346,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
 
     <Dialog open={!!editingManager} onOpenChange={(isOpen) => !isOpen && setEditingManager(null)}>
         <DialogContent>
-          <form ref={editFormRef} action={handleEditManager}>
+          <form onSubmit={handleEditManager}>
             <DialogHeader>
               <DialogTitle>Editar Cuenta: <span className='font-mono'>{editingManager?.username}</span></DialogTitle>
               <DialogDescription>

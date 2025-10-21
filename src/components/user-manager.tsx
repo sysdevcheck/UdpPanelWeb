@@ -35,7 +35,7 @@ import { useCollection, useDoc, useFirestore, useMemoFirebase } from '@/firebase
 import { collection, query, where, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
 import { syncVpnUsersWithVps, restartService, resetServerConfig } from '@/app/actions';
 
-type User = {
+type VpnUser = {
   id: string;
   username: string;
   createdAt: Timestamp;
@@ -53,7 +53,7 @@ type Server = {
     password?: string;
 }
 
-type UserWithStatus = User & {
+type UserWithStatus = VpnUser & {
     status: {
         label: 'Activo' | 'Por Vencer' | 'Vencido';
         daysLeft: number;
@@ -78,14 +78,14 @@ const getStatus = (expiresAt: Timestamp): UserWithStatus['status'] => {
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string; }}) {
+export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }}) {
   const { role, assignedServerId, uid } = user;
   const isOwner = role === 'owner';
 
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(isOwner ? null : assignedServerId || null);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<VpnUser | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   
   const { toast } = useToast();
@@ -95,38 +95,54 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
   const USERS_PER_PAGE = 10;
   
   // Fetch servers for owner
-  const serversQuery = useMemoFirebase(() => isOwner ? collection(firestore, 'servers') : null, [isOwner, firestore]);
+  const serversQuery = useMemoFirebase(() => isOwner ? query(collection(firestore, 'servers'), where('ownerUid', '==', uid)) : null, [isOwner, firestore, uid]);
   const { data: servers, isLoading: isLoadingServers } = useCollection<Server>(serversQuery);
 
   // Fetch single server for manager
   const serverDocRef = useMemoFirebase(() => !isOwner && selectedServerId ? doc(firestore, 'servers', selectedServerId) : null, [isOwner, selectedServerId, firestore]);
-  const { data: assignedServer, isLoading: isLoadingServer } = useDoc<Server>(serverDocRef);
+  const { data: assignedServerData, isLoading: isLoadingServer } = useDoc<Server>(serverDocRef);
+  const assignedServer = assignedServerData ? [assignedServerData] : null;
 
-  const currentServer = isOwner ? servers?.find(s => s.id === selectedServerId) : assignedServer;
+  const currentServerList = isOwner ? servers : assignedServer;
+  const currentServer = currentServerList?.find(s => s.id === selectedServerId);
   
   // Fetch users for the selected server
   const usersQuery = useMemoFirebase(() => {
     if (!selectedServerId) return null;
-    return query(collection(firestore, 'vpnUsers'), where('serverId', '==', selectedServerId));
-  }, [selectedServerId, firestore]);
-  const { data: vpnUsersData, isLoading: isLoadingUsers } = useCollection<User>(usersQuery);
+    let q = query(collection(firestore, 'vpnUsers'), where('serverId', '==', selectedServerId));
+    if (!isOwner) {
+        q = query(q, where('createdBy', '==', uid));
+    }
+    return q;
+  }, [selectedServerId, isOwner, uid, firestore]);
+  const { data: vpnUsersData, isLoading: isLoadingUsers } = useCollection<VpnUser>(usersQuery);
 
   const users = useMemo(() => 
     (vpnUsersData || []).map(u => ({...u, status: getStatus(u.expiresAt)})), 
   [vpnUsersData]);
 
   const handleVpsSync = async () => {
-    if (!currentServer || !vpnUsersData) return;
+    if (!currentServer) return;
     setIsActionPending(true);
 
-    const sshConfig = currentServer;
-
-    await syncVpnUsersWithVps(currentServer.id, sshConfig, vpnUsersData);
-    setIsActionPending(false);
+    try {
+        // Fetch ALL users for this server, not just the manager's
+        const allUsersForServerQuery = query(collection(firestore, 'vpnUsers'), where('serverId', '==', currentServer.id));
+        const allUsersSnapshot = await getDocs(allUsersForServerQuery);
+        const allVpnUsers = allUsersSnapshot.docs.map(d => d.data() as VpnUser);
+        
+        await syncVpnUsersWithVps(currentServer.id, currentServer, allVpnUsers);
+        toast({ title: 'Sincronización Completa', description: `Los usuarios del servidor ${currentServer.name} han sido sincronizados.` });
+    } catch (e: any) {
+        toast({ variant: 'destructive', title: 'Error de Sincronización', description: e.message });
+    } finally {
+        setIsActionPending(false);
+    }
   }
 
-  const handleAddUser = async (formData: FormData) => {
-    const username = formData.get('username') as string;
+  const handleAddUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const username = new FormData(event.currentTarget).get('username') as string;
     if (!username || !selectedServerId) {
       toast({variant: 'destructive', title: 'Error', description: 'Falta el nombre de usuario o el servidor.'});
       return;
@@ -137,7 +153,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     expiresAt.setDate(expiresAt.getDate() + 30);
 
     try {
-        const docRef = await addDoc(collection(firestore, 'vpnUsers'), {
+        await addDoc(collection(firestore, 'vpnUsers'), {
             username,
             serverId: selectedServerId,
             createdBy: uid,
@@ -149,11 +165,14 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         await handleVpsSync();
     } catch (e: any) {
         toast({variant: 'destructive', title: 'Error', description: e.message });
+    } finally {
+        setIsActionPending(false);
     }
-    setIsActionPending(false);
   }
 
-  const handleEditUser = async (formData: FormData) => {
+  const handleEditUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     const userId = formData.get('userId') as string;
     const newUsername = formData.get('newUsername') as string;
 
@@ -168,8 +187,9 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         await handleVpsSync();
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
+    } finally {
+        setIsActionPending(false);
     }
-    setIsActionPending(false);
   }
   
   const handleRenewUser = async (userId: string) => {
@@ -183,8 +203,9 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         toast({ title: 'Éxito', description: 'Usuario renovado.' });
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
+    } finally {
+        setIsActionPending(false);
     }
-    setIsActionPending(false);
   }
 
   const handleDeleteUser = async (userId: string) => {
@@ -195,8 +216,9 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         await handleVpsSync();
     } catch (e: any) {
          toast({variant: 'destructive', title: 'Error', description: e.message });
+    } finally {
+        setIsActionPending(false);
     }
-    setIsActionPending(false);
   }
   
   const handleServerAction = async (action: 'reset' | 'restart') => {
@@ -207,7 +229,6 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
       
       const formData = new FormData();
       formData.set('serverId', currentServer.id);
-      
       formData.set('sshConfig', JSON.stringify(currentServer));
 
       const result = await actionFn({ success: false }, formData);
@@ -225,10 +246,11 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return users;
     return users.filter(user => {
-        const status = user.status.label.toLowerCase();
-        if (filter === 'expiring') return status === 'por vencer';
-        if (filter === 'expired') return status === 'vencido';
-        return status === filter;
+        const statusLabel = user.status.label;
+        if (filter === 'active' && statusLabel === 'Activo') return true;
+        if (filter === 'expiring' && statusLabel === 'Por Vencer') return true;
+        if (filter === 'expired' && statusLabel === 'Vencido') return true;
+        return false;
     });
   }, [users, filter]);
 
@@ -287,7 +309,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
       return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                <CardTitle className="text-xl">Cargando usuarios...</CardTitle>
+                <CardTitle className="text-xl">Cargando...</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
@@ -346,7 +368,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         </div>
       </CardHeader>
       <CardContent>
-        <form ref={addUserFormRef} action={handleAddUser} className="flex flex-col sm:flex-row gap-2 mb-4">
+        <form ref={addUserFormRef} onSubmit={handleAddUser} className="flex flex-col sm:flex-row gap-2 mb-4">
           <Input
             name="username"
             placeholder="Nuevo usuario"
@@ -362,7 +384,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
             <div className="flex gap-1 flex-wrap">
-                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>Todos</Button>
+                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>Todos ({users.length})</Button>
                 <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Activos</Button>
                 <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Por Vencer</Button>
                 <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expired')}>Vencidos</Button>
@@ -417,7 +439,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                           <TableCell className="text-right space-x-0">
                              <div className="flex justify-end items-center">
                                 <Button onClick={() => handleRenewUser(user.id)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isActionPending} title="Renovar Usuario">
-                                    {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    <RefreshCw className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
                                     <Pencil className="h-4 w-4" />
@@ -490,7 +512,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
 
     <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
         <DialogContent>
-          <form action={handleEditUser}>
+          <form onSubmit={handleEditUser}>
             <DialogHeader>
             <DialogTitle>Editar Usuario</DialogTitle>
             <DialogDescription>
