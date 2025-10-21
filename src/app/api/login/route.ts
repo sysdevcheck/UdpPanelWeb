@@ -28,8 +28,28 @@ export async function POST(request: NextRequest) {
     // Buscar al usuario por nombre de usuario
     const user = typedUsers.find(u => u.username === username);
 
-    // Validar si el usuario existe y la contraseña coincide
-    if (!user || user.password !== password) {
+    // Si no se encuentra el usuario, es inválido
+    if (!user) {
+        return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
+    }
+
+    let passwordMatch = false;
+
+    // Lógica de validación de contraseña
+    if (user.role === 'owner') {
+        const ownerUsername = process.env.OWNER_USERNAME || 'admin';
+        const ownerPassword = process.env.OWNER_PASSWORD || 'password';
+        if (username === ownerUsername && password === ownerPassword) {
+            passwordMatch = true;
+        }
+    } else {
+        // Para managers, la contraseña está en el JSON
+        if (user.password === password) {
+            passwordMatch = true;
+        }
+    }
+
+    if (!passwordMatch) {
       return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
     }
 
@@ -54,7 +74,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Login API error:', error);
-    // Este catch ahora manejará otros errores inesperados, como un body malformado.
     return NextResponse.json({ error: 'Ocurrió un error inesperado en el servidor.' }, { status: 500 });
   }
 }

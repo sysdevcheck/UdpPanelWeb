@@ -11,8 +11,8 @@ import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password');
+  const [username, setUsername] = useState(process.env.NEXT_PUBLIC_OWNER_USERNAME || 'admin');
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_OWNER_PASSWORD || 'password');
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 

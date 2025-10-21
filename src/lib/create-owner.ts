@@ -24,10 +24,18 @@ async function main() {
         }
 
         console.log("No owner found. Creating default owner account...");
+
+        const ownerUsername = process.env.OWNER_USERNAME || 'admin';
+        const ownerPassword = process.env.OWNER_PASSWORD || 'password';
+
+        if (ownerUsername === 'admin' && ownerPassword === 'password') {
+            console.warn("\nWARNING: You are using default credentials for the owner account.");
+            console.warn("It's highly recommended to set OWNER_USERNAME and OWNER_PASSWORD in your .env file for better security.\n");
+        }
+        
         const defaultOwner = {
-            id: 'user_admin_001',
-            username: 'admin',
-            password: 'password',
+            username: ownerUsername,
+            password: ownerPassword, // This password will be checked against env vars
             role: 'owner',
             createdAt: new Date().toISOString(),
         };
@@ -35,7 +43,7 @@ async function main() {
         credentials.push(defaultOwner);
         await fs.writeFile(CREDENTIALS_PATH, JSON.stringify(credentials, null, 2), 'utf-8');
         
-        console.log("Default owner account (admin/password) created successfully in data/credentials.json");
+        console.log(`Default owner account ("${ownerUsername}") created successfully in data/credentials.json`);
 
     } catch (error) {
         console.error("Failed to create owner:", error);
