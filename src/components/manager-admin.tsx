@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar, Server, Save } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Crown, Shield, Pencil, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   AlertDialog,
@@ -34,18 +34,10 @@ import {
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 
-type SshConfig = {
-  host: string;
-  port?: number;
-  username: string;
-  password?: string;
-}
-
 type Manager = {
   username: string;
   createdAt?: string;
   expiresAt?: string;
-  sshConfig?: SshConfig;
 }
 
 type ManagerWithStatus = Manager & {
@@ -88,7 +80,6 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   const { toast } = useToast();
   const addFormRef = useRef<HTMLFormElement>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
-  const sshFormRef = useRef<HTMLFormElement>(null);
 
   const [addManagerState, addManagerAction, isAddingPending] = useActionState(addManager, initialActionState);
   const [editManagerState, editManagerAction, isEditingPending] = useActionState(editManager, initialActionState);
@@ -99,11 +90,13 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }, []);
 
   useEffect(() => {
-    setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
-  }, [initialManagers]);
+    if (isClient) {
+      setManagers(initialManagers.map(m => ({...m, status: getStatus(m.expiresAt)})));
+    }
+  }, [initialManagers, isClient]);
 
   const handleStateUpdate = (state: typeof addManagerState, actionType: string) => {
-    if (!state) return;
+    if (!state) return false;
     if (state.success && state.managers) {
         setManagers(state.managers.map(m => ({...m, status: getStatus(m.expiresAt)})));
         if (state.message) {
@@ -117,24 +110,28 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
   }
   
   useEffect(() => {
-    if(handleStateUpdate(addManagerState, 'Adding Manager')) {
-        addFormRef.current?.reset();
+    if (addManagerState.success || addManagerState.error) {
+      if(handleStateUpdate(addManagerState, 'Adding Manager')) {
+          addFormRef.current?.reset();
+      }
     }
   }, [addManagerState, toast]);
   
   useEffect(() => {
-    if(handleStateUpdate(editManagerState, 'Editing Manager')) {
-        setEditingManager(null);
+    if (editManagerState.success || editManagerState.error) {
+      if(handleStateUpdate(editManagerState, 'Editing Manager')) {
+          setEditingManager(null);
+      }
     }
   }, [editManagerState, toast]);
 
   useEffect(() => {
-    handleStateUpdate(deleteManagerState, 'Deleting Manager');
+    if (deleteManagerState.success || deleteManagerState.error) {
+      handleStateUpdate(deleteManagerState, 'Deleting Manager');
+    }
   }, [deleteManagerState, toast]);
 
   const isPending = isAddingPending || isEditingPending || isDeletingPending;
-  
-  const owner = managers.find(m => m.username === ownerUsername);
 
   if (!isClient) {
     return (
@@ -148,45 +145,6 @@ export function ManagerAdmin({ initialManagers, ownerUsername }: { initialManage
 
   return (
     <div className="space-y-6">
-      <Card className="w-full max-w-4xl mx-auto shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/> ZiVPN Server SSH Configuration</CardTitle>
-          <CardDescription>
-            Configure the remote server connection. These settings are only available to the owner and are required for the panel to work.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form ref={sshFormRef} action={editManagerAction} className="space-y-4">
-              <input type="hidden" name="oldUsername" value={ownerUsername} />
-              <input type="hidden" name="ownerUsername" value={ownerUsername} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="grid gap-1.5">
-                      <Label htmlFor="sshHost">Server IP / Hostname</Label>
-                      <Input name="sshHost" id="sshHost" placeholder="e.g., 123.45.67.89" defaultValue={owner?.sshConfig?.host} required disabled={isPending} />
-                  </div>
-                  <div className="grid gap-1.5">
-                      <Label htmlFor="sshPort">SSH Port</Label>
-                      <Input name="sshPort" id="sshPort" type="number" placeholder="22" defaultValue={owner?.sshConfig?.port} disabled={isPending} />
-                  </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="grid gap-1.5">
-                      <Label htmlFor="sshUser">SSH Username</Label>
-                      <Input name="sshUser" id="sshUser" placeholder="e.g., root" defaultValue={owner?.sshConfig?.username} required disabled={isPending} />
-                  </div>
-                  <div className="grid gap-1.5">
-                      <Label htmlFor="sshPassword">SSH Password</Label>
-                      <Input name="sshPassword" id="sshPassword" type="password" placeholder="Leave blank to keep current" defaultValue={owner?.sshConfig?.password} disabled={isPending} />
-                  </div>
-              </div>
-              <Button type="submit" disabled={isPending}>
-                  {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save SSH Configuration
-              </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       <Card className="w-full max-w-4xl mx-auto shadow-lg">
         <CardHeader>
           <CardTitle>Add New Manager</CardTitle>

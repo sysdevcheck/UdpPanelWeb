@@ -3,24 +3,24 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { exec as localExec } from 'child_process';
+import { exec } from 'child_process';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import SSH2Promise from 'ssh2-promise';
+import util from 'util';
+
+// Promisify exec for async/await usage
+const execPromise = util.promisify(exec);
 
 // ====================================================================
 // Constants & Environment Configuration
 // ====================================================================
 
 const isProduction = process.env.NODE_ENV === 'production';
-const useRemoteSsh = isProduction; // Use SSH in production, local files in dev
+const basePath = isProduction ? '/etc/zivpn' : path.join(process.cwd(), 'src', 'lib', 'local-dev');
 
-const localBasePath = path.join(process.cwd(), 'src', 'lib', 'local-dev');
-const remoteBasePath = '/etc/zivpn';
-
-const configPath = path.join(useRemoteSsh ? remoteBasePath : localBasePath, 'config.json');
-const managersConfigPath = path.join(useRemoteSsh ? remoteBasePath : localBasePath, 'managers.json');
-const usersMetadataPath = path.join(useRemoteSsh ? remoteBasePath : localBasePath, 'users-metadata.json');
+const configPath = path.join(basePath, 'config.json');
+const managersConfigPath = path.join(basePath, 'managers.json');
+const usersMetadataPath = path.join(basePath, 'users-metadata.json');
 
 const defaultConfig = {
   "listen": ":5667",
@@ -34,128 +34,54 @@ const defaultConfig = {
 };
 
 // ====================================================================
-// SSH Connection Management
+// Core Service Functions
 // ====================================================================
-
-async function getSshConnection() {
-    if (!useRemoteSsh) return null;
-
-    const managers = await readManagersFile(true); // read locally to get credentials
-    const owner = managers[0];
-
-    if (!owner || !owner.sshConfig || !owner.sshConfig.host) {
-        throw new Error("SSH configuration is not set for the owner manager.");
-    }
-    
-    const ssh = new SSH2Promise({
-        host: owner.sshConfig.host,
-        username: owner.sshConfig.username,
-        password: owner.sshConfig.password,
-        port: owner.sshConfig.port || 22,
-    });
-
-    return ssh;
-}
-
-
-// ====================================================================
-// Core Service Functions (Local and Remote)
-// ====================================================================
-
-async function readFile(filePath: string): Promise<string> {
-    if (!useRemoteSsh) {
-        await fs.mkdir(localBasePath, { recursive: true });
-        try {
-            return await fs.readFile(filePath, 'utf8');
-        } catch (error: any) {
-            if (error.code === 'ENOENT') return ''; // Return empty string if file doesn't exist
-            throw error;
-        }
-    } else {
-        const ssh = await getSshConnection();
-        if (!ssh) throw new Error("SSH connection failed");
-        const sftp = ssh.sftp();
-        try {
-            await ssh.connect();
-            const remoteDir = path.dirname(filePath);
-            try {
-                // Ensure directory exists, suppress error if it does
-                await ssh.exec(`mkdir -p ${remoteDir}`).catch(() => {});
-            } catch (e) { /* ignore */ }
-
-            const fileExists = await sftp.exists(filePath);
-            if (!fileExists) return '';
-
-            const data = await sftp.readFile(filePath, 'utf8');
-            return data as string;
-        } finally {
-            ssh.close();
-        }
-    }
-}
-
-async function writeFile(filePath: string, data: string): Promise<void> {
-    if (!useRemoteSsh) {
-        await fs.mkdir(localBasePath, { recursive: true });
-        await fs.writeFile(filePath, data, 'utf8');
-    } else {
-        const ssh = await getSshConnection();
-        if (!ssh) throw new Error("SSH connection failed");
-        const sftp = ssh.sftp();
-        try {
-            await ssh.connect();
-             const remoteDir = path.dirname(filePath);
-            try {
-                // Ensure directory exists
-                await ssh.exec(`mkdir -p ${remoteDir}`).catch(() => {});
-            } catch (e) { /* ignore */ }
-
-            await sftp.writeFile(filePath, data, 'utf8');
-        } finally {
-            ssh.close();
-        }
-    }
-}
-
 
 /**
  * Executes a shell command to restart the VPN service.
  */
 async function restartVpnService(): Promise<{ success: boolean; error?: string }> {
-  if (!useRemoteSsh) {
+  if (!isProduction) {
     console.log("DEV-MODE: Simulated systemctl restart zivpn");
     return { success: true };
   }
   
-  const ssh = await getSshConnection();
-  if (!ssh) return { success: false, error: "SSH Connection failed" };
-
   try {
-      await ssh.connect();
-      // The command must allow running without a tty, which is common for sudo configs.
-      const result = await ssh.exec('/usr/bin/sudo /usr/bin/systemctl restart zivpn');
-      if (typeof result === 'string' && (result.includes('failed') || result.includes('error'))) {
-           return { success: false, error: `Failed to restart VPN service. Details: ${result}` };
-      }
-      return { success: true };
+    // The command must allow running without a tty.
+    // 'sudoers' file must be configured to allow this user to run this command without a password.
+    const { stdout, stderr } = await execPromise('sudo /usr/bin/systemctl restart zivpn');
+    if (stderr) {
+       return { success: false, error: `Failed to restart VPN service. Details: ${stderr}` };
+    }
+    return { success: true };
   } catch (error: any) {
-       const errorMessage = `Error restarting zivpn service: ${error.message}`;
-       console.error(errorMessage);
-       return { success: false, error: `Failed to restart VPN service. Is 'sudo systemctl' configured correctly in sudoers? Details: ${error.message}` };
-  } finally {
-      ssh.close();
+     const errorMessage = `Error restarting zivpn service: ${error.message}`;
+     console.error(errorMessage);
+     return { success: false, error: `Failed to restart VPN service. Is 'sudo systemctl' configured correctly in sudoers? Details: ${error.message}` };
   }
+}
+
+/**
+ * Ensures the base directory exists.
+ */
+async function ensureDirExists() {
+    try {
+        await fs.mkdir(basePath, { recursive: true });
+    } catch (e) {
+        console.error("Could not create directory", basePath, e);
+    }
 }
 
 /**
  * Reads the raw VPN user configuration.
  */
 async function readRawConfig(): Promise<any> {
+    await ensureDirExists();
     try {
-        const data = await readFile(configPath);
+        const data = await fs.readFile(configPath, 'utf8');
         return data.trim() ? JSON.parse(data) : { ...defaultConfig };
     } catch (error: any) {
-        if (error.message.includes('No such file')) {
+        if (error.code === 'ENOENT') {
             await saveConfig([]); // Create with empty user list
             return { ...defaultConfig };
         }
@@ -168,15 +94,16 @@ async function readRawConfig(): Promise<any> {
  * Reads the users metadata file.
  */
 async function readUsersMetadata(): Promise<any[]> {
+    await ensureDirExists();
     try {
-        const data = await readFile(usersMetadataPath);
+        const data = await fs.readFile(usersMetadataPath, 'utf8');
         if (!data.trim()) {
             await saveUsersMetadata([]);
             return [];
         }
         return JSON.parse(data);
     } catch (error: any) {
-       if (error.message.includes('No such file')) {
+       if (error.code === 'ENOENT') {
             await saveUsersMetadata([]);
             return [];
         }
@@ -190,10 +117,11 @@ async function readUsersMetadata(): Promise<any[]> {
  * Saves the provided list of usernames to the main zivpn config.json file.
  */
 async function saveConfig(usernames: string[]): Promise<{ success: boolean; error?: string }> {
+  await ensureDirExists();
   try {
     const configData = await readRawConfig();
     configData.auth.config = usernames; 
-    await writeFile(configPath, JSON.stringify(configData, null, 2));
+    await fs.writeFile(configPath, JSON.stringify(configData, null, 2));
     return { success: true };
   } catch (error: any) {
     console.error(`CRITICAL: Error writing config file at ${configPath}:`, error);
@@ -206,8 +134,9 @@ async function saveConfig(usernames: string[]): Promise<{ success: boolean; erro
  * Saves the provided users metadata to the users-metadata.json file.
  */
 async function saveUsersMetadata(metadata: any[]): Promise<{ success: boolean; error?: string }> {
+  await ensureDirExists();
   try {
-    await writeFile(usersMetadataPath, JSON.stringify(metadata, null, 2));
+    await fs.writeFile(usersMetadataPath, JSON.stringify(metadata, null, 2));
     return { success: true };
   } catch (error: any) {
     console.error(`CRITICAL: Error writing metadata file at ${usersMetadataPath}:`, error);
@@ -421,24 +350,11 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
 
 /**
  * Reads the managers.json file.
- * @param forceLocal - If true, reads from the local dev file system regardless of environment.
  */
-export async function readManagersFile(forceLocal = false): Promise<any[]> {
-    const filePath = (forceLocal || !useRemoteSsh) ? path.join(localBasePath, 'managers.json') : managersConfigPath;
-    const readFn = (forceLocal || !useRemoteSsh) ? fs.readFile : readFile;
-    
-    if (!(forceLocal || !useRemoteSsh)) {
-        // When remote, we need to read the local managers file to check for SSH config.
-        // This is a bit of a chicken-and-egg, but we assume managers.json is managed by the app owner.
-        // For remote operations on managers, we will need to re-evaluate.
-        // For now, let's assume manager operations happen on a local/synced file.
-    }
-
-    await fs.mkdir(localBasePath, { recursive: true });
-
+async function readManagersFile(): Promise<any[]> {
+    await ensureDirExists();
     try {
-        // Always read managers from local file system, as it contains SSH credentials.
-        const data = await fs.readFile(path.join(localBasePath, 'managers.json'), 'utf8');
+        const data = await fs.readFile(managersConfigPath, 'utf8');
         const managers = data.trim() ? JSON.parse(data) : [];
         
         // Expiry logic only applies to non-owner managers
@@ -467,17 +383,16 @@ export async function readManagersFile(forceLocal = false): Promise<any[]> {
 
 
 /**
- * Saves the provided list of managers to the local managers.json file.
+ * Saves the provided list of managers to the managers.json file.
  */
-export async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
-    await fs.mkdir(localBasePath, { recursive: true });
-    const localManagersPath = path.join(localBasePath, 'managers.json');
+async function saveManagersFile(managers: any[]): Promise<{success: boolean, error?: string}> {
+    await ensureDirExists();
     try {
-        await fs.writeFile(localManagersPath, JSON.stringify(managers, null, 2), 'utf8');
+        await fs.writeFile(managersConfigPath, JSON.stringify(managers, null, 2), 'utf8');
         return { success: true };
     } catch (error: any) {
-        console.error(`CRITICAL: Could not write to local managers file:`, error);
-        return { success: false, error: `Failed to write managers.json. Check permissions for ${localManagersPath}. Details: ${error.message}` };
+        console.error(`CRITICAL: Could not write to managers file:`, error);
+        return { success: false, error: `Failed to write managers.json. Check permissions for ${managersConfigPath}. Details: ${error.message}` };
     }
 }
 
@@ -513,7 +428,7 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
         return { error: 'Username and password are required.' };
       }
 
-      let managers = await readManagersFile(true); // Always read local for login
+      let managers = await readManagersFile();
       
       if (managers.length === 0) {
           console.log('No managers found. Creating default admin user.');
@@ -570,13 +485,13 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
  * Checks if the given username is the owner (first manager in the list).
  */
 async function isOwner(username: string): Promise<boolean> {
-    const managers = await readManagersFile(true);
+    const managers = await readManagersFile();
     return managers.length > 0 && managers[0].username === username;
 }
 
 export async function readManagers(): Promise<{ managers?: any[], error?: string }> {
     try {
-      const managers = await readManagersFile(true);
+      const managers = await readManagersFile();
       return { managers };
     } catch(e: any) {
       return { error: e.message }
@@ -599,7 +514,7 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
         return { success: false, error: "Username and password are required." };
     }
 
-    const managers = await readManagersFile(true);
+    const managers = await readManagersFile();
     if (managers.some(m => m.username === username)) {
         return { success: false, error: "Manager username already exists." };
     }
@@ -638,7 +553,7 @@ export async function deleteManager(prevState: any, formData: FormData): Promise
         return { success: false, error: "The owner account cannot be deleted." };
     }
     
-    let managers = await readManagersFile(true);
+    let managers = await readManagersFile();
     const updatedManagers = managers.filter(m => m.username !== usernameToDelete);
 
     if (updatedManagers.length === managers.length) {
@@ -669,34 +584,18 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
     const newPassword = formData.get('newPassword') as string;
-    
-    const sshHost = formData.get('sshHost') as string;
-    const sshPort = formData.get('sshPort') as string;
-    const sshUser = formData.get('sshUser') as string;
-    const sshPassword = formData.get('sshPassword') as string;
 
     if (!oldUsername) {
         return { success: false, error: "Old username is missing." };
     }
 
-    const managers = await readManagersFile(true);
+    const managers = await readManagersFile();
     const managerIndex = managers.findIndex(m => m.username === oldUsername);
 
     if (managerIndex === -1) {
         return { success: false, error: `Manager "${oldUsername}" not found.` };
     }
     
-    // Handle SSH config update for owner
-    if (oldUsername === managers[0].username) {
-        managers[managerIndex].sshConfig = {
-            host: sshHost,
-            port: sshPort ? parseInt(sshPort, 10) : 22,
-            username: sshUser,
-            password: sshPassword,
-        }
-    }
-    
-    // Handle username/password update
     if (newUsername) {
         if (oldUsername === managers[0].username && oldUsername !== newUsername) {
             return { success: false, error: "The owner's username cannot be changed." };

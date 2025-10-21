@@ -2,12 +2,7 @@
 
 Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core).
 
-## 🚀 Modelos de Despliegue
-
-Este panel ofrece dos modos de funcionamiento flexibles:
-
-1.  **Modo Integrado (Todo en uno)**: El panel y el servicio `zivpn` se ejecutan en el **mismo VPS**. Esta es la configuración más simple y directa. La aplicación edita archivos locales en `/etc/zivpn/`.
-2.  **Modo Remoto (Panel en la Nube)**: El panel se despliega en un servicio de hosting (como **Firebase App Hosting**) y gestiona un servidor `zivpn` remoto a través de **SSH**. Esto te permite tener una interfaz web rápida y escalable sin exponer directamente tu servidor VPN.
+> **IMPORTANTE:** Esta versión está configurada para una **instalación integrada**, lo que significa que el panel y el servicio `zivpn` deben ejecutarse en el **mismo VPS**. La funcionalidad de gestión remota a través de SSH ha sido eliminada para resolver problemas de compilación.
 
 ---
 
@@ -18,17 +13,16 @@ Este panel ofrece dos modos de funcionamiento flexibles:
 - **🗓️ Expiración Automática**: Los usuarios se crean con una vida útil de 30 días y se eliminan automáticamente al vencer.
 - **🔄 Renovación Fácil**: Renueva el acceso de un usuario por otros 30 días con un solo clic.
 - **🚦 Indicadores de Estado**: Los usuarios se etiquetan visualmente como **Activo**, **Por Vencer** (dentro de 7 días) o **Vencido**.
-- **⚡ Reinicio Automático del Servicio (local o remoto)**: Después de cada acción, la aplicación reinicia el servicio `zivpn` para aplicar los cambios.
+- **⚡ Reinicio Automático del Servicio**: Después de cada acción, la aplicación reinicia el servicio `zivpn` para aplicar los cambios.
 - **🔎 Filtrado y Paginación**: Filtra y navega fácilmente por la lista de usuarios.
 - **👑 Gestión de Managers (Superadmin)**: El primer usuario (dueño) puede crear y eliminar otras cuentas de manager.
-- **☁️ Soporte para Gestión Remota (SSH)**: El dueño puede configurar credenciales SSH para que el panel gestione un servidor `zivpn` remoto.
 - **📱 Interfaz Responsiva**: Totalmente funcional en dispositivos móviles y de escritorio.
 
 ---
 
-## 🚀 Opción 1: Instalación Integrada (Panel y ZiVPN en el mismo VPS)
+## 🚀 Instalación en un Servidor/VPS
 
-> **Nota:** Usa este método si quieres instalar todo en un único servidor.
+> **Nota:** Usa este método para instalar todo en un único servidor.
 
 ### 1. Prerrequisitos
 
@@ -148,70 +142,25 @@ pm2 save
 
 ---
 
-## 🚀 Opción 2: Instalación Remota (Panel en Firebase, ZiVPN en VPS)
+## 💻 Desarrollo Local (En tu propia máquina)
 
-Este modo te permite alojar la interfaz del panel en un servicio como Firebase App Hosting y controlar tu servidor `zivpn` de forma remota a través de SSH.
+Si quieres hacer cambios en el código, puedes ejecutar la aplicación en tu computadora local.
 
-### Requisitos del Servidor VPN (VPS)
-
-1.  **`zivpn` instalado**: Asegúrate de que `zivpn` esté instalado y funcionando como un servicio `systemd`.
-2.  **Acceso SSH**: Debes tener acceso SSH al VPS con un usuario que tenga permisos `sudo`.
-3.  **Configuración `sudoers`**: Al igual que en la instalación local, el usuario SSH que utilices necesita permisos para reiniciar `zivpn` sin contraseña.
-    ```bash
-    sudo visudo
-    ```
-    Y añade la línea (reemplazando `el_usuario_ssh` si no es `root`):
-    ```
-    el_usuario_ssh ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
-    ```
-
-### Despliegue del Panel en Firebase
-
-1.  **Clona el proyecto en tu máquina local**:
+1.  **Clona el proyecto e instala dependencias**:
     ```bash
     git clone https://github.com/sysdevcheck/UdpPanelWeb.git
     cd UdpPanelWeb
     npm install
     ```
-2.  **Instala Firebase CLI**:
+2.  **Ejecuta el servidor de desarrollo**:
     ```bash
-    npm install -g firebase-tools
+    npm run dev
     ```
-3.  **Inicia sesión en Firebase**:
-    ```bash
-    firebase login
-    ```
-4.  **Inicializa Firebase en el proyecto**:
-    ```bash
-    firebase init hosting
-    ```
-    *   Selecciona un proyecto existente o crea uno nuevo.
-    *   Cuando te pregunte por el directorio público, **no uses `public`**. Como esta es una app Next.js, la configuración de despliegue es diferente. Firebase App Hosting lo detectará automáticamente.
-5.  **Despliega en Firebase App Hosting**:
-    ```bash
-    firebase deploy --only hosting
-    ```
-    Firebase te dará la URL de tu panel desplegado (ej. `https://tu-proyecto.web.app`).
-
-### Configuración de la Conexión SSH
-
-1.  **Accede al panel**: Ve a la URL de tu panel desplegado en Firebase.
-2.  **Inicia sesión**: Usa las credenciales por defecto:
-    *   **Usuario:** `admin`
-    *   **Contraseña:** `password`
-3.  **Ve a la pestaña "Managers"**: Como eres el primer usuario, eres el "dueño".
-4.  **Rellena el formulario "ZiVPN Server SSH Configuration"**:
-    *   **Server IP / Hostname**: La IP de tu VPS donde corre `zivpn`.
-    *   **SSH Port**: El puerto SSH de tu VPS (normalmente 22).
-    *   **SSH Username**: El usuario con el que te conectas por SSH (ej. `root`).
-    *   **SSH Password**: La contraseña de ese usuario.
-5.  **Guarda la configuración**.
-
-¡Listo! El panel alojado en Firebase ahora gestionará tu servidor `zivpn` de forma remota.
+    La aplicación estará disponible en `http://localhost:9002`. En este modo, en lugar de editar los archivos en `/etc/zivpn/`, se crearán y usarán archivos de configuración locales dentro de una carpeta `src/lib/local-dev/` para simular el comportamiento del servidor.
 
 ---
 
-## 🔒 Opcional y Recomendado: Usar un Subdominio con HTTPS (para Instalación Integrada)
+## 🔒 Opcional y Recomendado: Usar un Subdominio con HTTPS
 
 Para un acceso más profesional y seguro (ej. `https://panel.tudominio.com`), puedes usar **Nginx** como reverse proxy.
 
@@ -255,7 +204,7 @@ server {
 }
 ```
 
-> **Explicación de los puertos**: Nginx escucha en el puerto 80 (HTTP). Luego, reenvía internamente esas visitas a tu aplicación, que está escuchando en `localhost` en el puerto `9002`. El usuario final nunca necesita saber el puerto 9002.
+> **Explicación de los puertos**: Nginx escucha en el puerto 80 (HTTP). Luego, reenvía internamente esas visitas a tu aplicación, que está escuchando en `127.0.0.1` en el puerto `9002`. El usuario final nunca necesita saber el puerto 9002.
 
 ### Paso 3: Activar la Configuración y Reiniciar Nginx
 
@@ -324,4 +273,3 @@ Esto significa que la aplicación no tiene permisos para leer o escribir en el d
     sudo chown -R root:root /etc/zivpn
     ```
     Luego, reinicia la aplicación: `pm2 restart zivpn-panel`.
-```
