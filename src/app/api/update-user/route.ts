@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     const updateFirestorePayload: { [key: string]: any } = {};
     if (username) updateFirestorePayload.username = username;
     if (email) updateFirestorePayload.email = email;
+    if (password) updateFirestorePayload.password = password; // Also update password in firestore
     if (assignedServerId !== undefined) updateFirestorePayload.assignedServerId = assignedServerId;
 
     if(Object.keys(updateFirestorePayload).length > 0) {

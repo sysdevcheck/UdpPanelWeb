@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         uid: userRecord.uid, // Link to the auth user
         username,
         email,
+        password, // Store password for direct login
         role,
         assignedServerId: assignedServerId || null,
         createdAt: new Date(),

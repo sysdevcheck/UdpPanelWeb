@@ -7,8 +7,9 @@ import { adminApp } from '@/firebase/admin';
 
 // --- CONFIGURATION ---
 // IMPORTANT: Make sure this user already exists in Firebase Authentication.
-const OWNER_EMAIL = 'sysdevcheck@gmail.com';
-const OWNER_USERNAME = 'sysdevcheck';
+const OWNER_EMAIL = 'admin@example.com'; // Dummy email for auth
+const OWNER_USERNAME = 'admin';
+const OWNER_PASSWORD = 'password';
 // ---------------------
 
 async function createOwner() {
@@ -19,20 +20,22 @@ async function createOwner() {
     
     let userRecord;
 
-    // Step 1: Find the user in Firebase Auth by email
+    // Step 1: Find the user in Firebase Auth by email or create them
     try {
         console.log(`Looking for user with email '${OWNER_EMAIL}' in Firebase Auth...`);
         userRecord = await auth.getUserByEmail(OWNER_EMAIL);
-        console.log(`User found (UID: ${userRecord.uid}).`);
+        console.log(`User found (UID: ${userRecord.uid}). Updating password and claims.`);
+        await auth.updateUser(userRecord.uid, { password: OWNER_PASSWORD });
+
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
             console.log(`User not found. Creating a new user with email '${OWNER_EMAIL}'...`);
             userRecord = await auth.createUser({
                 email: OWNER_EMAIL,
-                password: 'password', // Set a default temporary password
+                password: OWNER_PASSWORD,
                 displayName: OWNER_USERNAME,
             });
-            console.log(`User created successfully (UID: ${userRecord.uid}). Please change the password.`);
+            console.log(`User created successfully (UID: ${userRecord.uid}).`);
         } else {
             throw error; // Re-throw other auth errors
         }
@@ -53,6 +56,7 @@ async function createOwner() {
     const ownerData = {
         uid: userRecord.uid,
         username: OWNER_USERNAME,
+        password: OWNER_PASSWORD, // Storing password for direct login
         email: OWNER_EMAIL,
         role: 'owner',
         createdAt: new Date(),
@@ -66,9 +70,9 @@ async function createOwner() {
     
     console.log("-----------------------------------------");
     console.log("✅ Success!");
-    console.log(`User '${OWNER_EMAIL}' is now configured as the Owner.`);
+    console.log(`User '${OWNER_USERNAME}' is now configured as the Owner.`);
     console.log("-----------------------------------------");
-    console.log("You can now run 'npm run dev' and log in.");
+    console.log("You can now run 'npm run dev' and log in with username 'admin' and password 'password'.");
 
   } catch (error: any) {
      console.error("❌ An error occurred while creating the owner user:", error);
