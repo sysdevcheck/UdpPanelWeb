@@ -4,6 +4,9 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Client } from 'ssh2';
+import { getFirestore } from 'firebase-admin/firestore';
+import { adminApp } from '@/firebase/admin';
+
 
 // ====================================================================
 // Constants & Environment Configuration
@@ -97,19 +100,40 @@ export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnU
 
 
 // ====================================================================
-// Authentication (Kept simple for now)
+// Authentication
 // ====================================================================
 
 export async function getLoggedInUser() {
   const cookieStore = cookies();
   const sessionCookie = cookieStore.get('session');
   if (!sessionCookie) return null;
-  // In a real Firebase app, you'd verify this token.
-  // For now, we'll just trust the username stored in it.
+
   try {
     const session = JSON.parse(sessionCookie.value);
-    return session;
-  } catch {
+    if (!session.uid) return null;
+
+    const firestore = getFirestore(adminApp);
+    
+    // Primero, revisamos si el UID corresponde al documento del dueño
+    const ownerDoc = await firestore.collection('users').doc('owner').get();
+    if (ownerDoc.exists && ownerDoc.data()?.uid === session.uid) {
+      return ownerDoc.data();
+    }
+    
+    // Si no es el dueño, buscamos en la colección de usuarios por UID
+    const usersQuery = await firestore.collection('users').where('uid', '==', session.uid).limit(1).get();
+    if (!usersQuery.empty) {
+        const userDoc = usersQuery.docs[0];
+        return userDoc.data();
+    }
+    
+    // Si no se encuentra en ningún lado, no tiene perfil en la app
+    return null;
+
+  } catch (e){
+    console.error("Failed to parse session cookie or fetch user from firestore", e);
+    // Borramos la cookie si está corrupta
+    cookies().delete('session');
     return null;
   }
 }
