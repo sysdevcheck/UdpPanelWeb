@@ -122,7 +122,7 @@ export async function POST(request: Request) {
                  return NextResponse.json({ success: false, error: 'SSH password not available.', log }, { status: 400 });
             }
         } else if (!finalSshConfig.password) {
-            if (action === 'testConnection') {
+            if (action === 'testConnection' || action === 'executeCommand') {
                 log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
                 return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
             }
@@ -184,6 +184,15 @@ export async function POST(request: Request) {
                     return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
                 }
                 return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
+            }
+
+            case 'executeCommand': {
+                const { command } = payload;
+                if (!command) {
+                    return NextResponse.json({ success: false, error: 'Command is required.' }, { status: 400 });
+                }
+                const { stdout, stderr } = await execCommand(ssh, command);
+                return NextResponse.json({ success: !stderr, data: { stdout, stderr } });
             }
 
             default:

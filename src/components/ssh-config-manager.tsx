@@ -54,8 +54,11 @@ export function SshConfigManager() {
     const [servers, setServers] = useState<SshConfig[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [editingServer, setEditingServer] = useState<Partial<SshConfig> | null>(null);
+    const [commandServer, setCommandServer] = useState<SshConfig | null>(null);
+    const [commandOutput, setCommandOutput] = useState<LogEntry[]>([]);
+    const [isExecutingCommand, setIsExecutingCommand] = useState(false);
     const [log, setLog] = useState<LogEntry[]>([]);
-    const [isSavingPending, setIsSavingPending] = useState(isSavingPending);
+    const [isSavingPending, setIsSavingPending] = useState(false);
     const [isDeletingPending, setIsDeletingPending] = useState(false);
     const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
 
@@ -209,6 +212,58 @@ export function SshConfigManager() {
         setIsActionPending(prev => ({...prev, [server.id]: false}));
     }
 
+    const handleExecuteCommand = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!commandServer) return;
+        
+        const formData = new FormData(e.currentTarget);
+        const command = formData.get('command') as string;
+
+        if (!command) {
+            toast({ variant: 'destructive', title: 'Error', description: 'El comando no puede estar vacío.' });
+            return;
+        }
+
+        setIsExecutingCommand(true);
+        setCommandOutput([{ level: 'INFO', message: `Executing: ${command}` }]);
+
+        try {
+            const response = await fetch('/api/ssh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'executeCommand',
+                    payload: { command },
+                    sshConfig: commandServer
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                 throw new Error(result.error || 'Fallo al ejecutar el comando.');
+            }
+
+            const output: LogEntry[] = [];
+            if(result.data.stdout) {
+                output.push({ level: 'SUCCESS', message: result.data.stdout });
+            }
+            if(result.data.stderr) {
+                output.push({ level: 'ERROR', message: result.data.stderr });
+            }
+            if(output.length === 0) {
+                output.push({ level: 'INFO', message: 'El comando no produjo ninguna salida.' });
+            }
+
+            setCommandOutput(prev => [...prev, ...output]);
+
+        } catch (e: any) {
+            setCommandOutput(prev => [...prev, { level: 'ERROR', message: e.message }]);
+        } finally {
+            setIsExecutingCommand(false);
+        }
+    };
+
+
     const isPending = isSavingPending || isDeletingPending || Object.values(isActionPending).some(p => p);
     
     if (isLoading) {
@@ -268,6 +323,9 @@ export function SshConfigManager() {
                                   <TableCell className="font-medium">{server.name}</TableCell>
                                   <TableCell className='font-mono text-muted-foreground'>{server.username}@{server.host}:{server.port}</TableCell>
                                   <TableCell className="text-right">
+                                    <Button onClick={() => setCommandServer(server)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-purple-500/10 hover:text-purple-500" disabled={isPending || status !== 'online'} title="Ejecutar Comando">
+                                        <Terminal className="h-4 w-4" />
+                                    </Button>
                                     <Button onClick={() => handleServerAction('restart', server)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending || status !== 'online'} title="Reiniciar Servicio">
                                         {pending ? <Loader2 className='h-4 w-4 animate-spin'/> : <Power className="h-4 w-4" />}
                                     </Button>
@@ -304,7 +362,7 @@ export function SshConfigManager() {
                                         </AlertDialogTrigger>
                                         <AlertDialogContent>
                                             <AlertDialogHeader>
-                                                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+                                                <AlertDialogTitle>¿Estás absolutely seguro?</AlertDialogTitle>
                                                 <AlertDialogDescription>
                                                     Esto eliminará permanentemente el servidor <strong className='font-mono'>{server.name}</strong> y todos sus usuarios VPN. Esta acción no se puede deshacer.
                                                 </AlertDialogDescription>
@@ -397,8 +455,40 @@ export function SshConfigManager() {
                 </form>
             </DialogContent>
         </Dialog>
+        <Dialog open={!!commandServer} onOpenChange={(isOpen) => { if (!isOpen) { setCommandServer(null); setCommandOutput([])} }}>
+            <DialogContent className="sm:max-w-3xl">
+                 <DialogHeader>
+                    <DialogTitle>Ejecutar Comando en <span className="font-mono text-primary">{commandServer?.name}</span></DialogTitle>
+                    <DialogDescription>
+                        Escribe un comando para ejecutarlo en el servidor remoto.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <form onSubmit={handleExecuteCommand} className="flex gap-2">
+                        <Input 
+                            name="command" 
+                            placeholder="Ej: ls -la /etc" 
+                            className="font-mono"
+                            disabled={isExecutingCommand}
+                        />
+                        <Button type="submit" disabled={isExecutingCommand}>
+                            {isExecutingCommand && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Ejecutar
+                        </Button>
+                    </form>
+                    {commandOutput.length > 0 && (
+                         <ConsoleOutput logs={commandOutput} title={`root@${commandServer?.host}:~#`} />
+                    )}
+                </div>
+                 <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="secondary">
+                            Cerrar
+                        </Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </>
     )
 }
-
-    
