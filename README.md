@@ -1,4 +1,3 @@
-
 # 🛡️ Panel de Gestión para ZiVPN - Multi-Manager
 
 Esta es una aplicación web Next.js que proporciona una interfaz amigable y multi-usuario para gestionar de forma segura a los usuarios de un servicio [ZiVPN](https://github.com/zivvpn/zivpn-core). En lugar de editar manualmente archivos de configuración en tu servidor, puedes usar este panel para que diferentes "managers" o "revendedores" gestionen sus propios usuarios de forma aislada.
@@ -64,9 +63,33 @@ Cada usuario de la VPN tiene un campo `createdBy` para asociarlo a un manager.
 ]
 ```
 
-## 🚀 Instalación y Despliegue en tu VPS (Ubuntu)
+## 💻 Desarrollo Local
 
-Sigue estos pasos en la terminal de tu servidor VPS para instalar y ejecutar el panel.
+Si deseas ejecutar la aplicación en tu computadora local para desarrollo:
+
+1.  **Clona el repositorio**:
+    ```bash
+    git clone https://github.com/sysdevcheck/UdpPanelWeb.git
+    cd UdpPanelWeb
+    ```
+2.  **Instala Node.js**: Asegúrate de tener Node.js v20 o superior.
+3.  **Instala dependencias**:
+    ```bash
+    npm install
+    ```
+4.  **Ejecuta el servidor de desarrollo**:
+    ```bash
+    npm run dev
+    ```
+La aplicación estará disponible en `http://localhost:9002`.
+
+> **Nota**: En modo de desarrollo, los archivos de configuración (`managers.json`, `users-metadata.json`) se crearán y guardarán en la carpeta `src/lib/local-dev/` dentro del proyecto.
+
+---
+
+## 🚀 Instalación y Despliegue en Servidor VPS (Ubuntu)
+
+> **Nota:** Estas instrucciones son para un entorno de producción en un servidor.
 
 ### 1. Prerrequisitos
 
@@ -231,6 +254,8 @@ server {
     }
 }
 ```
+
+> **Explicación de los puertos**: Nginx escucha en el puerto 80 (HTTP) para las visitas del público. Luego, reenvía internamente esas visitas a tu aplicación, que está escuchando en `localhost` en el puerto `9002`. El usuario final nunca necesita saber el puerto 9002.
 
 ### Paso 3: Activar la Configuración y Reiniciar Nginx
 
