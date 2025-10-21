@@ -61,12 +61,22 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 
         const responseBody: SshApiResponse = await response.json();
 
+        // If the fetch itself was OK, but the API reports failure (e.g. bad password)
+        // the response body will contain the useful log. We must return it.
         if (!response.ok) {
-            // Even if response is not ok, the body might contain a useful log.
             return {
                 success: false,
                 error: responseBody.error || `API request failed with status ${response.status}`,
                 log: responseBody.log || [{ level: 'ERROR', message: `API request failed with status ${response.status}` }]
+            };
+        }
+        
+        // Also handle the case where the API call is successful but the operation inside failed
+        if (!responseBody.success) {
+            return {
+                success: false,
+                error: responseBody.error,
+                log: responseBody.log,
             };
         }
 
@@ -94,7 +104,8 @@ async function restartVpnService(sshConfig: any): Promise<{ success: boolean; er
         console.log("DEV-MODE: Simulated service restart.");
         return { success: true };
     }
-    return sshApiRequest('restartService', {}, sshConfig);
+    const result = await sshApiRequest('restartService', {}, sshConfig);
+    return { success: result.success, error: result.error };
 }
 
 async function ensureDirExists(sshConfig: any) {
