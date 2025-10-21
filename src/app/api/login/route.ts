@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const sessionPayload = {
         uid: userDoc.id,
         username: userData.username,
-        email: userData.email, // keeping email if available
+        email: userData.email || null, // Make email optional
         role: userData.role || 'user',
         assignedServerId: userData.assignedServerId || null,
     };
