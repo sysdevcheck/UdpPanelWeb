@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, undefined);
 
   // Check for specific informative messages to style them differently
-  const isPermissionsError = state?.error?.includes('permissions') || state?.error?.includes('owner');
+  const isPermissionsError = state?.error?.includes('permisos') || state?.error?.includes('propietario');
 
   const getAlertVariant = () => {
     if (isPermissionsError) {
@@ -34,8 +34,8 @@ export default function LoginPage() {
   };
 
   const getAlertTitle = () => {
-    if (isPermissionsError) return 'Permissions Issue Detected';
-    if (state?.error) return 'Login Failed';
+    if (isPermissionsError) return 'Problema de Permisos Detectado';
+    if (state?.error) return 'Login Fallido';
     return 'Error';
   };
   
@@ -44,9 +44,9 @@ export default function LoginPage() {
       <form action={formAction}>
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle className="text-2xl">Login</CardTitle>
+            <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
             <CardDescription>
-              Enter your manager credentials to access the panel.
+              Introduce tus credenciales para acceder al panel.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -60,16 +60,16 @@ export default function LoginPage() {
               </Alert>
             )}
             <div className="grid gap-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Usuario</Label>
               <Input id="username" name="username" type="text" required disabled={isPending}/>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Contraseña</Label>
               <Input id="password" name="password" type="password" required disabled={isPending}/>
             </div>
           </CardContent>
           <CardFooter>
-            <Button className="w-full" type="submit" disabled={isPending}>Sign in</Button>
+            <Button className="w-full" type="submit" disabled={isPending}>Entrar</Button>
           </CardFooter>
         </Card>
       </form>

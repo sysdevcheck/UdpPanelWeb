@@ -3,13 +3,13 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useActionState } from 'react';
-import { addUser, deleteUser, editUser, renewUser, readConfig } from '@/app/actions';
+import { addUser, deleteUser, editUser, renewUser, readConfig, restartService, resetServerConfig } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server, Power, Settings2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,7 +49,7 @@ type Server = {
 
 type UserWithStatus = User & {
     status: {
-        label: 'Active' | 'Expiring' | 'Expired';
+        label: 'Activo' | 'Por Vencer' | 'Vencido';
         daysLeft: number;
         variant: "default" | "destructive" | "secondary";
     }
@@ -57,19 +57,19 @@ type UserWithStatus = User & {
 
 type StatusFilter = 'all' | 'active' | 'expiring' | 'expired';
 
-const getStatus = (expiresAt: string): { label: 'Active' | 'Expiring' | 'Expired', daysLeft: number, variant: "default" | "destructive" | "secondary" } => {
+const getStatus = (expiresAt: string): { label: 'Activo' | 'Por Vencer' | 'Vencido', daysLeft: number, variant: "default" | "destructive" | "secondary" } => {
     const expirationDate = new Date(expiresAt);
     const now = new Date();
     const diffTime = expirationDate.getTime() - now.getTime();
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (daysLeft <= 0) {
-        return { label: 'Expired', daysLeft, variant: 'destructive' };
+        return { label: 'Vencido', daysLeft, variant: 'destructive' };
     }
     if (daysLeft <= 7) {
-        return { label: 'Expiring', daysLeft, variant: 'secondary' };
+        return { label: 'Por Vencer', daysLeft, variant: 'secondary' };
     }
-    return { label: 'Active', daysLeft, variant: 'default' };
+    return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
 const initialActionState = { success: false, error: undefined, message: undefined, users: [] };
@@ -95,6 +95,8 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   const [editUserState, editUserAction, isEditingPending] = useActionState(editUser, initialActionState);
   const [deleteUserState, deleteUserAction, isDeletingPending] = useActionState(deleteUser, initialActionState);
   const [renewUserState, renewUserAction, isRenewingPending] = useActionState(renewUser, initialActionState);
+  const [resetState, resetAction, isResettingPending] = useActionState(resetServerConfig, {success: false});
+  const [restartState, restartAction, isRestartingPending] = useActionState(restartService, {success: false});
 
   useEffect(() => {
     setIsClient(true);
@@ -112,11 +114,11 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     if (state.success && state.users) {
         setUsers(state.users.map((u: User) => ({ ...u, status: getStatus(u.expiresAt) })));
         if (state.message) {
-             toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
+             toast({ title: 'Éxito', description: state.message, className: 'bg-green-500 text-white' });
         }
         return true;
     } else if (state.error) {
-      toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
+      toast({ variant: 'destructive', title: `Error en ${actionType}`, description: state.error });
     }
     return false;
   };
@@ -128,7 +130,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     if (result.auth?.config) {
       setUsers(result.auth.config.map((u: User) => ({ ...u, status: getStatus(u.expiresAt) })));
     } else if (result.error) {
-      toast({ variant: 'destructive', title: `Error loading users`, description: result.error });
+      toast({ variant: 'destructive', title: `Error al cargar usuarios`, description: result.error });
       setUsers([]);
     }
     setIsLoadingUsers(false);
@@ -137,7 +139,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   useEffect(() => {
     if (!addUserState) return;
     if (addUserState.success || addUserState.error) {
-      if(handleStateUpdate(addUserState, 'Adding User')) {
+      if(handleStateUpdate(addUserState, 'Añadir Usuario')) {
           addUserFormRef.current?.reset();
       }
     }
@@ -147,7 +149,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   useEffect(() => {
     if (!editUserState) return;
     if (editUserState.success || editUserState.error) {
-      if(handleStateUpdate(editUserState, 'Editing User')) {
+      if(handleStateUpdate(editUserState, 'Editar Usuario')) {
         setEditingUser(null);
       }
     }
@@ -157,7 +159,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   useEffect(() => {
     if (!deleteUserState) return;
     if (deleteUserState.success || deleteUserState.error) {
-      handleStateUpdate(deleteUserState, 'Deleting User');
+      handleStateUpdate(deleteUserState, 'Eliminar Usuario');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteUserState]);
@@ -165,18 +167,39 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
   useEffect(() => {
     if (!renewUserState) return;
     if (renewUserState.success || renewUserState.error) {
-      handleStateUpdate(renewUserState, 'Renewing User');
+      handleStateUpdate(renewUserState, 'Renovar Usuario');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renewUserState]);
 
+  useEffect(() => {
+    if (!resetState) return;
+    if(resetState.success && resetState.message) {
+        toast({ title: 'Éxito', description: resetState.message, className: 'bg-green-500 text-white' });
+    } else if (resetState.error) {
+         toast({ variant: 'destructive', title: 'Reseteo Fallido', description: resetState.error });
+    }
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [resetState]);
 
-  const isPending = isAddingPending || isEditingPending || isDeletingPending || isRenewingPending;
+useEffect(() => {
+    if (!restartState) return;
+    if (restartState.success && restartState.message) {
+        toast({ title: 'Éxito', description: restartState.message });
+    } else if (restartState.error) {
+        toast({ variant: 'destructive', title: 'Reinicio Fallido', description: restartState.error });
+    }
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [restartState]);
+
+
+  const isPending = isAddingPending || isEditingPending || isDeletingPending || isRenewingPending || isResettingPending || isRestartingPending;
 
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return users;
     return users.filter(user => {
         const status = user.status.label.toLowerCase();
+        if (filter === 'expiring') return status === 'por vencer';
         return status === filter;
     });
   }, [users, filter]);
@@ -205,7 +228,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                 <CardTitle className="text-xl">VPN Users</CardTitle>
+                 <CardTitle className="text-xl">Usuarios VPN</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
@@ -221,8 +244,8 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                <CardTitle className="text-xl">Manage VPN Users</CardTitle>
-                <CardDescription>Select a server to view and manage its users.</CardDescription>
+                <CardTitle className="text-xl">Gestionar Usuarios VPN</CardTitle>
+                <CardDescription>Selecciona un servidor para ver y gestionar sus usuarios.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
@@ -236,7 +259,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                         </Button>
                     ))}
                     {servers.length === 0 && (
-                        <p className='text-muted-foreground col-span-full text-center py-10'>No servers configured. Please add a server in the 'Servers' tab.</p>
+                        <p className='text-muted-foreground col-span-full text-center py-10'>No hay servidores configurados. Por favor, añade un servidor en la pestaña 'Servidores'.</p>
                     )}
                 </div>
             </CardContent>
@@ -248,7 +271,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
       return (
         <Card className="w-full max-w-5xl mx-auto shadow-lg">
             <CardHeader>
-                <CardTitle className="text-xl">Loading users for {selectedServer?.name}...</CardTitle>
+                <CardTitle className="text-xl">Cargando usuarios para {selectedServer?.name}...</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="h-40 text-center text-muted-foreground flex items-center justify-center">
@@ -263,45 +286,84 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
     <>
     <Card className="w-full max-w-5xl mx-auto shadow-lg">
       <CardHeader>
-        <div className='flex justify-between items-start'>
+        <div className='flex flex-wrap justify-between items-start gap-4'>
             <div>
                  <CardTitle className="text-xl">
-                    {isOwner ? `Users on: ${selectedServer?.name}` : 'Your VPN Users'}
+                    {isOwner ? `Usuarios en: ${selectedServer?.name}` : 'Tus Usuarios VPN'}
                  </CardTitle>
                 <CardDescription>
-                Add, edit, renew, or remove users. Users expire after 30 days.
+                Añade, edita, renueva o elimina usuarios. Los usuarios vencen a los 30 días.
                 </CardDescription>
             </div>
-            {isOwner && (
-                <Button variant="outline" onClick={() => { setSelectedServer(null); setUsers([]); }}>
-                    Change Server
-                </Button>
-            )}
+            <div className='flex gap-2 flex-wrap'>
+                {isOwner && (
+                    <Button variant="outline" onClick={() => { setSelectedServer(null); setUsers([]); }}>
+                        Cambiar Servidor
+                    </Button>
+                )}
+                {!isOwner && (
+                    <>
+                        <form action={restartAction} className='inline-flex'>
+                           <input type="hidden" name="serverId" value={selectedServer?.id || ''} />
+                           <input type="hidden" name="ownerUsername" value={managerUsername} />
+                           <Button type="submit" variant="outline" disabled={isPending} title="Reiniciar Servicio">
+                               <Power className="h-4 w-4" /> <span className='ml-2'>Reiniciar Servicio</span>
+                           </Button>
+                        </form>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" disabled={isPending} title="Resetear Configuración">
+                                    <Settings2 className="h-4 w-4" /> <span className='ml-2'>Resetear Config</span>
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <form action={resetAction}>
+                                    <input type="hidden" name="serverId" value={selectedServer?.id || ''} />
+                                    <input type="hidden" name="ownerUsername" value={managerUsername} />
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>¿Seguro que quieres resetear?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Esto ejecutará el script de reseteo en <strong className='font-mono'>{selectedServer?.name}</strong>. Se intentará respaldar y restaurar tus usuarios, pero es una operación delicada.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isResettingPending}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction type="submit" variant="destructive" disabled={isResettingPending}>
+                                            {isResettingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                            Sí, Resetear
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </form>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </>
+                )}
+            </div>
         </div>
       </CardHeader>
       <CardContent>
         <form ref={addUserFormRef} action={addUserAction} className="flex flex-col sm:flex-row gap-2 mb-4">
           <input type="hidden" name="managerUsername" value={managerUsername} />
-          {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
+          {selectedServer && <input type="hidden" name="serverId" value={selectedServer.id} />}
           <Input
             name="username"
-            placeholder="New username"
+            placeholder="Nuevo usuario"
             disabled={isPending}
             className="text-base"
             required
           />
           <Button type="submit" disabled={isPending} className="mt-2 sm:mt-0 w-full sm:w-auto">
             {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            <span>Add User</span>
+            <span>Añadir Usuario</span>
           </Button>
         </form>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
             <div className="flex gap-1 flex-wrap">
-                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>All</Button>
-                <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Active</Button>
-                <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Expiring</Button>
-                <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expired')}>Expired</Button>
+                <Button variant={filter === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('all')}>Todos</Button>
+                <Button variant={filter === 'active' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('active')}>Activos</Button>
+                <Button variant={filter === 'expiring' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expiring')}>Por Vencer</Button>
+                <Button variant={filter === 'expired' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleFilterChange('expired')}>Vencidos</Button>
             </div>
         </div>
 
@@ -310,11 +372,11 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Status</TableHead>
-                    {isOwner && <TableHead>Created By</TableHead>}
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Creado</TableHead>
+                    <TableHead>Estado</TableHead>
+                    {isOwner && <TableHead>Creado Por</TableHead>}
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -332,7 +394,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                           <TableCell className="min-w-[150px]">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Calendar className="w-4 h-4" />
-                              {format(new Date(user.createdAt), 'PPP')}
+                              {format(new Date(user.createdAt), 'PPP', { locale: (require('date-fns/locale/es')) })}
                             </div>
                           </TableCell>
                            <TableCell className="min-w-[150px]">
@@ -340,7 +402,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                                <div className="flex flex-col">
                                    <Badge variant={variant}>{label}</Badge>
                                    <span className="text-xs text-muted-foreground mt-1">
-                                      {daysLeft > 0 ? `Expires in ${daysLeft} day(s)` : `Expired ${-daysLeft} day(s) ago`}
+                                      {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
                                    </span>
                                 </div>
                              </div>
@@ -355,35 +417,35 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                                 <form action={renewUserAction} className='inline-flex'>
                                     <input type="hidden" name="username" value={user.username} />
                                     <input type="hidden" name="managerUsername" value={managerUsername} />
-                                    {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
-                                    <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending}>
+                                    {selectedServer && <input type="hidden" name="serverId" value={selectedServer.id} />}
+                                    <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending} title="Renovar Usuario">
                                         <RefreshCw className="h-4 w-4" />
                                     </Button>
                                 </form>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending} title="Eliminar Usuario">
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
                                         <form action={deleteUserAction}>
                                             <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                This action cannot be undone. This will permanently delete the user <strong className="font-mono">{user.username}</strong>.
+                                                Esta acción no se puede deshacer. Esto eliminará permanentemente al usuario <strong className="font-mono">{user.username}</strong>.
                                             </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
                                                 <input type="hidden" name="username" value={user.username} />
                                                 <input type="hidden" name="managerUsername" value={managerUsername} />
-                                                {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
-                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                {selectedServer && <input type="hidden" name="serverId" value={selectedServer.id} />}
+                                                <AlertDialogCancel disabled={isDeletingPending}>Cancelar</AlertDialogCancel>
                                                 <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
-                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                                    {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Eliminar'}
                                                 </AlertDialogAction>
                                             </AlertDialogFooter>
                                         </form>
@@ -399,7 +461,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                       <TableCell colSpan={isOwner ? 5 : 4} className="h-24 text-center text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                             <AlertCircle className="w-8 h-8" />
-                           <span>No users to display for this server or filter.</span>
+                           <span>No hay usuarios para mostrar en este servidor o filtro.</span>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -415,10 +477,10 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1 || isPending}
                 >
-                    Previous
+                    Anterior
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
+                    Página {currentPage} de {totalPages}
                 </span>
                 <Button 
                     variant="outline" 
@@ -426,7 +488,7 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages || isPending}
                 >
-                    Next
+                    Siguiente
                 </Button>
               </div>
             )}
@@ -438,15 +500,15 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
         <DialogContent>
           <form ref={editUserFormRef} action={editUserAction}>
             <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Editar Usuario</DialogTitle>
             <DialogDescription>
-                Change the username for <strong className="font-mono">{editingUser?.username}</strong>.
+                Cambiar el nombre de usuario para <strong className="font-mono">{editingUser?.username}</strong>.
             </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="newUsername" className="text-right">
-                    Username
+                    Usuario
                     </Label>
                     <Input
                       id="newUsername"
@@ -458,17 +520,17 @@ export function UserManager({ initialUsers, managerUsername, isOwner, servers = 
                     />
                     <input type="hidden" name="oldUsername" value={editingUser?.username || ''} />
                     <input type="hidden" name="managerUsername" value={managerUsername} />
-                    {isOwner && <input type="hidden" name="serverId" value={selectedServer?.id || ''} />}
+                    {selectedServer && <input type="hidden" name="serverId" value={selectedServer.id} />}
                 </div>
             </div>
             <DialogFooter>
                 <DialogClose asChild>
                     <Button type="button" variant="secondary" disabled={isEditingPending}>
-                        Cancel
+                        Cancelar
                     </Button>
                 </DialogClose>
                 <Button type="submit" disabled={isEditingPending}>
-                    {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+                    {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar Cambios"}
                 </Button>
             </DialogFooter>
           </form>

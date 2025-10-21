@@ -24,9 +24,9 @@ export default async function Home() {
 
   const configData = await readFullConfig();
   if (configData.error || !configData.managersData) {
-    console.error("Critical State: Could not read managers file.", configData.error);
+    console.error("Estado Crítico: No se pudo leer el archivo de managers.", configData.error);
     // You might want to log the user out or show a more graceful error page
-    return <div>Error loading configuration data: {configData.error}. Please check file permissions or login again.</div>;
+    return <div>Error al cargar la configuración: {configData.error}. Por favor, revisa los permisos del archivo o inicia sesión de nuevo.</div>;
   }
   const { owner, servers, managers } = configData.managersData;
 
@@ -37,7 +37,7 @@ export default async function Home() {
   const assignedServer = managerInfo ? servers.find(s => s.id === managerInfo.assignedServerId) : null;
 
   // For managers, we pre-load their users. For owners, this will be empty initially.
-  const initialVpnUsersData = !isOwner ? await readConfig(loggedInUser) : { auth: { config: [] } };
+  const initialVpnUsersData = !isOwner && assignedServer ? await readConfig(loggedInUser) : { auth: { config: [] } };
   const vpnUsers = initialVpnUsersData.auth?.config || [];
 
   const defaultTab = isOwner ? "servers" : "vpn-users";
@@ -55,15 +55,15 @@ export default async function Home() {
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <span className="text-sm text-muted-foreground">
-                <span className="hidden sm:inline">Welcome, </span>
+                <span className="hidden sm:inline">Bienvenido, </span>
                 <strong className="font-medium text-foreground">{loggedInUser}</strong>
-                 {isOwner && <span className="text-amber-500 ml-1">(Owner)</span>}
+                 {isOwner && <span className="text-amber-500 ml-1">(Dueño)</span>}
                  {!isOwner && assignedServer && <span className="text-muted-foreground ml-1 hidden sm:inline">({assignedServer.name})</span>}
               </span>
               <form action={logout}>
                 <Button variant="outline" size="sm">
                   <LogOut className="mr-0 sm:mr-2 h-4 w-4" />
-                  <span className="hidden sm:inline">Logout</span>
+                  <span className="hidden sm:inline">Cerrar Sesión</span>
                 </Button>
               </form>
             </div>
@@ -76,12 +76,12 @@ export default async function Home() {
             {isOwner && (
                 <TabsTrigger value="servers">
                     <Server className="mr-2 h-4 w-4" />
-                    Servers
+                    Servidores
                 </TabsTrigger>
             )}
             <TabsTrigger value="vpn-users">
               <Users className="mr-2 h-4 w-4" />
-              VPN Users
+              Usuarios VPN
             </TabsTrigger>
             {isOwner && (
               <TabsTrigger value="managers">
@@ -99,9 +99,9 @@ export default async function Home() {
             {!isOwner && !assignedServer && (
                  <Alert variant="destructive" className="max-w-xl mx-auto">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Not Assigned to a Server</AlertTitle>
+                  <AlertTitle>No Asignado a un Servidor</AlertTitle>
                   <AlertDescription>
-                    You are not currently assigned to a server. Please contact the owner to have your account assigned to a VPS.
+                    No estás asignado a un servidor. Por favor, contacta al dueño para que te asigne a un VPS.
                   </AlertDescription>
                 </Alert>
             )}

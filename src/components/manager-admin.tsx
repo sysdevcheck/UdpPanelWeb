@@ -54,15 +54,15 @@ type Manager = {
 
 type ManagerWithStatus = Manager & {
     status: {
-        label: 'Active' | 'Expiring' | 'Expired' | 'Permanent';
+        label: 'Activo' | 'Por Vencer' | 'Vencido' | 'Permanente';
         daysLeft: number | null;
         variant: "default" | "destructive" | "secondary" | "outline";
     }
 }
 
-const getStatus = (expiresAt: string | undefined): { label: 'Active' | 'Expiring' | 'Expired' | 'Permanent', daysLeft: number | null, variant: "default" | "destructive" | "secondary" | "outline" } => {
+const getStatus = (expiresAt: string | undefined): { label: 'Activo' | 'Por Vencer' | 'Vencido' | 'Permanente', daysLeft: number | null, variant: "default" | "destructive" | "secondary" | "outline" } => {
     if (!expiresAt) {
-      return { label: 'Permanent', daysLeft: null, variant: 'outline' };
+      return { label: 'Permanente', daysLeft: null, variant: 'outline' };
     }
     const expirationDate = new Date(expiresAt);
     const now = new Date();
@@ -70,12 +70,12 @@ const getStatus = (expiresAt: string | undefined): { label: 'Active' | 'Expiring
     const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (daysLeft <= 0) {
-        return { label: 'Expired', daysLeft, variant: 'destructive' };
+        return { label: 'Vencido', daysLeft, variant: 'destructive' };
     }
     if (daysLeft <= 7) {
-        return { label: 'Expiring', daysLeft, variant: 'secondary' };
+        return { label: 'Por Vencer', daysLeft, variant: 'secondary' };
     }
-    return { label: 'Active', daysLeft, variant: 'default' };
+    return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
 const initialActionState = {
@@ -119,11 +119,11 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
              setManagers(state.managersData.managers.map((m: any) => ({...m, status: getStatus(m.expiresAt)})));
         }
         if (state.message) {
-             toast({ title: 'Success', description: state.message, className: 'bg-green-500 text-white' });
+             toast({ title: 'Éxito', description: state.message, className: 'bg-green-500 text-white' });
         }
         return true;
     } else if (state.error) {
-        toast({ variant: 'destructive', title: `Error ${actionType}`, description: state.error });
+        toast({ variant: 'destructive', title: `Error en ${actionType}`, description: state.error });
     }
     return false;
   }
@@ -131,7 +131,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   useEffect(() => {
     if (!addManagerState) return;
     if (addManagerState.success || addManagerState.error) {
-      if(handleStateUpdate(addManagerState, 'Adding Manager')) {
+      if(handleStateUpdate(addManagerState, 'Añadir Manager')) {
           addFormRef.current?.reset();
       }
     }
@@ -141,7 +141,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   useEffect(() => {
     if (!editManagerState) return;
     if (editManagerState.success || editManagerState.error) {
-      if(handleStateUpdate(editManagerState, 'Editing Manager')) {
+      if(handleStateUpdate(editManagerState, 'Editar Manager')) {
           setEditingManager(null);
       }
     }
@@ -151,7 +151,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   useEffect(() => {
     if (!deleteManagerState) return;
     if (deleteManagerState.success || deleteManagerState.error) {
-      handleStateUpdate(deleteManagerState, 'Deleting Manager');
+      handleStateUpdate(deleteManagerState, 'Eliminar Manager');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteManagerState]);
@@ -169,9 +169,9 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast({ title: 'Success', description: 'Full system backup has been downloaded.' });
+        toast({ title: 'Éxito', description: 'El backup completo del sistema ha sido descargado.' });
     } else if (exportState.error) {
-        toast({ variant: 'destructive', title: 'Export Failed', description: exportState.error });
+        toast({ variant: 'destructive', title: 'Exportación Fallida', description: exportState.error });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportState]);
@@ -179,10 +179,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
   useEffect(() => {
     if(!importState) return;
     if (importState.success) {
-      toast({ title: 'Success', description: importState.message, className: 'bg-green-500 text-white' });
+      toast({ title: 'Éxito', description: importState.message, className: 'bg-green-500 text-white' });
       if (fileInputRef.current) fileInputRef.current.value = "";
     } else if (importState.error) {
-      toast({ variant: 'destructive', title: 'Import Failed', description: importState.error });
+      toast({ variant: 'destructive', title: 'Importación Fallida', description: importState.error });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importState]);
@@ -225,9 +225,9 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
         <CardHeader>
             <div className='flex justify-between items-start'>
                 <div>
-                    <CardTitle>Add New Manager</CardTitle>
+                    <CardTitle>Añadir Nuevo Manager</CardTitle>
                     <CardDescription>
-                        Create accounts that can manage users on a specific server.
+                        Crea cuentas que puedan gestionar usuarios en un servidor específico.
                     </CardDescription>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -235,7 +235,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                         <input type="hidden" name="ownerUsername" value={ownerUsername} />
                         <Button type="submit" variant="outline" disabled={isPending} className='w-full'>
                             {isExportingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />}
-                            Export Backup
+                            Exportar Backup
                         </Button>
                     </form>
                      <form ref={importFormRef} className='w-full'>
@@ -243,7 +243,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                         <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
                         <Button type="button" variant="outline" onClick={handleImportClick} disabled={isPending} className='w-full'>
                            {isImportingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
-                            Import Backup
+                            Importar Backup
                         </Button>
                     </form>
                 </div>
@@ -253,18 +253,18 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
           <form ref={addFormRef} action={addManagerAction} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
             <input type="hidden" name="ownerUsername" value={ownerUsername} />
             <div className="grid w-full gap-1.5">
-                <Label htmlFor="username-manager">Username</Label>
-                <Input name="username" id="username-manager" placeholder="New manager username" required disabled={isPending} />
+                <Label htmlFor="username-manager">Usuario</Label>
+                <Input name="username" id="username-manager" placeholder="Nombre del nuevo manager" required disabled={isPending} />
             </div>
              <div className="grid w-full gap-1.5">
-                <Label htmlFor="password-manager">Password</Label>
-                <Input name="password" id="password-manager" type="password" placeholder="Password" required disabled={isPending} />
+                <Label htmlFor="password-manager">Contraseña</Label>
+                <Input name="password" id="password-manager" type="password" placeholder="Contraseña" required disabled={isPending} />
             </div>
              <div className="grid w-full gap-1.5">
-                <Label htmlFor="server-select-add">Assign to Server</Label>
+                <Label htmlFor="server-select-add">Asignar a Servidor</Label>
                 <Select name="assignedServerId" required disabled={isPending || allServers.length === 0}>
                   <SelectTrigger id="server-select-add">
-                    <SelectValue placeholder={allServers.length === 0 ? "No servers available" : "Select a server"} />
+                    <SelectValue placeholder={allServers.length === 0 ? "No hay servidores" : "Seleccionar servidor"} />
                   </SelectTrigger>
                   <SelectContent>
                     {allServers.map((server) => (
@@ -276,7 +276,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
             <div className='sm:col-span-3 flex justify-end'>
                 <Button type="submit" disabled={isPending || allServers.length === 0} className='w-full sm:w-auto'>
                     {isAddingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    <span>Add Manager</span>
+                    <span>Añadir Manager</span>
                 </Button>
             </div>
           </form>
@@ -285,18 +285,18 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
       
       <Card className="w-full max-w-5xl mx-auto shadow-lg">
         <CardHeader>
-            <CardTitle>Current Accounts</CardTitle>
-            <CardDescription>List of all owner and manager accounts with access to this panel.</CardDescription>
+            <CardTitle>Cuentas Actuales</CardTitle>
+            <CardDescription>Lista de todas las cuentas de dueño y manager con acceso a este panel.</CardDescription>
         </CardHeader>
         <CardContent>
             <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Role & Status</TableHead>
-                    <TableHead>Assigned Server</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Rol y Estado</TableHead>
+                    <TableHead>Servidor Asignado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -318,7 +318,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                                 {isOwnerRow ? (
                                     <Badge variant="default" className="bg-amber-500 hover:bg-amber-500/90 w-fit">
                                         <Crown className="mr-2 h-4 w-4" />
-                                        Owner
+                                        Dueño
                                     </Badge>
                                  ) : (
                                     <Badge variant="secondary" className="w-fit">
@@ -329,14 +329,14 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                                 <Badge variant={variant} className="w-fit">{label}</Badge>
                                 {daysLeft !== null && !isOwnerRow && (
                                    <span className="text-xs text-muted-foreground">
-                                      {daysLeft > 0 ? `Expires in ${daysLeft} day(s)` : `Expired ${-daysLeft} day(s) ago`}
+                                      {daysLeft > 0 ? `Vence en ${daysLeft} día(s)` : `Venció hace ${-daysLeft} día(s)`}
                                    </span>
                                 )}
                              </div>
                           </TableCell>
                           <TableCell>
                              {isOwnerRow ? (
-                                <span className="text-sm text-muted-foreground italic">All Servers</span>
+                                <span className="text-sm text-muted-foreground italic">Todos los servidores</span>
                              ) : assignedServer ? (
                                 <div className='flex items-center gap-2'>
                                   <Server className='w-4 h-4 text-muted-foreground'/>
@@ -345,7 +345,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                              ) : (
                                 <div className='flex items-center gap-2 text-destructive'>
                                   <AlertCircle className='w-4 h-4'/>
-                                  <span className='font-medium'>Unassigned</span>
+                                  <span className='font-medium'>Sin asignar</span>
                                 </div>
                              )}
                           </TableCell>
@@ -363,18 +363,18 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                                     <AlertDialogContent>
                                         <form action={deleteManagerAction}>
                                             <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                This will permanently delete the manager <strong className="font-mono">{manager.username}</strong> and revoke their access. This does not delete the VPN users they created.
+                                                Esto eliminará permanentemente al manager <strong className="font-mono">{manager.username}</strong> y revocará su acceso. Esto no elimina los usuarios VPN que haya creado.
                                             </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
                                                 <input type="hidden" name="username" value={manager.username} />
                                                 <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                                                <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                <AlertDialogCancel disabled={isDeletingPending}>Cancelar</AlertDialogCancel>
                                                 <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
                                                     {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                                    Delete Manager
+                                                    Eliminar Manager
                                                 </AlertDialogAction>
                                             </AlertDialogFooter>
                                         </form>
@@ -395,9 +395,9 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
         <DialogContent>
           <form ref={editFormRef} action={editManagerAction}>
             <DialogHeader>
-              <DialogTitle>Edit Account: <span className='font-mono'>{editingManager?.username}</span></DialogTitle>
+              <DialogTitle>Editar Cuenta: <span className='font-mono'>{editingManager?.username}</span></DialogTitle>
               <DialogDescription>
-                  Change the details for this account.
+                  Cambia los detalles de esta cuenta.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -407,7 +407,7 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                 {editingManager?.username !== ownerUsername && (
                     <>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="newUsername" className="text-right">Username</Label>
+                            <Label htmlFor="newUsername" className="text-right">Usuario</Label>
                             <Input
                             id="newUsername"
                             name="newUsername"
@@ -418,10 +418,10 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                             />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="server-select-edit" className="text-right">Server</Label>
+                            <Label htmlFor="server-select-edit" className="text-right">Servidor</Label>
                             <Select name="assignedServerId" defaultValue={editingManager?.assignedServerId || ""} required disabled={isPending || allServers.length === 0}>
                                 <SelectTrigger id="server-select-edit" className="col-span-3">
-                                    <SelectValue placeholder={allServers.length === 0 ? "No servers available" : "Select a server"}/>
+                                    <SelectValue placeholder={allServers.length === 0 ? "No hay servidores" : "Seleccionar servidor"}/>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {allServers.map((server) => (
@@ -434,12 +434,12 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
                 )}
                 
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="newPassword" className="text-right">New Password</Label>
+                    <Label htmlFor="newPassword" className="text-right">Nueva Contraseña</Label>
                     <Input
                       id="newPassword"
                       name="newPassword"
                       type="password"
-                      placeholder="Leave blank to keep current"
+                      placeholder="Dejar en blanco para no cambiar"
                       className="col-span-3"
                       disabled={isEditingPending}
                     />
@@ -448,11 +448,11 @@ export function ManagerAdmin({ initialManagers, ownerUsername, allServers }: { i
             <DialogFooter>
                 <DialogClose asChild>
                     <Button type="button" variant="secondary" disabled={isEditingPending}>
-                        Cancel
+                        Cancelar
                     </Button>
                 </DialogClose>
                 <Button type="submit" disabled={isEditingPending}>
-                    {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+                    {isEditingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar Cambios"}
                 </Button>
             </DialogFooter>
           </form>

@@ -70,14 +70,14 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
                 // If the body isn't JSON, use the status text.
                 return {
                     success: false,
-                    error: `API request failed with status ${response.status}: ${response.statusText}`,
-                    log: [{ level: 'ERROR', message: `API request failed with status ${response.status}: ${response.statusText}` }]
+                    error: `La petición a la API falló con estado ${response.status}: ${response.statusText}`,
+                    log: [{ level: 'ERROR', message: `La petición a la API falló con estado ${response.status}: ${response.statusText}` }]
                 };
             }
             return {
                 success: false,
-                error: errorBody.error || 'An unknown API error occurred',
-                log: errorBody.log || [{ level: 'ERROR', message: errorBody.error || 'An unknown API error occurred' }]
+                error: errorBody.error || 'Ocurrió un error desconocido en la API',
+                log: errorBody.log || [{ level: 'ERROR', message: errorBody.error || 'Ocurrió un error desconocido en la API' }]
             };
         }
 
@@ -85,11 +85,11 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
         return responseBody;
 
     } catch (e: any) {
-        console.error(`Failed to fetch from SSH API endpoint. Is the app running? URL: ${baseUrl}/api/ssh`, e);
+        console.error(`Fallo al conectar con el endpoint de la API SSH. ¿Está la app corriendo? URL: ${baseUrl}/api/ssh`, e);
         return {
             success: false,
-            error: `Could not connect to the internal SSH service. Details: ${e.message}`,
-            log: [{ level: 'ERROR', message: `Could not connect to the internal SSH service. Is the panel running correctly? Details: ${e.message}` }]
+            error: `No se pudo conectar al servicio SSH interno. Detalles: ${e.message}`,
+            log: [{ level: 'ERROR', message: `No se pudo conectar al servicio SSH interno. ¿Está el panel corriendo correctamente? Detalles: ${e.message}` }]
         };
     }
 }
@@ -101,7 +101,7 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 
 async function restartVpnService(sshConfig: any | null): Promise<{ success: boolean; error?: string }> {
     if (!sshConfig) {
-        return { success: false, error: "Cannot restart service without SSH config." };
+        return { success: false, error: "No se puede reiniciar el servicio sin una configuración SSH." };
     }
 
     const result = await sshApiRequest('restartService', {}, sshConfig);
@@ -113,7 +113,7 @@ async function ensureDirExists(sshConfig: any | null, remotePath: string) {
         try {
             await fs.mkdir(path.dirname(remotePath), { recursive: true });
         } catch (e) {
-            console.error("Could not create local directory", path.dirname(remotePath), e);
+            console.error("No se pudo crear el directorio local", path.dirname(remotePath), e);
         }
         return;
     }
@@ -153,7 +153,7 @@ async function writeFile(filePath: string, data: string, sshConfig: any | null):
 // Data Access Layer (Reading/Writing JSON files)
 // ====================================================================
 
-async function getSshConfig(managerUsername: string, serverId?: string): Promise<any | null> {
+async function getSshConfigForUser(managerUsername: string, serverId?: string): Promise<any | null> {
     const managersData = await readManagersFile();
     const isOwner = await isOwnerCheck(managerUsername);
 
@@ -167,8 +167,9 @@ async function getSshConfig(managerUsername: string, serverId?: string): Promise
     if (!manager || !manager.assignedServerId) {
         return null; // Manager not found or not assigned to a server
     }
-
-    return managersData.servers.find((s:any) => s.id === manager.assignedServerId) || null;
+    // For non-owner, serverId from form is ignored, we use the one from their profile
+    const finalServerId = manager.assignedServerId;
+    return managersData.servers.find((s:any) => s.id === finalServerId) || null;
 }
 
 async function readRawConfig(sshConfig: any): Promise<any> {
@@ -184,7 +185,7 @@ async function readRawConfig(sshConfig: any): Promise<any> {
     try {
         return JSON.parse(configData);
     } catch (e) {
-        console.error(`Failed to parse config.json for ${hostIdentifier}, returning default. Content:`, configData);
+        console.error(`Fallo al parsear config.json para ${hostIdentifier}, devolviendo config por defecto. Contenido:`, configData);
         return { ...defaultConfig };
     }
 }
@@ -203,7 +204,7 @@ async function readUsersMetadata(sshConfig: any): Promise<any[]> {
     try {
         return JSON.parse(metadataStr);
     } catch (e) {
-        console.error(`Error parsing user metadata for ${hostIdentifier}:`, e);
+        console.error(`Error al parsear metadata de usuarios para ${hostIdentifier}:`, e);
         return [];
     }
 }
@@ -242,12 +243,12 @@ export async function readConfig(managerUsername: string, serverId?: string): Pr
   }
 
   // Get the sshConfig. For managers, serverId is ignored. For owners, it's required.
-  const sshConfig = await getSshConfig(managerUsername, serverId);
+  const sshConfig = await getSshConfigForUser(managerUsername, serverId);
   
   if (!sshConfig) {
       const errorMsg = isOwner 
-          ? "Server not found or specified." 
-          : "You are not assigned to a server. Please contact the owner.";
+          ? "Servidor no encontrado o no especificado." 
+          : "No estás asignado a un servidor. Por favor, contacta al dueño.";
       console.log(`Manager ${managerUsername}: ${errorMsg}`);
       return { auth: { config: [] }, error: errorMsg };
   }
@@ -258,7 +259,7 @@ export async function readConfig(managerUsername: string, serverId?: string): Pr
   const validMetadata = usersMetadata.filter((user: any) => user.expiresAt && new Date(user.expiresAt) > now);
 
   if (validMetadata.length < usersMetadata.length) {
-    console.log(`Removing ${usersMetadata.length - validMetadata.length} expired users from server ${sshConfig.host}.`);
+    console.log(`Eliminando ${usersMetadata.length - validMetadata.length} usuarios vencidos del servidor ${sshConfig.host}.`);
     const activeUsernames = validMetadata.map((user: any) => user.username);
     
     await saveUsersMetadata(validMetadata, sshConfig);
@@ -282,21 +283,21 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     const managerUsername = formData.get('managerUsername') as string;
     const serverId = formData.get('serverId') as string | undefined; // For owner
     if (!managerUsername) {
-        return { success: false, error: "Authentication required. Please log in again." };
+        return { success: false, error: "Autenticación requerida. Por favor, inicia sesión de nuevo." };
     }
-    const sshConfig = await getSshConfig(managerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(managerUsername, serverId);
     if (!sshConfig) {
-      return { success: false, error: "You are not assigned to a server or the server is misconfigured." };
+      return { success: false, error: "No estás asignado a un servidor o el servidor está mal configurado." };
     }
 
     const username = formData.get('username') as string;
     if (!username) {
-        return { success: false, error: "Username cannot be empty." };
+        return { success: false, error: "El nombre de usuario no puede estar vacío." };
     }
 
     let usersMetadata = await readUsersMetadata(sshConfig);
     if (usersMetadata.some((user: any) => user.username === username)) {
-        return { success: false, error: "User already exists." };
+        return { success: false, error: "El usuario ya existe." };
     }
     
     const now = new Date();
@@ -330,18 +331,18 @@ export async function addUser(prevState: any, formData: FormData): Promise<{ suc
     const isOwner = await isOwnerCheck(managerUsername);
     const managerUsers = isOwner ? usersMetadata : usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
-    return { success: true, users: managerUsers, message: `User "${username}" has been added.` };
+    return { success: true, users: managerUsers, message: `Usuario "${username}" ha sido añadido.` };
 }
 
 export async function deleteUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[], error?: string }> {
     const managerUsername = formData.get('managerUsername') as string;
     const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
-        return { success: false, error: "Authentication required." };
+        return { success: false, error: "Autenticación requerida." };
     }
-    const sshConfig = await getSshConfig(managerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(managerUsername, serverId);
     if (!sshConfig) {
-      return { success: false, error: "Cannot perform action: not assigned to a server." };
+      return { success: false, error: "No se puede realizar la acción: no asignado a un servidor." };
     }
 
     const username = formData.get('username') as string;
@@ -351,10 +352,10 @@ export async function deleteUser(prevState: any, formData: FormData): Promise<{ 
     const isOwner = await isOwnerCheck(managerUsername);
 
     if (!userToDelete) {
-        return { success: false, error: "User not found." };
+        return { success: false, error: "Usuario no encontrado." };
     }
     if (!isOwner && userToDelete.createdBy !== managerUsername) {
-        return { success: false, error: "Permission denied." };
+        return { success: false, error: "Permiso denegado." };
     }
     
     const updatedMetadata = usersMetadata.filter((user: any) => user.username !== username);
@@ -385,17 +386,17 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     const managerUsername = formData.get('managerUsername') as string;
     const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
-        return { success: false, error: "Authentication required." };
+        return { success: false, error: "Autenticación requerida." };
     }
-    const sshConfig = await getSshConfig(managerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(managerUsername, serverId);
     if (!sshConfig) {
-      return { success: false, error: "Cannot perform action: not assigned to a server." };
+      return { success: false, error: "No se puede realizar la acción: no asignado a un servidor." };
     }
     
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
     if (!oldUsername || !newUsername) {
-        return { success: false, error: "Usernames cannot be empty." };
+        return { success: false, error: "Los nombres de usuario no pueden estar vacíos." };
     }
 
     let usersMetadata = await readUsersMetadata(sshConfig);
@@ -403,13 +404,13 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
     const isOwner = await isOwnerCheck(managerUsername);
 
     if (userIndex === -1) {
-        return { success: false, error: `User "${oldUsername}" not found.` };
+        return { success: false, error: `Usuario "${oldUsername}" no encontrado.` };
     }
     if (!isOwner && usersMetadata[userIndex].createdBy !== managerUsername) {
-        return { success: false, error: "Permission denied." };
+        return { success: false, error: "Permiso denegado." };
     }
     if (oldUsername !== newUsername && usersMetadata.some((user: any) => user.username === newUsername)) {
-        return { success: false, error: `User "${newUsername}" already exists.` };
+        return { success: false, error: `El usuario "${newUsername}" ya existe.` };
     }
     
     usersMetadata[userIndex].username = newUsername;
@@ -434,18 +435,18 @@ export async function editUser(prevState: any, formData: FormData): Promise<{ su
 
     const managerUsers = isOwner ? usersMetadata : usersMetadata.filter((u: any) => u.createdBy === managerUsername);
     revalidatePath('/');
-    return { success: true, users: managerUsers, message: `User updated to "${newUsername}".` };
+    return { success: true, users: managerUsers, message: `Usuario actualizado a "${newUsername}".` };
 }
 
 export async function renewUser(prevState: any, formData: FormData): Promise<{ success: boolean; users?: any[]; error?: string }> {
     const managerUsername = formData.get('managerUsername') as string;
     const serverId = formData.get('serverId') as string | undefined;
     if (!managerUsername) {
-        return { success: false, error: "Authentication required." };
+        return { success: false, error: "Autenticación requerida." };
     }
-    const sshConfig = await getSshConfig(managerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(managerUsername, serverId);
     if (!sshConfig) {
-      return { success: false, error: "Cannot perform action: not assigned to a server." };
+      return { success: false, error: "No se puede realizar la acción: no asignado a un servidor." };
     }
     
     const username = formData.get('username') as string;
@@ -454,10 +455,10 @@ export async function renewUser(prevState: any, formData: FormData): Promise<{ s
     const isOwner = await isOwnerCheck(managerUsername);
 
     if (userIndex === -1) {
-        return { success: false, error: `User "${username}" not found.` };
+        return { success: false, error: `Usuario "${username}" no encontrado.` };
     }
     if (!isOwner && usersMetadata[userIndex].createdBy !== managerUsername) {
-        return { success: false, error: "Permission denied." };
+        return { success: false, error: "Permiso denegado." };
     }
 
     const now = new Date();
@@ -482,7 +483,7 @@ async function readManagersFile(): Promise<any> {
     await ensureDirExists(null, localManagersConfigPath);
     const managersData = await readFile(localManagersConfigPath, null);
     if (!managersData.trim()) {
-        console.log('No managers file found. Creating default.');
+        console.log('No se encontró archivo de managers. Creando por defecto.');
         await saveManagersFile(defaultManagersFile);
         return defaultManagersFile;
     }
@@ -494,7 +495,7 @@ async function readManagersFile(): Promise<any> {
       if (!data.managers) data.managers = [];
       return data;
     } catch(e) {
-      console.error("Failed to parse managers.json, creating default. Error:", e);
+      console.error("Fallo al parsear managers.json, creando por defecto. Error:", e);
       await saveManagersFile(defaultManagersFile);
       return defaultManagersFile;
     }
@@ -505,7 +506,7 @@ async function saveManagersFile(data: any): Promise<{success: boolean, error?: s
 }
 
 export async function getLoggedInUser() {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   return cookieStore.get('session')?.value;
 }
 
@@ -520,7 +521,7 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
   const password = formData.get('password') as string;
 
   if (!username || !password) {
-    return { error: 'Username and password are required.' };
+    return { error: 'Se requieren usuario y contraseña.' };
   }
   
   const managersData = await readManagersFile();
@@ -540,7 +541,7 @@ export async function login(prevState: any, formData: FormData): Promise<{ error
     redirect('/');
   }
 
-  return { error: 'Invalid username or password.' };
+  return { error: 'Usuario o contraseña inválidos.' };
 }
 
 // ====================================================================
@@ -561,7 +562,7 @@ export async function readFullConfig(): Promise<{ managersData?: any, error?: st
       const validManagers = data.managers.filter((m: any) => !m.expiresAt || new Date(m.expiresAt) > now);
 
       if (validManagers.length < data.managers.length) {
-          console.log(`Removing ${data.managers.length - validManagers.length} expired managers.`);
+          console.log(`Eliminando ${data.managers.length - validManagers.length} managers vencidos.`);
           data.managers = validManagers;
           await saveManagersFile(data);
       }
@@ -574,18 +575,18 @@ export async function readFullConfig(): Promise<{ managersData?: any, error?: st
 export async function addManager(prevState: any, formData: FormData): Promise<{ success: boolean; managersData?: any, error?: string, message?: string }> {
     const ownerUsername = formData.get('ownerUsername') as string;
     const isOwner = await isOwnerCheck(ownerUsername);
-    if(!isOwner) return { success: false, error: "Permission denied." };
+    if(!isOwner) return { success: false, error: "Permiso denegado." };
     
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
 
-    if (!username || !password) return { success: false, error: "Username and password are required." };
-    if (!assignedServerId) return { success: false, error: "A server must be assigned to the manager." };
+    if (!username || !password) return { success: false, error: "Se requieren usuario y contraseña." };
+    if (!assignedServerId) return { success: false, error: "Se debe asignar un servidor al manager." };
 
     const data = await readManagersFile();
     if (data.managers.some((m:any) => m.username === username) || data.owner.username === username) {
-        return { success: false, error: "Manager username already exists." };
+        return { success: false, error: "El nombre de usuario del manager ya existe." };
     }
     
     const now = new Date();
@@ -602,7 +603,7 @@ export async function addManager(prevState: any, formData: FormData): Promise<{ 
     
     if (result.success) {
       revalidatePath('/');
-      return { success: true, managersData: data, message: `Manager "${username}" has been added.` };
+      return { success: true, managersData: data, message: `Manager "${username}" ha sido añadido.` };
     } else {
       return { success: false, error: result.error, managersData: data };
     }
@@ -612,10 +613,10 @@ export async function deleteManager(prevState: any, formData: FormData): Promise
     const usernameToDelete = formData.get('username') as string;
     const ownerUsername = formData.get('ownerUsername') as string;
     const isOwner = await isOwnerCheck(ownerUsername);
-    if(!isOwner) return { success: false, error: "Permission denied." };
+    if(!isOwner) return { success: false, error: "Permiso denegado." };
 
     if (usernameToDelete === ownerUsername) {
-        return { success: false, error: "The owner account cannot be deleted." };
+        return { success: false, error: "La cuenta del dueño no se puede eliminar." };
     }
     
     let data = await readManagersFile();
@@ -623,7 +624,7 @@ export async function deleteManager(prevState: any, formData: FormData): Promise
     data.managers = data.managers.filter((m:any) => m.username !== usernameToDelete);
 
     if (data.managers.length === initialCount) {
-        return { success: false, error: "Manager not found." };
+        return { success: false, error: "Manager no encontrado." };
     }
 
     const result = await saveManagersFile(data);
@@ -638,21 +639,21 @@ export async function deleteManager(prevState: any, formData: FormData): Promise
 export async function editManager(prevState: any, formData: FormData): Promise<{ success: boolean; managersData?: any, error?: string; message?: string; }> {
     const ownerUsername = formData.get('ownerUsername') as string;
     const isOwner = await isOwnerCheck(ownerUsername);
-    if (!isOwner) return { success: false, error: "Permission denied." };
+    if (!isOwner) return { success: false, error: "Permiso denegado." };
 
     const oldUsername = formData.get('oldUsername') as string;
     const newUsername = formData.get('newUsername') as string;
     const newPassword = formData.get('newPassword') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
 
-    if (!oldUsername) return { success: false, error: "Old username is missing." };
+    if (!oldUsername) return { success: false, error: "Falta el nombre de usuario antiguo." };
 
     const data = await readManagersFile();
     const managerIndex = data.managers.findIndex((m:any) => m.username === oldUsername);
 
     if (managerIndex === -1) {
         const isOwnerAccount = oldUsername === data.owner.username;
-        if (!isOwnerAccount) return { success: false, error: `Manager "${oldUsername}" not found.` };
+        if (!isOwnerAccount) return { success: false, error: `Manager "${oldUsername}" no encontrado.` };
         
         // Editing owner account
         if(newPassword) data.owner.password = newPassword;
@@ -661,7 +662,7 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
         // Editing a regular manager
         if (newUsername) {
             if (newUsername !== oldUsername && (data.managers.some((m:any) => m.username === newUsername) || data.owner.username === newUsername)) {
-                return { success: false, error: `Manager username "${newUsername}" already exists.` };
+                return { success: false, error: `El nombre de usuario "${newUsername}" ya existe.` };
             }
             data.managers[managerIndex].username = newUsername;
         }
@@ -679,7 +680,7 @@ export async function editManager(prevState: any, formData: FormData): Promise<{
         await logout();
     }
     
-    return { success: true, managersData: data, message: `Account for "${newUsername || oldUsername}" has been updated.` };
+    return { success: true, managersData: data, message: `La cuenta de "${newUsername || oldUsername}" ha sido actualizada.` };
 }
 
 
@@ -692,7 +693,7 @@ export async function testServerConnection(serverConfig: any): Promise<{ success
 
 export async function saveServerConfig(prevState: any, formData: FormData): Promise<SshApiResponse> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied.", log: [] };
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permiso denegado.", log: [] };
 
     const serverId = formData.get('serverId') as string | null; // Will be null for new servers
     const name = formData.get('name') as string;
@@ -702,7 +703,7 @@ export async function saveServerConfig(prevState: any, formData: FormData): Prom
     const password = formData.get('password') as string;
 
     if (!name || !host || !username || !password) {
-        return { success: false, error: "Name, host, username, and password are required.", log: [] };
+        return { success: false, error: "Nombre, host, usuario y contraseña son requeridos.", log: [] };
     }
 
     const newSshConfig = {
@@ -715,7 +716,7 @@ export async function saveServerConfig(prevState: any, formData: FormData): Prom
 
     const testResult = await sshApiRequest('testConnection', {}, newSshConfig);
     if (!testResult.success) {
-        return { success: false, error: testResult.error || 'Connection failed', log: testResult.log };
+        return { success: false, error: testResult.error || 'Conexión fallida', log: testResult.log };
     }
 
     const data = await readManagersFile();
@@ -733,28 +734,28 @@ export async function saveServerConfig(prevState: any, formData: FormData): Prom
     const result = await saveManagersFile(data);
     if(result.success) {
         revalidatePath('/');
-        return { success: true, message: "Server Connection Verified & Saved!", log: testResult.log };
+        return { success: true, message: "¡Conexión Verificada y Guardada!", log: testResult.log };
     }
 
     const finalLog = testResult.log || [];
-    finalLog.push({ level: 'ERROR', message: `Failed to save configuration file: ${result.error}` });
-    return { success: false, error: result.error || "Failed to save server configuration.", log: finalLog };
+    finalLog.push({ level: 'ERROR', message: `Fallo al guardar el archivo de configuración: ${result.error}` });
+    return { success: false, error: result.error || "Fallo al guardar la configuración del servidor.", log: finalLog };
 }
 
 
 export async function deleteServer(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permiso denegado." };
     
     const serverId = formData.get('serverId') as string;
-    if (!serverId) return { success: false, error: "Server ID is missing." };
+    if (!serverId) return { success: false, error: "Falta el ID del servidor." };
 
     const data = await readManagersFile();
     
     const initialServerCount = data.servers.length;
     data.servers = data.servers.filter((s: any) => s.id !== serverId);
     if(data.servers.length === initialServerCount) {
-        return { success: false, error: "Server not found." };
+        return { success: false, error: "Servidor no encontrado." };
     }
 
     // Un-assign any managers that were assigned to this server
@@ -768,58 +769,60 @@ export async function deleteServer(prevState: any, formData: FormData): Promise<
     const result = await saveManagersFile(data);
     if (result.success) {
         revalidatePath('/');
-        return { success: true, message: "Server has been deleted." };
+        return { success: true, message: "El servidor ha sido eliminado." };
     }
 
-    return { success: false, error: result.error || "Failed to delete server." };
+    return { success: false, error: result.error || "Fallo al eliminar el servidor." };
 }
 
 export async function resetServerConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
-    const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
-    
+    const username = formData.get('ownerUsername') as string; // Can be owner or manager
     const serverId = formData.get('serverId') as string;
-    if (!serverId) return { success: false, error: "Server ID is missing." };
+    
+    if (!username || !serverId) {
+        return { success: false, error: "Falta información del usuario o del servidor." };
+    }
 
-    const sshConfig = await getSshConfig(ownerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(username, serverId);
     if (!sshConfig) {
-        return { success: false, error: "Could not find SSH configuration for this server." };
+        return { success: false, error: "No se pudo encontrar la configuración SSH para este servidor." };
     }
     
     const result = await sshApiRequest('resetConfig', { host: sshConfig.host }, sshConfig);
 
     if (result.success) {
         revalidatePath('/');
-        return { success: true, message: `Server ${sshConfig.name} has been reset successfully.` };
+        return { success: true, message: `El servidor ${sshConfig.name} ha sido reseteado exitosamente.` };
     }
 
-    return { success: false, error: result.error || "An unknown error occurred during server reset." };
+    return { success: false, error: result.error || "Ocurrió un error desconocido durante el reseteo del servidor." };
 }
 
 export async function restartService(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
-    const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
-
+    const username = formData.get('ownerUsername') as string; // Can be owner or manager
     const serverId = formData.get('serverId') as string;
-    if (!serverId) return { success: false, error: "Server ID is missing." };
+
+    if (!username || !serverId) {
+        return { success: false, error: "Falta información del usuario o del servidor." };
+    }
     
-    const sshConfig = await getSshConfig(ownerUsername, serverId);
+    const sshConfig = await getSshConfigForUser(username, serverId);
     if (!sshConfig) {
-        return { success: false, error: "Could not find SSH configuration for this server." };
+        return { success: false, error: "No se pudo encontrar la configuración SSH para este servidor." };
     }
 
     const result = await restartVpnService(sshConfig);
 
     if (result.success) {
-        return { success: true, message: `Service on ${sshConfig.name} has been restarted.` };
+        return { success: true, message: `El servicio en ${sshConfig.name} ha sido reiniciado.` };
     }
-    return { success: false, error: result.error || "An unknown error occurred during service restart." };
+    return { success: false, error: result.error || "Ocurrió un error desconocido durante el reinicio del servicio." };
 }
 
 
 export async function exportBackup(prevState: any, formData: FormData): Promise<{ success: boolean; data?: string; error?: string; }> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permiso denegado." };
 
     try {
         const managersData = await readManagersFile();
@@ -829,7 +832,7 @@ export async function exportBackup(prevState: any, formData: FormData): Promise<
         };
 
         for (const server of managersData.servers) {
-            const sshConfig = await getSshConfig(ownerUsername, server.id);
+            const sshConfig = await getSshConfigForUser(ownerUsername, server.id);
             if (sshConfig) {
                 const usersMetadata = await readUsersMetadata(sshConfig);
                 // Use server ID as key for uniqueness instead of host
@@ -845,11 +848,11 @@ export async function exportBackup(prevState: any, formData: FormData): Promise<
 
 export async function importBackup(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string; }> {
     const ownerUsername = formData.get('ownerUsername') as string;
-    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permission denied." };
+    if (!await isOwnerCheck(ownerUsername)) return { success: false, error: "Permiso denegado." };
 
     const backupFileContent = formData.get('backupFile') as string;
     if (!backupFileContent) {
-        return { success: false, error: "No backup file content provided." };
+        return { success: false, error: "No se proporcionó contenido de archivo de backup." };
     }
 
     try {
@@ -857,7 +860,7 @@ export async function importBackup(prevState: any, formData: FormData): Promise<
 
         // Validate backup structure
         if (!backupData.owner || !backupData.servers || !backupData.managers || !backupData.vpnUsers) {
-            throw new Error("Invalid backup file structure.");
+            throw new Error("Estructura de archivo de backup inválida.");
         }
 
         const { vpnUsers, ...managersData } = backupData;
@@ -867,7 +870,7 @@ export async function importBackup(prevState: any, formData: FormData): Promise<
 
         // Restore VPN users for each server
         for (const server of managersData.servers) {
-            const sshConfig = await getSshConfig(ownerUsername, server.id);
+            const sshConfig = await getSshConfigForUser(ownerUsername, server.id);
             const usersForServer = vpnUsers[server.id];
 
             if (sshConfig && usersForServer) {
@@ -884,9 +887,9 @@ export async function importBackup(prevState: any, formData: FormData): Promise<
             }
         }
         revalidatePath('/');
-        return { success: true, message: "Backup restored successfully!" };
+        return { success: true, message: "¡Backup restaurado exitosamente!" };
 
     } catch (e: any) {
-        return { success: false, error: `Failed to restore backup: ${e.message}` };
+        return { success: false, error: `Fallo al restaurar backup: ${e.message}` };
     }
 }

@@ -54,7 +54,7 @@ type SshActionState = {
     log?: LogEntry[];
 }
 
-type ServerStatus = 'online' | 'offline' | 'checking';
+type ServerStatus = 'online' | 'offline' | 'comprobando';
 
 const initialActionState: SshActionState = {
     success: false,
@@ -80,7 +80,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     const checkAllServers = async () => {
         setServerStatuses(prev => {
             const checkingState: Record<string, ServerStatus> = {};
-            initialServers.forEach(s => { checkingState[s.id] = 'checking' });
+            initialServers.forEach(s => { checkingState[s.id] = 'comprobando' });
             return checkingState;
         });
 
@@ -110,12 +110,12 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
         if (saveState.log && saveState.log.length > 0) setLog(saveState.log);
 
         if(saveState.success && saveState.message) {
-            toast({ title: 'Success', description: saveState.message, className: 'bg-green-500 text-white' });
+            toast({ title: 'Éxito', description: saveState.message, className: 'bg-green-500 text-white' });
             setEditingServer(null);
             formRef.current?.reset();
             checkAllServers(); // Re-check statuses after a change
         } else if (saveState.error) {
-             toast({ variant: 'destructive', title: 'Action Failed', description: saveState.error });
+             toast({ variant: 'destructive', title: 'Acción Fallida', description: saveState.error });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [saveState]);
@@ -123,10 +123,10 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
      useEffect(() => {
         if (!deleteState) return;
         if(deleteState.success && deleteState.message) {
-            toast({ title: 'Success', description: deleteState.message });
+            toast({ title: 'Éxito', description: deleteState.message });
             checkAllServers(); // Re-check statuses after a change
         } else if (deleteState.error) {
-             toast({ variant: 'destructive', title: 'Delete Failed', description: deleteState.error });
+             toast({ variant: 'destructive', title: 'Eliminación Fallida', description: deleteState.error });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deleteState]);
@@ -134,9 +134,9 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     useEffect(() => {
         if (!resetState) return;
         if(resetState.success && resetState.message) {
-            toast({ title: 'Success', description: resetState.message, className: 'bg-green-500 text-white' });
+            toast({ title: 'Éxito', description: resetState.message, className: 'bg-green-500 text-white' });
         } else if (resetState.error) {
-             toast({ variant: 'destructive', title: 'Reset Failed', description: resetState.error });
+             toast({ variant: 'destructive', title: 'Reseteo Fallido', description: resetState.error });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resetState]);
@@ -144,9 +144,9 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     useEffect(() => {
         if (!restartState) return;
         if (restartState.success && restartState.message) {
-            toast({ title: 'Success', description: restartState.message });
+            toast({ title: 'Éxito', description: restartState.message });
         } else if (restartState.error) {
-            toast({ variant: 'destructive', title: 'Restart Failed', description: restartState.error });
+            toast({ variant: 'destructive', title: 'Reinicio Fallido', description: restartState.error });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restartState]);
@@ -159,18 +159,18 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
              <CardHeader>
                 <div className='flex justify-between items-start'>
                     <div>
-                        <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Server Management</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/>Gestión de Servidores</CardTitle>
                         <CardDescription>
-                            Add, edit, or remove your remote VPS configurations. Managers can be assigned to these servers.
+                            Añade, edita o elimina las configuraciones de tus VPS remotos.
                         </CardDescription>
                     </div>
                      <div className='flex gap-2'>
-                        <Button variant="outline" onClick={checkAllServers} disabled={Object.values(serverStatuses).some(s => s === 'checking')}>
-                            {Object.values(serverStatuses).some(s => s === 'checking') ? <Loader2 className='mr-2 h-4 w-4 animate-spin'/> : <RefreshCw className='mr-2 h-4 w-4'/>}
-                             Re-check All
+                        <Button variant="outline" onClick={checkAllServers} disabled={Object.values(serverStatuses).some(s => s === 'comprobando')}>
+                            {Object.values(serverStatuses).some(s => s === 'comprobando') ? <Loader2 className='mr-2 h-4 w-4 animate-spin'/> : <RefreshCw className='mr-2 h-4 w-4'/>}
+                             Verificar Todos
                         </Button>
                         <Button onClick={() => setEditingServer({} as SshConfig)} disabled={isPending}>
-                            <Plus className='mr-2 h-4 w-4'/> Add Server
+                            <Plus className='mr-2 h-4 w-4'/> Añadir Servidor
                         </Button>
                      </div>
                 </div>
@@ -180,10 +180,10 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Connection Details</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Detalles de Conexión</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -193,7 +193,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                             return (
                                 <TableRow key={server.id}>
                                   <TableCell>
-                                     {status === 'checking' && <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin" />Checking</Badge>}
+                                     {status === 'comprobando' && <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin" />Comprobando</Badge>}
                                      {status === 'online' && <Badge className='bg-green-500 hover:bg-green-600'>Online</Badge>}
                                      {status === 'offline' && <Badge variant="destructive">Offline</Badge>}
                                   </TableCell>
@@ -203,13 +203,13 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                                     <form action={restartAction} className='inline-flex'>
                                         <input type="hidden" name="serverId" value={server.id} />
                                         <input type="hidden" name="ownerUsername" value={ownerUsername} />
-                                        <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending || status !== 'online'}>
+                                        <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isPending || status !== 'online'} title="Reiniciar Servicio">
                                             <Power className="h-4 w-4" />
                                         </Button>
                                     </form>
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500" disabled={isPending || status !== 'online'}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500" disabled={isPending || status !== 'online'} title="Resetear Configuración">
                                                 <Settings2 className="h-4 w-4" />
                                             </Button>
                                         </AlertDialogTrigger>
@@ -218,27 +218,27 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                                                 <input type="hidden" name="serverId" value={server.id} />
                                                 <input type="hidden" name="ownerUsername" value={ownerUsername} />
                                                 <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure you want to reset?</AlertDialogTitle>
+                                                    <AlertDialogTitle>¿Seguro que quieres resetear?</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        This will execute the reset script on <strong className='font-mono'>{server.name}</strong>. It will attempt to back up and restore your users, but this is a destructive operation. Please be certain.
+                                                        Esto ejecutará el script de reseteo en <strong className='font-mono'>{server.name}</strong>. Se intentará respaldar y restaurar tus usuarios, pero es una operación destructiva. Por favor, confirma.
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
-                                                    <AlertDialogCancel disabled={isResettingPending}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogCancel disabled={isResettingPending}>Cancelar</AlertDialogCancel>
                                                     <AlertDialogAction type="submit" variant="destructive" disabled={isResettingPending}>
                                                         {isResettingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                                        Yes, Reset Server
+                                                        Sí, Resetear Servidor
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </form>
                                         </AlertDialogContent>
                                     </AlertDialog>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isPending} onClick={() => setEditingServer(server)} title="Editar Servidor">
                                         <Pencil className="h-4 w-4" />
                                     </Button>
                                      <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isPending} title="Eliminar Servidor">
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </AlertDialogTrigger>
@@ -247,16 +247,16 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                                                 <input type="hidden" name="serverId" value={server.id} />
                                                 <input type="hidden" name="ownerUsername" value={ownerUsername} />
                                                 <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                    <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        This will permanently delete the server <strong className='font-mono'>{server.name}</strong>. Managers assigned to this server will lose access. This action cannot be undone.
+                                                        Esto eliminará permanentemente el servidor <strong className='font-mono'>{server.name}</strong>. Los managers asignados a este servidor perderán el acceso. Esta acción no se puede deshacer.
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
-                                                    <AlertDialogCancel disabled={isDeletingPending}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogCancel disabled={isDeletingPending}>Cancelar</AlertDialogCancel>
                                                     <AlertDialogAction type="submit" className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
                                                         {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                                        Delete Server
+                                                        Eliminar Servidor
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </form>
@@ -271,7 +271,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                             <div className='flex flex-col items-center gap-2'>
                                 <ServerCrash className='w-8 h-8'/>
-                                <span>No servers configured. Add one to get started.</span>
+                                <span>No hay servidores configurados. Añade uno para empezar.</span>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -286,9 +286,9 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
             <DialogContent className="sm:max-w-2xl">
                 <form ref={formRef} action={saveAction}>
                      <DialogHeader>
-                        <DialogTitle>{editingServer?.id ? 'Edit Server' : 'Add New Server'}</DialogTitle>
+                        <DialogTitle>{editingServer?.id ? 'Editar Servidor' : 'Añadir Nuevo Servidor'}</DialogTitle>
                         <DialogDescription>
-                            Enter the SSH credentials for the server. The connection will be tested before saving.
+                            Introduce las credenciales SSH para el servidor. La conexión será probada antes de guardar.
                         </DialogDescription>
                     </DialogHeader>
                     
@@ -297,27 +297,27 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
 
                     <div className="space-y-4 py-4">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="name">Server Name</Label>
-                            <Input name="name" id="name" placeholder="e.g., VPS-Miami" defaultValue={editingServer?.name} required disabled={isPending} />
+                            <Label htmlFor="name">Nombre del Servidor</Label>
+                            <Input name="name" id="name" placeholder="Ej: VPS-Miami" defaultValue={editingServer?.name} required disabled={isPending} />
                         </div>
                         <div className="grid sm:grid-cols-2 gap-4">
                             <div className="grid gap-1.5">
-                                <Label htmlFor="host">Server IP / Hostname</Label>
-                                <Input name="host" id="host" placeholder="e.g., 123.45.67.89" defaultValue={editingServer?.host} required disabled={isPending} />
+                                <Label htmlFor="host">IP / Hostname del Servidor</Label>
+                                <Input name="host" id="host" placeholder="Ej: 123.45.67.89" defaultValue={editingServer?.host} required disabled={isPending} />
                             </div>
                             <div className="grid gap-1.5">
-                                <Label htmlFor="port">SSH Port</Label>
+                                <Label htmlFor="port">Puerto SSH</Label>
                                 <Input name="port" id="port" type="number" placeholder="22" defaultValue={editingServer?.port || 22} disabled={isPending} />
                             </div>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-4">
                             <div className="grid gap-1.5">
-                                <Label htmlFor="ssh-username">SSH Username</Label>
-                                <Input name="username" id="ssh-username" placeholder="e.g., root" defaultValue={editingServer?.username} required disabled={isPending} />
+                                <Label htmlFor="ssh-username">Usuario SSH</Label>
+                                <Input name="username" id="ssh-username" placeholder="Ej: root" defaultValue={editingServer?.username} required disabled={isPending} />
                             </div>
                             <div className="grid gap-1.5">
-                                <Label htmlFor="ssh-password">SSH Password</Label>
-                                <Input name="password" id="ssh-password" type="password" placeholder={editingServer?.id ? 'Leave blank to keep unchanged' : 'Enter SSH password'} required={!editingServer?.id} disabled={isPending} />
+                                <Label htmlFor="ssh-password">Contraseña SSH</Label>
+                                <Input name="password" id="ssh-password" type="password" placeholder={editingServer?.id ? 'Dejar en blanco para no cambiar' : 'Introduce la contraseña SSH'} required={!editingServer?.id} disabled={isPending} />
                             </div>
                         </div>
 
@@ -325,7 +325,7 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                             <div className="mt-4 p-4 bg-black rounded-md font-mono text-sm text-white space-y-2 max-h-48 overflow-y-auto">
                                 <div className="flex items-center gap-2 border-b border-gray-700 pb-2 mb-2">
                                     <Terminal className="w-5 h-5 text-gray-400" />
-                                    <h3 className="font-semibold">Connection Log</h3>
+                                    <h3 className="font-semibold">Log de Conexión</h3>
                                 </div>
                                 {log.map((entry, index) => (
                                     <div key={index} className="flex items-start">
@@ -346,12 +346,12 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
                     <DialogFooter>
                         <DialogClose asChild>
                             <Button type="button" variant="secondary" disabled={isPending}>
-                                Cancel
+                                Cancelar
                             </Button>
                         </DialogClose>
                         <Button type="submit" disabled={isPending} className="gap-2">
                             {isSavingPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                            Test & Save
+                            Probar y Guardar
                         </Button>
                     </DialogFooter>
                 </form>
@@ -360,5 +360,3 @@ export function SshConfigManager({ ownerUsername, initialServers }: { ownerUsern
     </>
     )
 }
-
-    
