@@ -24,6 +24,12 @@ export default function LoginPage() {
     setIsPending(true);
     setError(null);
 
+    if (!auth) {
+        setError("El servicio de autenticación no está disponible. Revisa la configuración de Firebase.");
+        setIsPending(false);
+        return;
+    }
+
     if (!email || !password) {
       setError('Se requieren correo y contraseña.');
       setIsPending(false);
@@ -44,6 +50,7 @@ export default function LoginPage() {
 
       if (response.ok) {
         router.push('/');
+        router.refresh(); // Forzar la recarga de datos del servidor en la página de inicio
       } else {
         setError(data.error || 'Fallo al iniciar sesión.');
       }
@@ -67,7 +74,7 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
             <CardDescription>
-              Introduce tus credenciales de Firebase para acceder al panel.
+              Introduce tus credenciales para acceder al panel.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">

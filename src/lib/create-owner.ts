@@ -1,4 +1,3 @@
-
 // This is a server-side script to be run manually from the terminal.
 // It finds an existing user by email and promotes them to 'owner' by creating a document in Firestore.
 
@@ -12,7 +11,7 @@ const OWNER_EMAIL = 'sysdevcheck@gmail.com';
 const OWNER_USERNAME = 'sysdevcheck';
 // ---------------------
 
-async function promoteOwner() {
+async function createOwner() {
   try {
     console.log("Connecting to Firebase services...");
     const firestore = getFirestore(adminApp);
@@ -27,24 +26,37 @@ async function promoteOwner() {
         console.log(`User found (UID: ${userRecord.uid}).`);
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
-            console.error(`❌ ERROR: User with email '${OWNER_EMAIL}' was not found in Firebase Authentication.`);
-            console.error("Please create this user in the Firebase Console first, then run this script again.");
-            process.exit(1);
+            console.log(`User not found. Creating a new user with email '${OWNER_EMAIL}'...`);
+            userRecord = await auth.createUser({
+                email: OWNER_EMAIL,
+                password: 'password', // Set a default temporary password
+                displayName: OWNER_USERNAME,
+            });
+            console.log(`User created successfully (UID: ${userRecord.uid}). Please change the password.`);
+        } else {
+            throw error; // Re-throw other auth errors
         }
-        throw error; // Re-throw other auth errors
+    }
+    
+    // Step 2: Set custom claim for the user
+    try {
+        await auth.setCustomUserClaims(userRecord.uid, { role: 'owner' });
+        console.log(`Custom claim { role: 'owner' } set for user ${userRecord.uid}.`);
+    } catch(e) {
+        console.error("Failed to set custom claims. Please check IAM permissions.", e)
     }
 
-    // Step 2: Find or create the user document in Firestore 'users' collection
-    // This script now sets a specific document ID for the owner for easy lookup.
+
+    // Step 3: Create the owner document in Firestore 'users' collection with a specific ID 'owner'
     const ownerDocRef = firestore.collection('users').doc('owner');
 
     const ownerData = {
         uid: userRecord.uid,
         username: OWNER_USERNAME,
         email: OWNER_EMAIL,
-        role: 'owner', // This field now clearly identifies the owner document.
+        role: 'owner',
         createdAt: new Date(),
-        expiresAt: null,
+        expiresAt: null, // Owners do not expire
         assignedServerId: null,
     };
 
@@ -54,22 +66,16 @@ async function promoteOwner() {
     
     console.log("-----------------------------------------");
     console.log("✅ Success!");
-    console.log(`User '${OWNER_EMAIL}' is now set as the Owner in Firestore.`);
+    console.log(`User '${OWNER_EMAIL}' is now configured as the Owner.`);
     console.log("-----------------------------------------");
     console.log("You can now run 'npm run dev' and log in.");
 
   } catch (error: any) {
-    // Check if the error is due to Firestore permissions
-    if (error.message.includes('permission-denied') || error.message.includes('PERMISSION_DENIED')) {
-        console.error("❌ Firestore Permission Error: The script does not have permission to write to the 'users' collection.");
-        console.error("Please check your Firestore Security Rules to allow writes from the server environment.");
-    } else {
-        console.error("❌ An unexpected error occurred:", error);
-    }
-    process.exit(1);
+     console.error("❌ An error occurred while creating the owner user:", error);
+     process.exit(1);
   }
 }
 
-promoteOwner().then(() => {
+createOwner().then(() => {
     process.exit(0);
 });

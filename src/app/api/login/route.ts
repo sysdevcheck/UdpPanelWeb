@@ -34,14 +34,17 @@ export async function POST(request: NextRequest) {
     // Find matching user document in firestore to get assignedServerId for managers
     const usersRef = firestore.collection('users');
     // If it's the owner, we already have their info. If manager, query by UID.
-    const userQuery = isOwner 
-        ? ownerDoc.ref 
-        : await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
+    let userQuerySnapshot;
+    if (!isOwner) {
+        userQuerySnapshot = await usersRef.where('uid', '==', decodedToken.uid).limit(1).get();
+    }
+    
+    const userDocData = isOwner 
+        ? ownerDoc.data() 
+        : (userQuerySnapshot && !userQuerySnapshot.empty ? userQuerySnapshot.docs[0].data() : null);
 
     let assignedServerId = null;
     let username = decodedToken.email; // Default to email
-
-    const userDocData = isOwner ? ownerDoc.data() : (!userQuery.empty ? userQuery.docs[0].data() : null);
 
     if (userDocData) {
         assignedServerId = userDocData.assignedServerId || null;
