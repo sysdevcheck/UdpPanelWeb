@@ -21,16 +21,61 @@ const defaultConfig = {
   }
 };
 
+// ================== Connection Caching ==================
+const connectionCache = new Map<string, { conn: Client; timeoutId: NodeJS.Timeout }>();
+const CACHE_TIMEOUT = 5000; // 5 seconds
+
+function getCachedConnection(key: string): Client | null {
+    const cached = connectionCache.get(key);
+    if (cached) {
+        clearTimeout(cached.timeoutId); // Reset timeout on access
+        return cached.conn;
+    }
+    return null;
+}
+
+function setCachedConnection(key: string, conn: Client) {
+    const timeoutId = setTimeout(() => {
+        console.log(`Closing inactive SSH connection for ${key}`);
+        conn.end();
+        connectionCache.delete(key);
+    }, CACHE_TIMEOUT);
+
+    // If there's an old connection, close it before setting the new one
+    if (connectionCache.has(key)) {
+        const old = connectionCache.get(key);
+        if(old?.conn) {
+            clearTimeout(old.timeoutId);
+            old.conn.end();
+        }
+    }
+    connectionCache.set(key, { conn, timeoutId });
+}
 
 async function getSshConnection(sshConfig: any): Promise<Client> {
+    const cacheKey = `${sshConfig.username}@${sshConfig.host}:${sshConfig.port}`;
+    const cachedConn = getCachedConnection(cacheKey);
+
+    if (cachedConn && cachedConn.readable) {
+        // The connection is alive, reset the timeout and return it.
+        setCachedConnection(cacheKey, cachedConn);
+        return cachedConn;
+    }
+    
+    // If not cached or not readable, create a new connection.
     const conn = new Client();
     return new Promise((resolve, reject) => {
-        conn.on('ready', () => resolve(conn))
-            .on('error', (err) => reject(err))
-            .on('timeout', () => reject(new Error('Connection timed out')))
-            .connect(sshConfig);
+        conn.on('ready', () => {
+            setCachedConnection(cacheKey, conn); // Cache the new connection
+            resolve(conn);
+        })
+        .on('error', (err) => reject(err))
+        .on('timeout', () => reject(new Error('Connection timed out')))
+        .connect(sshConfig);
     });
 }
+// =======================================================
+
 
 async function execCommand(ssh: Client, command: string): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
@@ -101,6 +146,7 @@ const readServers = async () => {
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
     let ssh: Client | null = null;
+    let shouldCloseConnection = true; // By default, close connection unless it's a cached command
     
     try {
         const { action, payload, sshConfig } = await request.json();
@@ -112,7 +158,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
-        // This logic ensures password is included for API calls if not directly provided in the payload
         if (!finalSshConfig.password) {
             const servers = await readServers();
             const server = servers.find((s: any) => s.id === finalSshConfig.id);
@@ -126,11 +171,21 @@ export async function POST(request: Request) {
 
 
         if (action === 'testConnection') {
+            shouldCloseConnection = true; // Always close after a test
             try {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${finalSshConfig.username}@${finalSshConfig.host}:${finalSshConfig.port || 22}...` });
-                ssh = await getSshConnection(finalSshConfig);
+                const testConn = new Client();
+                await new Promise<void>((resolve, reject) => {
+                    testConn.on('ready', () => {
+                        testConn.end();
+                        resolve();
+                    })
+                    .on('error', reject)
+                    .on('timeout', () => reject(new Error('Connection timed out')))
+                    .connect(finalSshConfig);
+                });
+                
                 log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
-                ssh.end();
                 log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
                 return NextResponse.json({ success: true, message: 'Connection successful', log });
             } catch (e: any) {
@@ -148,11 +203,17 @@ export async function POST(request: Request) {
         }
 
         ssh = await getSshConnection(finalSshConfig);
-        const sftp = await getSftp(ssh);
+        
+        if (action === 'executeCommand') {
+            shouldCloseConnection = false; // Let the cache manager handle closing
+        } else {
+            shouldCloseConnection = true; // Close connection for other actions
+        }
 
         switch (action) {
             case 'updateVpnConfig': {
                 const { usernames } = payload;
+                const sftp = await getSftp(ssh);
                 const configStr = await readFileSftp(sftp, remoteConfigPath);
                 let config;
                 try {
@@ -213,7 +274,7 @@ export async function POST(request: Request) {
         log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${errorMessage}` });
         return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
     } finally {
-        if(ssh && ssh.readable) {
+        if(ssh && ssh.readable && shouldCloseConnection) {
             ssh.end();
         }
     }
