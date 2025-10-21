@@ -51,7 +51,7 @@ type LogEntry = {
 type ServerStatus = 'online' | 'offline' | 'comprobando' | 'unknown';
 
 
-export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
+export function SshConfigManager() {
     const { toast } = useToast();
 
     const formRef = useRef<HTMLFormElement>(null);
@@ -134,12 +134,13 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
             return;
         }
 
-        const serverData: Omit<SshConfig, 'id'> & { password?: string } = {
+        const serverData: Partial<SshConfig> = {
             name,
             host,
             port: port ? parseInt(port, 10) : 22,
             username,
         };
+        if(serverId) serverData.id = serverId;
 
         if (password) {
             serverData.password = password;
@@ -149,17 +150,17 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
             const response = await fetch('/api/manage-server', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ serverId, ownerUid, ...serverData })
+                body: JSON.stringify(serverData)
             });
 
             const result = await response.json();
-            setLog(result.log || []);
+            if (result.log) setLog(result.log);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Fallo al guardar el servidor');
             }
 
-            toast({ title: 'Éxito', description: result.message, className: 'bg-green-500 text-white' });
+            toast({ title: 'Éxito', description: result.message });
             setEditingServer(null);
             formRef.current?.reset();
             fetchServers();
@@ -176,7 +177,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
             const response = await fetch('/api/manage-server', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ serverId, ownerUid })
+                body: JSON.stringify({ serverId })
             });
             const result = await response.json();
             if (!response.ok) {
@@ -204,7 +205,7 @@ export function SshConfigManager({ ownerUid }: { ownerUid: string }) {
         const result = await actionFn({ success: false }, formData);
 
         if (result.success) {
-            toast({ title: 'Éxito', description: result.message, className: action === 'reset' ? 'bg-green-500 text-white' : undefined });
+            toast({ title: 'Éxito', description: result.message });
         } else if (result.error) {
             toast({ variant: 'destructive', title: 'Acción Fallida', description: result.error });
         }

@@ -1,93 +1,40 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
-import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import fs from 'fs/promises';
+import path from 'path';
 
-const firestore = getFirestore(adminApp);
-const adminAuth = getAuth(adminApp);
-const secretManager = new SecretManagerServiceClient();
-const projectId = process.env.GCLOUD_PROJECT;
+const SERVERS_PATH = path.join(process.cwd(), 'data', 'servers.json');
+const MANAGERS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
+const VPN_USERS_PATH = path.join(process.cwd(), 'data', 'vpn-users.json');
 
-async function setSecret(secretName: string, payload: string): Promise<any> {
-    if (!projectId) {
-        throw new Error('Google Cloud Project ID is not configured.');
-    }
-    const parent = `projects/${projectId}`;
-    
+const readData = async (filePath: string) => {
     try {
-       await secretManager.getSecret({ name: `${parent}/secrets/${secretName}` });
+        const data = await fs.readFile(filePath, 'utf-8');
+        return JSON.parse(data);
     } catch (e: any) {
-        if (e.code === 5) { // NOT_FOUND
-             await secretManager.createSecret({
-                parent,
-                secretId: secretName,
-                secret: { replication: { automatic: {} } },
-            });
-        } else { throw e; }
+        if (e.code === 'ENOENT') return []; // File not found, return empty array
+        throw e;
     }
-    
-    const [version] = await secretManager.addSecretVersion({
-        parent: `${parent}/secrets/${secretName}`,
-        payload: { data: Buffer.from(payload, 'utf8') },
-    });
+};
 
-    return version;
-}
-
-async function getSecret(secretName: string): Promise<string | null> {
-    try {
-        const [version] = await secretManager.accessSecretVersion({
-            name: `projects/${projectId}/secrets/${secretName}/versions/latest`,
-        });
-        const payload = version.payload?.data?.toString();
-        return payload || null;
-    } catch (e: any) {
-        if (e.code === 5) { // NOT_FOUND
-            return null;
-        }
-        console.error(`Could not access secret: ${secretName}`, e);
-        return null;
-    }
-}
-
-
-async function deleteSecret(secretName: string): Promise<void> {
-    if (!projectId) {
-        throw new Error('Google Cloud Project ID is not configured.');
-    }
-    const parent = `projects/${projectId}`;
-    try {
-        await secretManager.deleteSecret({
-            name: `${parent}/secrets/${secretName}`,
-        });
-    } catch (error: any) {
-        if (error.code === 5) { // NOT_FOUND
-            console.log(`Secret ${secretName} not found, skipping deletion.`);
-        } else {
-            throw error;
-        }
-    }
-}
+const writeData = async (filePath: string, data: any) => {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+};
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const serverId = searchParams.get('serverId');
 
     try {
+        const servers = await readData(SERVERS_PATH);
         if (serverId) {
-            const serverDoc = await firestore.collection('servers').doc(serverId).get();
-            if (!serverDoc.exists) {
+            const server = servers.find((s: any) => s.id === serverId);
+            if (!server) {
                 return NextResponse.json({ error: 'Server not found' }, { status: 404 });
             }
-            return NextResponse.json({ id: serverDoc.id, ...serverDoc.data() });
+            return NextResponse.json(server);
         } else {
-            const serversSnapshot = await firestore.collection('servers').get();
-            if (serversSnapshot.empty) {
-                return NextResponse.json([]);
-            }
-            const servers = serversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             return NextResponse.json(servers);
         }
     } catch (error: any) {
@@ -95,34 +42,45 @@ export async function GET(request: NextRequest) {
     }
 }
 
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { serverId, ownerUid, name, host, port, username, password } = body;
+    const { serverId, name, host, port, username, password } = body;
     
-    const serverRef = serverId ? firestore.collection('servers').doc(serverId) : firestore.collection('servers').doc();
-    const secretName = `ssh-password-${serverRef.id}`;
+    let servers = await readData(SERVERS_PATH);
     
-    const serverData = {
-        name,
-        host,
-        port,
-        username,
-        ownerUid,
-    };
-
     if (serverId) { // Editing existing server
-        await serverRef.update(serverData);
-        if (password) {
-             await setSecret(secretName, password);
+        const serverIndex = servers.findIndex((s: any) => s.id === serverId);
+        if (serverIndex === -1) {
+            return NextResponse.json({ error: 'Server not found for update' }, { status: 404 });
         }
+        servers[serverIndex] = {
+            ...servers[serverIndex],
+            name,
+            host,
+            port,
+            username,
+        };
+        // Only update password if a new one is provided
+        if (password) {
+            servers[serverIndex].password = password;
+        }
+
     } else { // Creating new server
-        await serverRef.set(serverData);
-        await setSecret(secretName, password);
+        const newServer = {
+            id: `server_${Date.now()}`,
+            name,
+            host,
+            port,
+            username,
+            password,
+        };
+        servers.push(newServer);
     }
     
-    return NextResponse.json({ success: true, message: `Servidor "${name}" guardado exitosamente.`, serverId: serverRef.id });
+    await writeData(SERVERS_PATH, servers);
+    
+    return NextResponse.json({ success: true, message: `Servidor "${name}" guardado exitosamente.` });
 
   } catch (error: any) {
     console.error('Manage Server API error:', error);
@@ -130,40 +88,40 @@ export async function POST(request: NextRequest) {
   }
 }
 
-
 export async function DELETE(request: NextRequest) {
   try {
-    const { serverId, ownerUid } = await request.json();
+    const { serverId } = await request.json();
     
     if (!serverId) {
         return NextResponse.json({ error: 'Server ID is required.' }, { status: 400 });
     }
 
-    const serverRef = firestore.collection('servers').doc(serverId);
-    const secretName = `ssh-password-${serverRef.id}`;
+    let servers = await readData(SERVERS_PATH);
+    let managers = await readData(MANAGERS_PATH);
+    let vpnUsers = await readData(VPN_USERS_PATH);
 
-    const batch = firestore.batch();
+    // Filter out the server to delete
+    const updatedServers = servers.filter((s: any) => s.id !== serverId);
+
+    // Unassign managers from the deleted server
+    const updatedManagers = managers.map((m: any) => {
+        if (m.assignedServerId === serverId) {
+            return { ...m, assignedServerId: null };
+        }
+        return m;
+    });
+
+    // Delete VPN users associated with the server
+    const updatedVpnUsers = vpnUsers.filter((u: any) => u.serverId !== serverId);
+
+    // Write all changes back to files
+    await writeData(SERVERS_PATH, updatedServers);
+    await writeData(MANAGERS_PATH, updatedManagers);
+    await writeData(VPN_USERS_PATH, updatedVpnUsers);
     
-    batch.delete(serverRef);
-    
-    const managersQuery = firestore.collection('users').where('assignedServerId', '==', serverId);
-    const managersSnapshot = await managersQuery.get();
-    for (const managerDoc of managersSnapshot.docs) {
-        batch.update(managerDoc.ref, { assignedServerId: null });
-    }
-
-    const vpnUsersQuery = firestore.collection('vpnUsers').where('serverId', '==', serverId);
-    const vpnUsersSnapshot = await vpnUsersQuery.get();
-    vpnUsersSnapshot.forEach(doc => batch.delete(doc.ref));
-
-    await batch.commit();
-    
-    await deleteSecret(secretName);
-
     return NextResponse.json({ success: true, message: 'Server deleted successfully.' });
 
-  } catch (error: any)
-  {
+  } catch (error: any) {
     console.error('Delete Server API error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

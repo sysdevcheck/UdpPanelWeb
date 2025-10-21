@@ -1,9 +1,24 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
+import fs from 'fs/promises';
+import path from 'path';
 
-const firestore = getFirestore(adminApp);
+const VPN_USERS_PATH = path.join(process.cwd(), 'data', 'vpn-users.json');
+
+const readData = async () => {
+    try {
+        const data = await fs.readFile(VPN_USERS_PATH, 'utf-8');
+        return JSON.parse(data);
+    } catch (e: any) {
+        if (e.code === 'ENOENT') return [];
+        throw e;
+    }
+};
+
+const writeData = async (data: any) => {
+    await fs.mkdir(path.dirname(VPN_USERS_PATH), { recursive: true });
+    await fs.writeFile(VPN_USERS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+};
 
 // GET handler to fetch users
 export async function GET(request: NextRequest) {
@@ -16,18 +31,18 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Server ID is required.' }, { status: 400 });
         }
 
-        let usersQuery = firestore.collection('vpnUsers').where('serverId', '==', serverId);
+        let allUsers = await readData();
+        
+        let usersQuery = allUsers.filter((u: any) => u.serverId === serverId);
+
         if (createdBy) {
-            usersQuery = usersQuery.where('createdBy', '==', createdBy);
+            usersQuery = usersQuery.filter((u: any) => u.createdBy === createdBy);
         }
         
-        const snapshot = await usersQuery.orderBy('createdAt', 'desc').get();
-        if (snapshot.empty) {
-            return NextResponse.json([]);
-        }
+        // Sort descending by creation date
+        usersQuery.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         
-        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return NextResponse.json(users);
+        return NextResponse.json(usersQuery);
 
     } catch (error: any) {
         console.error('VPN Users GET Error:', error);
@@ -45,17 +60,24 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Username, serverId, and createdBy are required.' }, { status: 400 });
         }
 
-        const expiresAt = Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        let allUsers = await readData();
+        
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
 
-        const newUserRef = await firestore.collection('vpnUsers').add({
+        const newUser = {
+            id: `vpn_${Date.now()}`,
             username,
             serverId,
             createdBy,
-            createdAt: FieldValue.serverTimestamp(),
-            expiresAt,
-        });
+            createdAt: new Date().toISOString(),
+            expiresAt: expiresAt.toISOString(),
+        };
 
-        return NextResponse.json({ success: true, id: newUserRef.id });
+        allUsers.push(newUser);
+        await writeData(allUsers);
+
+        return NextResponse.json({ success: true, id: newUser.id });
 
     } catch (error: any) {
         console.error('VPN Users POST Error:', error);
@@ -72,22 +94,24 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
         }
 
-        const docRef = firestore.collection('vpnUsers').doc(docId);
-        const updateData: { [key: string]: any } = {};
+        let allUsers = await readData();
+        const userIndex = allUsers.findIndex((u: any) => u.id === docId);
+
+        if (userIndex === -1) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
 
         if (username) {
-            updateData.username = username;
+            allUsers[userIndex].username = username;
         }
 
         if (renew) {
-            updateData.expiresAt = Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            const newExpiresAt = new Date();
+            newExpiresAt.setDate(newExpiresAt.getDate() + 30);
+            allUsers[userIndex].expiresAt = newExpiresAt.toISOString();
         }
 
-        if (Object.keys(updateData).length === 0) {
-            return NextResponse.json({ error: 'No update data provided (username or renew).' }, { status: 400 });
-        }
-
-        await docRef.update(updateData);
+        await writeData(allUsers);
         return NextResponse.json({ success: true, message: 'User updated successfully.' });
 
     } catch (error: any) {
@@ -106,7 +130,14 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
         }
 
-        await firestore.collection('vpnUsers').doc(docId).delete();
+        let allUsers = await readData();
+        const updatedUsers = allUsers.filter((u: any) => u.id !== docId);
+
+        if (allUsers.length === updatedUsers.length) {
+             return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+
+        await writeData(updatedUsers);
         return NextResponse.json({ success: true, message: 'User deleted successfully.' });
 
     } catch (error: any) {

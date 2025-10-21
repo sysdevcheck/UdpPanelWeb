@@ -1,17 +1,29 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
+import fs from 'fs/promises';
+import path from 'path';
 
-const firestore = getFirestore(adminApp);
+const CREDENTIALS_PATH = path.join(process.cwd(), 'data', 'credentials.json');
+
+const readCredentials = async () => {
+    try {
+        const data = await fs.readFile(CREDENTIALS_PATH, 'utf-8');
+        return JSON.parse(data);
+    } catch (e: any) {
+        if (e.code === 'ENOENT') return [];
+        throw e;
+    }
+};
+
+const writeCredentials = async (data: any) => {
+    await fs.mkdir(path.dirname(CREDENTIALS_PATH), { recursive: true });
+    await fs.writeFile(CREDENTIALS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+};
 
 export async function GET(request: NextRequest) {
     try {
-        const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
-        if (managersSnapshot.empty) {
-            return NextResponse.json([]);
-        }
-        const managers = managersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const credentials = await readCredentials();
+        const managers = credentials.filter((u: any) => u.role === 'manager');
         return NextResponse.json(managers);
     } catch (error: any) {
         console.error('Get Managers API error:', error);
@@ -32,33 +44,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'A server must be assigned to a manager.' }, { status: 400 });
     }
     
-    // Check if username already exists
-    const existingUserQuery = await firestore.collection('users').where('username', '==', username).limit(1).get();
-    if (!existingUserQuery.empty) {
+    const credentials = await readCredentials();
+    const existingUser = credentials.find((u: any) => u.username === username);
+    if (existingUser) {
       return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
     }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
-
-    const userDocRef = firestore.collection('users').doc();
-    await userDocRef.set({
-        uid: userDocRef.id, // Self-reference ID as UID
+    
+    const newUser = {
+        id: `user_${Date.now()}`,
         username,
         password, 
         role,
         assignedServerId: assignedServerId || null,
-        createdAt: Timestamp.now(),
-        expiresAt: expiresAt,
-    });
+        createdAt: new Date().toISOString(),
+        expiresAt: expiresAt.toISOString(),
+    };
     
-    const newManagerData = await userDocRef.get();
+    credentials.push(newUser);
+    await writeCredentials(credentials);
 
-    return NextResponse.json({ success: true, user: {id: newManagerData.id, ...newManagerData.data()} });
+    return NextResponse.json({ success: true, user: newUser });
 
   } catch (error: any) {
     console.error('Create User API error:', error);
-    let message = 'Error creating user.';
-    return NextResponse.json({ error: message, details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error creating user.', details: error.message }, { status: 500 });
   }
 }

@@ -1,10 +1,20 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { getFirestore } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
 import { syncVpnUsersWithVps as syncVpnUsersAction } from '@/app/actions';
+import fs from 'fs/promises';
+import path from 'path';
 
-const firestore = getFirestore(adminApp);
+const VPN_USERS_PATH = path.join(process.cwd(), 'data', 'vpn-users.json');
+
+const readVpnUsers = async () => {
+    try {
+        const data = await fs.readFile(VPN_USERS_PATH, 'utf-8');
+        return JSON.parse(data);
+    } catch (e: any) {
+        if (e.code === 'ENOENT') return [];
+        throw e;
+    }
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -14,12 +24,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Server ID and SSH Config are required.' }, { status: 400 });
         }
         
-        // Fetch ALL users for this server, not just the manager's
-        const allUsersForServerQuery = firestore.collection('vpnUsers').where('serverId', '==', serverId);
-        const allUsersSnapshot = await allUsersForServerQuery.get();
-        const allVpnUsers = allUsersSnapshot.docs.map(d => d.data());
-
-        const result = await syncVpnUsersAction(serverId, sshConfig, allVpnUsers);
+        const allUsers = await readVpnUsers();
+        const allUsersForServer = allUsers.filter((u: any) => u.serverId === serverId);
+        
+        const result = await syncVpnUsersAction(serverId, sshConfig, allUsersForServer);
 
         if (result.success) {
             return NextResponse.json({ success: true, message: `Los usuarios del servidor ${sshConfig.name} han sido sincronizados.` });

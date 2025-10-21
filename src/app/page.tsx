@@ -28,6 +28,7 @@ export default async function Home() {
         const session = JSON.parse(sessionCookie.value);
          if (session.username && session.role) {
              user = {
+                // For local user, we can use username as a unique key or a generated ID
                 uid: session.username, 
                 username: session.username,
                 role: session.role,
@@ -103,7 +104,7 @@ export default async function Home() {
           </TabsList>
            {isOwner && (
             <TabsContent value="servers">
-               <SshConfigManager ownerUid={uid} />
+               <SshConfigManager />
             </TabsContent>
           )}
           <TabsContent value="vpn-users">
@@ -124,7 +125,7 @@ export default async function Home() {
           </TabsContent>
           {isOwner && (
             <TabsContent value="managers">
-               <ManagerAdmin ownerUid={uid} />
+               <ManagerAdmin />
             </TabsContent>
           )}
            {isOwner && (

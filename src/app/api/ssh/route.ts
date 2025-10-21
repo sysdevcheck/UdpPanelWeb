@@ -1,14 +1,14 @@
+
 import { NextResponse } from 'next/server';
 import { Client, SFTPWrapper } from 'ssh2';
-import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
-import { getFirestore } from 'firebase-admin/firestore';
-import { adminApp } from '@/firebase/admin';
-
+import fs from 'fs/promises';
+import path from 'path';
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
 const remoteBasePath = '/etc/zivpn';
 const remoteConfigPath = `${remoteBasePath}/config.json`;
+const SERVERS_PATH = path.join(process.cwd(), 'data', 'servers.json');
 
 const defaultConfig = {
   "listen": ":5667",
@@ -88,19 +88,15 @@ async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Pro
     });
 }
 
-async function getSecret(secretName: string): Promise<string | null> {
+const readServers = async () => {
     try {
-        const secretManager = new SecretManagerServiceClient();
-        const [version] = await secretManager.accessSecretVersion({
-            name: `${secretName}/versions/latest`,
-        });
-        const payload = version.payload?.data?.toString();
-        return payload || null;
-    } catch (e) {
-        console.error(`Could not access secret: ${secretName}`, e);
-        return null;
+        const data = await fs.readFile(SERVERS_PATH, 'utf-8');
+        return JSON.parse(data);
+    } catch (e: any) {
+        if (e.code === 'ENOENT') return [];
+        throw e;
     }
-}
+};
 
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
@@ -108,27 +104,24 @@ export async function POST(request: Request) {
     
     try {
         const { action, payload, sshConfig } = await request.json();
+        
+        let finalSshConfig = { ...sshConfig };
 
-        if (!sshConfig || !sshConfig.host || !sshConfig.username) {
+        if (!finalSshConfig || !finalSshConfig.host || !finalSshConfig.username) {
             log.push({ level: 'ERROR', message: 'SSH host and username are required.' });
             return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
-        // If password is not provided directly, try to fetch it from Secret Manager for existing servers
-        if (!sshConfig.password && sshConfig.id) {
-            const projectId = process.env.GCLOUD_PROJECT;
-            if (projectId) {
-                const secretName = `projects/${projectId}/secrets/ssh-password-${sshConfig.id}`;
-                const secretPassword = await getSecret(secretName);
-                if (secretPassword) {
-                    sshConfig.password = secretPassword;
-                } else {
-                     log.push({ level: 'ERROR', message: 'SSH password not provided and not found in Secret Manager.' });
-                     return NextResponse.json({ success: false, error: 'SSH password not available.', log }, { status: 400 });
-                }
+        if (!finalSshConfig.password && finalSshConfig.id) {
+            const servers = await readServers();
+            const server = servers.find((s: any) => s.id === finalSshConfig.id);
+            if (server && server.password) {
+                finalSshConfig.password = server.password;
+            } else {
+                 log.push({ level: 'ERROR', message: 'SSH password not provided and not found in local data.' });
+                 return NextResponse.json({ success: false, error: 'SSH password not available.', log }, { status: 400 });
             }
-        } else if (!sshConfig.password) {
-             // For actions that require a password (like testConnection on a new server), this check remains.
+        } else if (!finalSshConfig.password) {
             if (action === 'testConnection') {
                 log.push({ level: 'ERROR', message: 'SSH password is required for this operation.' });
                 return NextResponse.json({ success: false, error: 'SSH password is required.', log }, { status: 400 });
@@ -137,18 +130,16 @@ export async function POST(request: Request) {
 
         if (action === 'testConnection') {
             try {
-                log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.username}@${sshConfig.host}:${sshConfig.port || 22}...` });
-                ssh = await getSshConnection(sshConfig);
+                log.push({ level: 'INFO', message: `Attempting to connect to ${finalSshConfig.username}@${finalSshConfig.host}:${finalSshConfig.port || 22}...` });
+                ssh = await getSshConnection(finalSshConfig);
                 log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
-                
                 ssh.end();
-                
                 log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
                 return NextResponse.json({ success: true, message: 'Connection successful', log });
             } catch (e: any) {
                 let errorMessage = e.message;
                  if (e.code === 'ENOTFOUND' || e.message.includes('ENOTFOUND')) {
-                    errorMessage = `Host not found. Could not resolve DNS for ${sshConfig.host}.`;
+                    errorMessage = `Host not found. Could not resolve DNS for ${finalSshConfig.host}.`;
                 } else if (e.message.includes('All configured authentication methods failed')) {
                     errorMessage = 'Authentication failed. Please check your username and password.';
                 } else if (e.level === 'client-timeout' || e.message.includes('Timed out')) {
@@ -159,7 +150,7 @@ export async function POST(request: Request) {
             }
         }
 
-        ssh = await getSshConnection(sshConfig);
+        ssh = await getSshConnection(finalSshConfig);
         const sftp = await getSftp(ssh);
 
         switch (action) {
@@ -186,16 +177,12 @@ export async function POST(request: Request) {
             }
             
             case 'resetConfig': {
-                // This action doesn't back up anymore, as Firestore is the source of truth.
-                // It just runs the reinstall script.
                 const scriptCommand = 'wget -O zi.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi.sh && sudo chmod +x zi.sh && sudo ./zi.sh';
                 const { stderr: scriptErr } = await execCommand(ssh, scriptCommand);
                 if (scriptErr) {
                     console.warn("Error during script execution:", scriptErr);
                     return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
                 }
-
-                // We expect the calling function to re-sync users and restart the service.
                 return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
             }
 

@@ -1,13 +1,13 @@
 
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle, Mail } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,12 +44,11 @@ type ServerInfo = {
 }
 
 type Manager = {
-  id: string; // Firestore document ID
-  uid: string; // Firebase Auth UID
+  id: string;
   username: string;
   assignedServerId?: string | null;
-  createdAt?: { seconds: number, nanoseconds: number }; // Firestore Timestamp structure
-  expiresAt?: { seconds: number, nanoseconds: number };
+  createdAt?: string;
+  expiresAt?: string;
 }
 
 type ManagerWithStatus = Omit<Manager, 'createdAt' | 'expiresAt'> & {
@@ -79,7 +78,7 @@ const getStatus = (expiresAt: Date | undefined | null): ManagerWithStatus['statu
     return { label: 'Activo', daysLeft, variant: 'default' };
 };
 
-export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
+export function ManagerAdmin() {
   const [managers, setManagers] = useState<ManagerWithStatus[]>([]);
   const [allServers, setAllServers] = useState<ServerInfo[]>([]);
   const [editingManager, setEditingManager] = useState<ManagerWithStatus | null>(null);
@@ -94,7 +93,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
       setIsLoading(true);
       try {
           const [managersRes, serversRes] = await Promise.all([
-              fetch('/api/create-user'), // Using create-user API to fetch managers
+              fetch('/api/create-user'),
               fetch('/api/manage-server')
           ]);
 
@@ -105,10 +104,10 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
           if (!serversRes.ok) throw new Error(serversData.error || 'Failed to fetch servers');
 
           const processedManagers = (managersData || []).map((m: Manager) => {
-              const expiresAtDate = m.expiresAt ? new Date(m.expiresAt.seconds * 1000) : undefined;
+              const expiresAtDate = m.expiresAt ? new Date(m.expiresAt) : undefined;
               return {
                   ...m,
-                  createdAt: m.createdAt ? new Date(m.createdAt.seconds * 1000) : undefined,
+                  createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
                   expiresAt: expiresAtDate,
                   status: getStatus(expiresAtDate)
               };
@@ -172,7 +171,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
         const response = await fetch('/api/delete-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ docId: manager.id })
+            body: JSON.stringify({ id: manager.id })
         });
         const result = await response.json();
 
@@ -193,7 +192,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
     setIsPending(true);
 
     const formData = new FormData(event.currentTarget);
-    const docId = formData.get('docId') as string;
+    const id = formData.get('id') as string;
     const username = formData.get('username') as string;
     const newPassword = formData.get('newPassword') as string;
     const assignedServerId = formData.get('assignedServerId') as string;
@@ -202,7 +201,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
        const response = await fetch('/api/update-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ docId, username, password: newPassword, assignedServerId })
+            body: JSON.stringify({ id, username, password: newPassword, assignedServerId })
         });
         const result = await response.json();
 
@@ -389,7 +388,7 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-                <input type="hidden" name="docId" value={editingManager?.id || ''} />
+                <input type="hidden" name="id" value={editingManager?.id || ''} />
                 
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="username" className="text-right">Usuario</Label>
@@ -417,7 +416,8 @@ export function ManagerAdmin({ ownerUid }: { ownerUid: string }) {
                 </div>
                 
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="newPassword" className="text-right">Nueva Contraseña</Label>                    <Input
+                    <Label htmlFor="newPassword" className="text-right">Nueva Contraseña</Label>
+                    <Input
                       id="newPassword"
                       name="newPassword"
                       type="password"

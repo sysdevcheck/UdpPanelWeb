@@ -32,13 +32,13 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
-import { syncVpnUsersWithVps, restartService, resetServerConfig } from '@/app/actions';
+import { restartService, resetServerConfig } from '@/app/actions';
 
 type VpnUser = {
   id: string;
   username: string;
-  createdAt: { seconds: number, nanoseconds: number };
-  expiresAt: { seconds: number, nanoseconds: number };
+  createdAt: string;
+  expiresAt: string;
   createdBy: string;
   serverId: string;
 }
@@ -79,7 +79,7 @@ const getStatus = (expiresAt: Date): UserWithStatus['status'] => {
 };
 
 export function UserManager({ user }: { user: { uid: string; username: string; role: string; assignedServerId?: string | null; }}) {
-  const { role, assignedServerId, uid, username: loggedInUsername } = user;
+  const { role, assignedServerId, username: loggedInUsername } = user;
   const isOwner = role === 'owner';
 
   const [allServers, setAllServers] = useState<ServerData[]>([]);
@@ -127,10 +127,10 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
           if (!response.ok) throw new Error("Failed to fetch users");
           const usersData: VpnUser[] = await response.json();
           const processedUsers = usersData.map(u => {
-              const expiresAtDate = new Date(u.expiresAt.seconds * 1000);
+              const expiresAtDate = new Date(u.expiresAt);
               return {
                   ...u,
-                  createdAt: new Date(u.createdAt.seconds * 1000),
+                  createdAt: new Date(u.createdAt),
                   expiresAt: expiresAtDate,
                   status: getStatus(expiresAtDate)
               };
@@ -293,7 +293,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
       const result = await actionFn({ success: false }, formData);
 
       if (result.success) {
-          toast({ title: 'Éxito', description: result.message, className: action === 'reset' ? 'bg-green-500 text-white' : undefined });
+          toast({ title: 'Éxito', description: result.message });
           if(action === 'reset') await handleVpsSync();
       } else if (result.error) {
           toast({ variant: 'destructive', title: 'Acción Fallida', description: result.error });
