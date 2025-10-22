@@ -8,7 +8,7 @@
 # Ubuntu 22.04 o superior.
 #
 # Uso:
-# 1. Descargar: curl -o install.sh <URL_DEL_SCRIPT>
+# 1. Descargar: curl -o install.sh https://raw.githubusercontent.com/sysdevcheck/UdpPanelWeb/main/install.sh
 # 2. Dar permisos: chmod +x install.sh
 # 3. Ejecutar: ./install.sh
 #
@@ -45,13 +45,13 @@ set -e
 info "Iniciando la instalación del Panel ZiVPN Multi-Manager..."
 
 # 1. ACTUALIZAR EL SISTEMA E INSTALAR PRERREQUISITOS
-info "Actualizando el sistema e instalando 'git' y 'curl'..."
+info "Paso 1: Actualizando el sistema e instalando 'git' y 'curl'..."
 sudo apt-get update
 sudo apt-get install -y git curl build-essential
-success "Sistema actualizado y prerrequisitos instalados."
+success "Paso 1 completado: Sistema actualizado y prerrequisitos instalados."
 
 # 2. INSTALAR NODE.JS USANDO NVM (NODE VERSION MANAGER)
-info "Instalando Node.js v20 usando NVM..."
+info "Paso 2: Instalando Node.js v20 usando NVM..."
 if [ -d "$HOME/.nvm" ]; then
     info "NVM ya está instalado."
 else
@@ -67,25 +67,25 @@ export NVM_DIR="$HOME/.nvm"
 nvm install 20
 nvm use 20
 nvm alias default 20
-success "Node.js v$(node -v) y npm v$(npm -v) instalados."
+success "Paso 2 completado: Node.js v$(node -v) y npm v$(npm -v) instalados."
 
 # 3. CLONAR EL REPOSITORIO
-info "Clonando el proyecto desde GitHub..."
+info "Paso 3: Clonando el proyecto desde GitHub..."
 if [ -d "$PROJECT_DIR" ]; then
     warn "El directorio '$PROJECT_DIR' ya existe. Saltando clonación."
 else
     git clone "$REPO_URL"
 fi
 cd "$PROJECT_DIR"
-success "Proyecto clonado en el directorio '$PROJECT_DIR'."
+success "Paso 3 completado: Proyecto clonado en el directorio '$PROJECT_DIR'."
 
 # 4. INSTALAR DEPENDENCIAS DEL PROYECTO
-info "Instalando dependencias con npm..."
+info "Paso 4: Instalando dependencias del proyecto con npm..."
 npm install
-success "Dependencias del proyecto instaladas."
+success "Paso 4 completado: Dependencias del proyecto instaladas."
 
 # 5. CONFIGURAR VARIABLES DE ENTORNO (.env.local)
-info "Configurando las variables de entorno..."
+info "Paso 5: Configurando las variables de entorno..."
 if [ -f ".env.local" ]; then
     warn "El archivo '.env.local' ya existe. No se realizarán cambios."
 else
@@ -112,14 +112,15 @@ NEXT_PUBLIC_BASE_URL=http://localhost:9002
 EOF
     success "Archivo '.env.local' creado con éxito."
 fi
+success "Paso 5 completado: Variables de entorno configuradas."
 
 # 6. COMPILAR LA APLICACIÓN
-info "Compilando la aplicación para producción..."
+info "Paso 6: Compilando la aplicación para producción..."
 npm run build
-success "Aplicación compilada."
+success "Paso 6 completado: Aplicación compilada."
 
 # 7. INSTALAR PM2 Y CONFIGURAR LA APLICACIÓN
-info "Instalando PM2 para gestionar la aplicación..."
+info "Paso 7: Instalando PM2 y configurando el servicio..."
 sudo npm install pm2 -g
 success "PM2 instalado globalmente."
 
@@ -133,7 +134,7 @@ success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 info "Configurando PM2 para que se inicie al arrancar el sistema..."
 pm2 startup | sudo bash -
 pm2 save
-success "PM2 configurado para arrancar con el sistema."
+success "Paso 7 completado: PM2 configurado para arrancar con el sistema."
 
 # 8. MENSAJE FINAL
 echo
