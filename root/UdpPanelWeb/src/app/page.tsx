@@ -1,5 +1,5 @@
 
-import { getSession, logout } from './actions';
+import { getSession, logout } from '@/app/actions';
 import { UserManager } from '@/components/user-manager';
 import { SshConfigManager } from '@/components/ssh-config-manager';
 import { BackupManager } from '@/components/backup-manager';
