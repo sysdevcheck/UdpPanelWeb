@@ -1,8 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { Client, SFTPWrapper } from 'ssh2';
-import fs from 'fs/promises';
-import path from 'path';
+import type { Client, SFTPWrapper } from 'ssh2';
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
@@ -20,7 +18,21 @@ const defaultConfig = {
   }
 };
 
+// ====================================================================
+// Dynamic SSH2 Loader - This is the key to bypass Next.js build errors
+// ====================================================================
+let ssh2Client: typeof import('ssh2').Client;
+const loadSsh2 = (): typeof import('ssh2').Client => {
+    if (!ssh2Client) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        ssh2Client = require('ssh2').Client;
+    }
+    return ssh2Client;
+};
+
+
 async function getSshConnection(sshConfig: any): Promise<Client> {
+    const Client = loadSsh2();
     const conn = new Client();
     return new Promise((resolve, reject) => {
         conn.on('ready', () => resolve(conn))
