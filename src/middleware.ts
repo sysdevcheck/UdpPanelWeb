@@ -5,8 +5,8 @@ export function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get('session');
   const { pathname } = request.nextUrl;
 
-  // Si no hay cookie de sesión y el usuario intenta acceder a la página principal
-  if (!sessionCookie && pathname === '/') {
+  // Si no hay cookie de sesión y el usuario intenta acceder a una ruta protegida
+  if (!sessionCookie && pathname !== '/login') {
     // Redirige a la página de login
     return NextResponse.redirect(new URL('/login', request.url));
   }
