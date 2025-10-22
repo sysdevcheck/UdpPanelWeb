@@ -13,12 +13,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  env: {
-    NEXT_PUBLIC_OWNER_USERNAME: process.env.OWNER_USERNAME,
-    NEXT_PUBLIC_OWNER_PASSWORD: process.env.OWNER_PASSWORD,
-  },
 };
 
 export default nextConfig;
-
-    

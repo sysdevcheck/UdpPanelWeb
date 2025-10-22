@@ -11,8 +11,8 @@ import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState(process.env.NEXT_PUBLIC_OWNER_USERNAME || 'admin');
-  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_OWNER_PASSWORD || 'password');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -73,11 +73,11 @@ export default function LoginPage() {
             )}
             <div className="grid gap-2">
               <Label htmlFor="username">Usuario</Label>
-              <Input id="username" name="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required disabled={isPending}/>
+              <Input id="username" name="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required disabled={isPending} placeholder="admin"/>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Contraseña</Label>
-              <Input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isPending}/>
+              <Input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isPending} placeholder="••••••••"/>
             </div>
           </CardContent>
           <CardFooter>
