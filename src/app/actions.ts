@@ -4,6 +4,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
 
 // ====================================================================
 // SSH API Wrapper Functions
@@ -98,11 +100,15 @@ async function saveConfigToVps(usernames: string[], sshConfig: any): Promise<{ s
     return { success: result.success, error: result.error };
 }
 
-export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnUsers: any[]) {
+export async function syncVpnUsersWithVps(serverId: string, sshConfig: any) {
     if (process.env.NODE_ENV === 'production') {
         return { success: false, error: "La sincronización SSH no está disponible en producción." };
     }
-    const usernames = vpnUsers.map(u => u.username);
+    const { firestore } = getSdks();
+    const vpnUsersQuery = query(collection(firestore, 'vpn-users'), where('serverId', '==', serverId));
+    const vpnUsersSnap = await getDocs(vpnUsersQuery);
+    const usernames = vpnUsersSnap.docs.map(doc => doc.data().username);
+
     const saveResult = await saveConfigToVps(usernames, sshConfig);
 
     if (saveResult.success) {

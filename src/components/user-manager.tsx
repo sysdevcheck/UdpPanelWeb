@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server, Power, Settings2 } from 'lucide-react';
+import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server, Power, Settings2, GitCommitHorizontal } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +50,7 @@ type ServerData = {
     username: string;
     port: number;
     password?: string;
+    serviceCommand?: string;
 }
 
 type UserWithStatus = Omit<VpnUser, 'createdAt' | 'expiresAt'> & {
@@ -171,8 +172,10 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
         toast({ title: 'Sincronización Completa', description: `Los usuarios del servidor ${currentServer.name} han sido sincronizados.` });
+        return true;
     } catch (e: any) {
         toast({ variant: 'destructive', title: 'Error de Sincronización', description: e.message });
+        return false;
     } finally {
         setIsActionPending(false);
     }
@@ -196,10 +199,18 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Failed to create user');
 
-        toast({ title: 'Éxito', description: `Usuario "${username}" añadido.` });
+        toast({ title: 'Éxito', description: `Usuario "${username}" añadido. Sincronizando con VPS...` });
         addUserFormRef.current?.reset();
-        await handleVpsSync();
-        fetchUsersForServer(selectedServerId);
+        
+        // Fetch users before syncing to include the new user
+        await fetchUsersForServer(selectedServerId);
+        
+        // Wait for sync to complete
+        const syncSuccess = await handleVpsSync();
+        if (syncSuccess) {
+          fetchUsersForServer(selectedServerId);
+        }
+
     } catch (e: any) {
         toast({variant: 'destructive', title: 'Error', description: e.message });
     } finally {
@@ -225,7 +236,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Failed to update user');
 
-        toast({ title: 'Éxito', description: 'Usuario actualizado.' });
+        toast({ title: 'Éxito', description: 'Usuario actualizado. Sincronizando con VPS...' });
         setEditingUser(null);
         await handleVpsSync();
         fetchUsersForServer(selectedServerId);
@@ -268,7 +279,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Failed to delete user');
 
-        toast({ title: 'Éxito', description: 'Usuario eliminado.' });
+        toast({ title: 'Éxito', description: 'Usuario eliminado. Sincronizando con VPS...' });
         await handleVpsSync();
         fetchUsersForServer(selectedServerId);
     } catch (e: any) {
@@ -330,6 +341,8 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     setFilter(newFilter);
     setCurrentPage(1);
   };
+
+  const isProduction = process.env.NODE_ENV === 'production';
   
   if (isOwner && !selectedServerId) {
     if (isLoading) {
@@ -380,12 +393,15 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                         Cambiar Servidor
                     </Button>
                 )}
-                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending || isLoading} title="Reiniciar Servicio">
-                     {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} <span className='ml-2'>Reiniciar Servicio</span>
+                 <Button variant="outline" onClick={handleVpsSync} disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Forzar sincronización de usuarios con el VPS"}>
+                     {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCommitHorizontal className="h-4 w-4" />} <span className='ml-2'>Sincronizar con VPS</span>
+                 </Button>
+                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Reiniciar Servicio"}>
+                     {isActionPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <Power className="h-4 w-4" />} <span className='ml-2'>Reiniciar Servicio</span>
                  </Button>
                   <AlertDialog>
                       <AlertDialogTrigger asChild>
-                          <Button variant="destructive" disabled={isActionPending || isLoading} title="Resetear Configuración">
+                          <Button variant="destructive" disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Resetear Configuración"}>
                               <Settings2 className="h-4 w-4" /> <span className='ml-2'>Resetear Config</span>
                           </Button>
                       </AlertDialogTrigger>
@@ -413,11 +429,11 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
           <Input
             name="username"
             placeholder="Nuevo usuario"
-            disabled={isActionPending || isLoading}
+            disabled={isActionPending || isLoading || isProduction}
             className="text-base"
             required
           />
-          <Button type="submit" disabled={isActionPending || isLoading} className="mt-2 sm:mt-0 w-full sm:w-auto">
+          <Button type="submit" disabled={isActionPending || isLoading || isProduction} className="mt-2 sm:mt-0 w-full sm:w-auto">
             {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>Añadir Usuario</span>
           </Button>
@@ -487,12 +503,12 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                                   <Button onClick={() => handleRenewUser(user.id)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isActionPending} title="Renovar Usuario">
                                       <RefreshCw className="h-4 w-4" />
                                   </Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending || isProduction} onClick={() => setEditingUser(user)} title={isProduction ? "No disponible en producción" : "Editar Usuario"}>
                                       <Pencil className="h-4 w-4" />
                                   </Button>
                                   <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending} title="Eliminar Usuario">
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending || isProduction} title={isProduction ? "No disponible en producción" : "Eliminar Usuario"}>
                                               <Trash2 className="h-4 w-4" />
                                           </Button>
                                       </AlertDialogTrigger>
@@ -500,7 +516,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                                           <AlertDialogHeader>
                                           <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                           <AlertDialogDescription>
-                                              Esta acción no se puede deshacer. Esto eliminará permanentemente al usuario <strong className="font-mono">{user.username}</strong>.
+                                              Esta acción no se puede deshacer. Esto eliminará al usuario <strong className="font-mono">{user.username}</strong> de la base de datos y lo sincronizará con el VPS.
                                           </AlertDialogDescription>
                                           </AlertDialogHeader>
                                           <AlertDialogFooter>
@@ -563,7 +579,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
             <DialogHeader>
             <DialogTitle>Editar Usuario</DialogTitle>
             <DialogDescription>
-                Cambiar el nombre de usuario para <strong className="font-mono">{editingUser?.username}</strong>.
+                Cambiar el nombre de usuario para <strong className="font-mono">{editingUser?.username}</strong>. El cambio se sincronizará con el VPS.
             </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -589,7 +605,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                     </Button>
                 </DialogClose>
                 <Button type="submit" disabled={isActionPending}>
-                    {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar Cambios"}
+                    {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar y Sincronizar"}
                 </Button>
             </DialogFooter>
           </form>
@@ -598,5 +614,3 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     </>
   );
 }
-
-    
