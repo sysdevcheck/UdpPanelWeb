@@ -4,15 +4,13 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Client } from 'ssh2';
-
 
 // ====================================================================
 // Constants & Environment Configuration
 // ====================================================================
 
 const isProduction = process.env.NODE_ENV === 'production';
-
+const PRODUCTION_ERROR_MESSAGE = "Esta acción no está disponible en el entorno de producción.";
 
 // ====================================================================
 // SSH API Wrapper Functions
@@ -27,6 +25,10 @@ type SshApiResponse = {
 }
 
 async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
+    if (isProduction) {
+        return { success: false, error: PRODUCTION_ERROR_MESSAGE };
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
     
     try {
@@ -37,7 +39,6 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             cache: 'no-store',
         });
 
-        // Don't try to parse JSON if the response is not ok and not JSON
         if (!response.ok) {
             const contentType = response.headers.get('content-type');
             let errorBody;
@@ -63,13 +64,12 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
             };
         }
         
-        // Handle empty responses for certain actions like testConnection
         const textResponse = await response.text();
         if (!textResponse) {
              if (action === 'testConnection') {
                 return { success: response.status === 200 };
             }
-            return { success: true }; // Assume success for other actions with empty body
+            return { success: true };
         }
 
         return JSON.parse(textResponse);
@@ -89,6 +89,7 @@ async function sshApiRequest(action: string, payload: any, sshConfig: any): Prom
 // ====================================================================
 
 async function restartVpnService(sshConfig: any): Promise<{ success: boolean; error?: string }> {
+    if (isProduction) return { success: false, error: PRODUCTION_ERROR_MESSAGE };
     if (!sshConfig) {
         return { success: false, error: "No se puede reiniciar el servicio sin una configuración SSH." };
     }
@@ -97,17 +98,18 @@ async function restartVpnService(sshConfig: any): Promise<{ success: boolean; er
 }
 
 async function saveConfigToVps(usernames: string[], sshConfig: any): Promise<{ success: boolean; error?: string }> {
+    if (isProduction) return { success: false, error: PRODUCTION_ERROR_MESSAGE };
     const payload = { usernames };
     const result = await sshApiRequest('updateVpnConfig', payload, sshConfig);
     return { success: result.success, error: result.error };
 }
 
-// This function will now be called after a successful Firestore write.
 export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnUsers: any[]) {
+    if (isProduction) return { success: false, error: PRODUCTION_ERROR_MESSAGE };
     const usernames = vpnUsers.map(u => u.username);
     const saveResult = await saveConfigToVps(usernames, sshConfig);
 
-    if (saveResult.success && isProduction) {
+    if (saveResult.success) {
         await restartVpnService(sshConfig);
     }
     
@@ -132,16 +134,17 @@ export async function logout() {
 
 
 // ====================================================================
-// Owner Actions for Server Management (Still hits local API, which then uses SSH)
+// Owner Actions for Server Management
 // ====================================================================
 
 export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
+  if (isProduction) return { success: false };
   const result = await sshApiRequest('testConnection', {}, serverConfig);
-  // Ensure we always return an object with a success property
   return { success: result?.success || false };
 }
 
 export async function resetServerConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    if (isProduction) return { success: false, error: PRODUCTION_ERROR_MESSAGE };
     const serverId = formData.get('serverId') as string;
     const sshConfigPayload = formData.get('sshConfig') as string;
 
@@ -161,6 +164,7 @@ export async function resetServerConfig(prevState: any, formData: FormData): Pro
 }
 
 export async function restartService(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    if (isProduction) return { success: false, error: PRODUCTION_ERROR_MESSAGE };
     const serverId = formData.get('serverId') as string;
     const sshConfigPayload = formData.get('sshConfig') as string;
 
