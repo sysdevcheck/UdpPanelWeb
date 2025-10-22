@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       };
 
       const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-      await cookies().set('session', JSON.stringify(sessionPayload), {
+      cookies().set('session', JSON.stringify(sessionPayload), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         expires: Date.now() + thirtyDays,
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     };
 
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    await cookies().set('session', JSON.stringify(sessionPayload), {
+    cookies().set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       expires: Date.now() + thirtyDays,

@@ -112,7 +112,7 @@ export async function syncVpnUsersWithVps(serverId: string, sshConfig: any) {
 // ====================================================================
 
 export async function getSession() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     return cookieStore.get('session');
 }
 
