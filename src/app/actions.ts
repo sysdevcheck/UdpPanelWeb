@@ -116,7 +116,7 @@ export async function getSession() {
     return cookieStore.get('session');
 }
 
-export async function logout() {
+export function logout() {
   cookies().delete('session');
   redirect('/login');
 }
