@@ -38,7 +38,6 @@ export default function LoginPage() {
 
       if (response.ok) {
         router.push('/');
-        router.refresh(); // Forzar la recarga de datos del servidor en la página de inicio
       } else {
         setError(data.error || 'Fallo al iniciar sesión.');
       }
