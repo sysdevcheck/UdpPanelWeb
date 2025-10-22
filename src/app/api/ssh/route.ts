@@ -1,227 +1,94 @@
 
-import { NextResponse } from 'next/server';
-
-// Lazy load ssh2
-let Client: any;
-
-async function loadSsh2() {
-    if (!Client) {
-        Client = (await import('ssh2')).Client;
-    }
-    return Client;
-}
+import { type NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import path from 'path';
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
-const remoteBasePath = '/etc/zivpn';
-const remoteConfigPath = `${remoteBasePath}/config.json`;
-
-const defaultConfig = {
-  "listen": ":5667",
-  "cert": `${remoteBasePath}/zivpn.crt`,
-  "key": `${remoteBasePath}/zivpn.key`,
-  "obfs": "zivpn",
-  "auth": {
-    "mode": "passwords",
-    "config": []
-  }
-};
-
-
-async function getSshConnection(sshConfig: any): Promise<any> {
-    const SshClient = await loadSsh2();
-    const conn = new SshClient();
+function executeSshClient(action: string, payload: any): Promise<any> {
     return new Promise((resolve, reject) => {
-        conn.on('ready', () => resolve(conn))
-            .on('error', (err: any) => reject(err))
-            .on('timeout', () => reject(new Error('Connection timed out')))
-            .connect(sshConfig);
-    });
-}
-
-async function execCommand(ssh: any, command: string, timeout = 15000): Promise<{ stdout: string; stderr: string }> {
-    return new Promise((resolve, reject) => {
-        let stdout = '';
-        let stderr = '';
+        const scriptPath = path.join(process.cwd(), 'src', 'lib', 'ssh-client.js');
         
-        const timer = setTimeout(() => {
-            reject(new Error(`El comando ha superado el tiempo de espera de ${timeout / 1000}s. Posiblemente es un comando interactivo no soportado.`));
-        }, timeout);
+        // Ensure Node.js executable can be found regardless of env
+        const nodeExecutable = process.execPath;
 
-        ssh.exec(command, (err: any, stream: any) => {
-            if (err) {
-                clearTimeout(timer);
-                return reject(err);
-            }
-            stream.on('close', (code: any, signal: any) => {
-                clearTimeout(timer);
-                resolve({ stdout, stderr });
-            }).on('data', (data: Buffer) => {
-                stdout += data.toString();
-            }).stderr.on('data', (data: Buffer) => {
-                stderr += data.toString();
-            });
+        const child = spawn(nodeExecutable, [scriptPath]);
+        
+        let stdoutData = '';
+        let stderrData = '';
+
+        child.stdout.on('data', (data) => {
+            stdoutData += data.toString();
         });
-    });
-}
 
-function getSftp(ssh: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-        ssh.sftp((err: any, sftp: any) => {
-            if (err) return reject(err);
-            resolve(sftp);
+        child.stderr.on('data', (data) => {
+            stderrData += data.toString();
         });
-    });
-}
 
-async function readFileSftp(sftp: any, path: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-        sftp.readFile(path, 'utf8', (err: any, data: string) => {
-            if (err) {
-                 if (err.code === 2) { // SFTP_STATUS_CODE.NO_SUCH_FILE
-                    resolve(''); // Return empty string if file doesn't exist
-                } else {
-                    reject(err);
+        child.on('close', (code) => {
+            if (stderrData) {
+                 // Try to parse stderr as JSON for structured errors
+                try {
+                    const errorJson = JSON.parse(stderrData);
+                    return reject(errorJson);
+                } catch (e) {
+                    // Otherwise, treat it as a plain text error
+                    return reject({ error: stderrData.trim() });
                 }
-            } else {
-                resolve(data);
+            }
+            if (code !== 0) {
+                return reject({ error: `El script SSH finalizó con el código ${code}` });
+            }
+            try {
+                resolve(JSON.parse(stdoutData || '{}'));
+            } catch (e) {
+                reject({ error: 'La respuesta del script SSH no es un JSON válido.', details: stdoutData });
             }
         });
+        
+        child.on('error', (err) => {
+            reject({ error: 'Fallo al iniciar el proceso del cliente SSH.', details: err.message });
+        });
+
+        // Send data to the child process
+        child.stdin.write(JSON.stringify({ action, payload }));
+        child.stdin.end();
     });
 }
 
-async function writeFileSftp(sftp: any, path: string, data: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const dirname = path.substring(0, path.lastIndexOf('/'));
-        const ssh = sftp.getClient();
-        execCommand(ssh, `mkdir -p ${dirname}`).then(() => {
-            sftp.writeFile(path, data, 'utf8', (err: any) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        }).catch(reject);
-    });
-}
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     const log: LogEntry[] = [];
-    let ssh: any | null = null;
     
     try {
         const body = await request.json();
-        const { action, payload, sshConfig } = body;
+        const { action, sshConfig, payload = {} } = body;
         
-        let finalSshConfig = { ...sshConfig };
-
-        if (!finalSshConfig || !finalSshConfig.host || !finalSshConfig.username) {
-            log.push({ level: 'ERROR', message: 'SSH host and username are required.' });
-            return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
+        if (!action || !sshConfig) {
+            return NextResponse.json({ success: false, error: 'La acción y la configuración SSH son requeridas.' }, { status: 400 });
         }
-        
+
+        const internalPayload = {
+            sshConfig,
+            ...payload
+        };
+
+        const result = await executeSshClient(action, internalPayload);
+
+        // For testConnection, the log is the primary output
         if (action === 'testConnection') {
-            try {
-                log.push({ level: 'INFO', message: `Attempting to connect to ${finalSshConfig.username}@${finalSshConfig.host}:${finalSshConfig.port || 22}...` });
-                ssh = await getSshConnection(finalSshConfig);
-                log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
-                log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
-                return NextResponse.json({ success: true, message: 'Connection successful', log });
-            } catch (e: any) {
-                let errorMessage = e.message;
-                 if (e.code === 'ENOTFOUND' || e.message.includes('ENOTFOUND')) {
-                    errorMessage = `Host not found. Could not resolve DNS for ${finalSshConfig.host}.`;
-                } else if (e.message.includes('All configured authentication methods failed')) {
-                    errorMessage = 'Authentication failed. Please check your username and password.';
-                } else if (e.level === 'client-timeout' || e.message.includes('Timed out')) {
-                    errorMessage = `Connection timed out. Check the host IP and port. Ensure the port is open and not blocked by a firewall.`;
-                }
-                log.push({ level: 'ERROR', message: errorMessage });
-                return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
-            }
+            return NextResponse.json(result);
         }
 
-        ssh = await getSshConnection(finalSshConfig);
-        
-        switch (action) {
-            case 'updateVpnConfig': {
-                const { usernames } = payload;
-                const sftp = await getSftp(ssh);
-                const configStr = await readFileSftp(sftp, remoteConfigPath);
-                let config;
-                try {
-                    config = configStr ? JSON.parse(configStr) : { ...defaultConfig };
-                } catch {
-                    config = { ...defaultConfig };
-                }
-                config.auth.config = usernames;
-                await writeFileSftp(sftp, remoteConfigPath, JSON.stringify(config, null, 2));
-                return NextResponse.json({ success: true, message: "Config updated on VPS" });
-            }
-            
-            case 'restartService': {
-                 const serviceCommand = finalSshConfig.serviceCommand || 'systemctl restart zivpn';
-                 const { stdout, stderr } = await execCommand(ssh, `sudo ${serviceCommand}`);
-                 if (stderr) {
-                     return NextResponse.json({ success: false, error: stderr }, { status: 500 });
-                 }
-                 return NextResponse.json({ success: true, data: stdout });
-            }
-            
-            case 'resetConfig': {
-                const scriptCommand = 'wget -O zi.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi.sh && sudo chmod +x zi.sh && sudo ./zi.sh';
-                const { stderr: scriptErr } = await execCommand(ssh, scriptCommand, 60000); // Longer timeout for reset
-                if (scriptErr) {
-                    console.warn("Error during script execution:", scriptErr);
-                    if (!scriptErr.includes("stty: not a tty")) {
-                       return NextResponse.json({ success: false, error: `Script execution failed: ${scriptErr}` }, { status: 500 });
-                    }
-                }
-                return NextResponse.json({ success: true, message: "Reset script executed. Re-syncing users is required." });
-            }
-
-            default:
-                log.push({ level: 'ERROR', message: `Invalid action specified: '${action}'` });
-                return NextResponse.json({ success: false, error: 'Invalid action', log }, { status: 400 });
-        }
+        return NextResponse.json({ success: true, ...result });
 
     } catch (error: any) {
         console.error('API SSH Route Error:', error);
-        let errorMessage = error.message;
-
-        const contentType = request.headers.get('content-type');
-        let isJsonRequest = contentType && contentType.includes('application/json');
-
-        if (!isJsonRequest) {
-            // If it's not a JSON request, it might not be a SyntaxError we can recover from.
-            // But we can check if the body is parseable as JSON.
-             try {
-                await request.json(); // try to parse
-            } catch(e) {
-                 if (e instanceof SyntaxError) {
-                    errorMessage = 'Invalid JSON in request body.';
-                    return NextResponse.json({ success: false, error: errorMessage, log }, { status: 400 });
-                }
-            }
-        }
         
-        if (error.code === 'ENOTFOUND' || error.message.includes('ENOTFOUND')) {
-            errorMessage = `Host not found. Could not resolve DNS.`;
-        } else if (error.message.includes('All configured authentication methods failed')) {
-            errorMessage = 'Authentication failed. Please check your username and password.';
-        } else if (error.level === 'client-timeout' || error.message.includes('Timed out')) {
-            errorMessage = `Connection timed out. Check the host IP and port.`;
-        }
-        log.push({ level: 'ERROR', message: `An unexpected error occurred in the API route: ${errorMessage}` });
+        const errorMessage = error.error || error.message || 'Ocurrió un error desconocido.';
+        const errorDetails = error.details || '';
+        log.push({ level: 'ERROR', message: `${errorMessage} ${errorDetails}`.trim() });
         
-        return new Response(`<html><body><h1>Server Error</h1><p>${errorMessage}</p></body></html>`, {
-            status: 500,
-            headers: { 'Content-Type': 'text/html' }
-        });
-
-    } finally {
-        if(ssh && ssh.readable) {
-            ssh.end();
-        }
+        return NextResponse.json({ success: false, error: errorMessage, log }, { status: 500 });
     }
 }
-
-    
