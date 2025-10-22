@@ -85,35 +85,13 @@ info "Paso 4: Instalando dependencias del proyecto con npm..."
 npm install
 success "Paso 4 completado: Dependencias del proyecto instaladas."
 
-# 5. CONFIGURAR VARIABLES DE ENTORNO (.env.local)
-info "Paso 5: Configurando las variables de entorno..."
+# 5. ELIMINAR ARCHIVO .env.local si existe
 if [ -f ".env.local" ]; then
-    warn "El archivo '.env.local' ya existe. No se realizarán cambios para preservar las credenciales."
-else
-    echo "Por favor, introduce las credenciales para el usuario Dueño (Owner):"
-    read -p "Nombre de usuario para el Dueño [admin]: " owner_username
-    OWNER_USERNAME=${owner_username:-admin}
-
-    read -s -p "Contraseña para el Dueño: " owner_password
-    echo
-    while [ -z "$owner_password" ]; do
-        read -s -p "La contraseña no puede estar vacía. Por favor, introduce una contraseña: " owner_password
-        echo
-    done
-
-    # Crear el archivo .env.local
-    cat > .env.local << EOF
-# Credenciales del usuario Dueño (Owner)
-OWNER_USERNAME=${OWNER_USERNAME}
-OWNER_PASSWORD=${owner_password}
-
-# URL base donde se ejecutará el panel.
-# Usamos localhost:3000 por defecto, ya que se ejecuta en el mismo VPS.
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-EOF
-    success "Archivo '.env.local' creado con éxito."
+    warn "El archivo '.env.local' ya no es necesario y ha sido eliminado."
+    rm .env.local
 fi
-success "Paso 5 completado: Variables de entorno configuradas."
+success "Paso 5 completado: Configuración de entorno actualizada."
+
 
 # 6. CREAR ARCHIVO DE INTERCAMBIO (SWAP) PARA EVITAR ERRORES DE MEMORIA
 info "Paso 6: Creando archivo de intercambio (swap) para asegurar memoria suficiente..."
@@ -164,6 +142,10 @@ success "¡Instalación completada!"
 echo
 info "Tu panel ZiVPN Multi-Manager ya está corriendo."
 info "Puedes acceder a él en: http://<IP_DE_TU_VPS>:3000"
+info "Para iniciar sesión, usa un usuario y contraseña de un usuario del sistema operativo de tu VPS."
+warn "IMPORTANTE: Un usuario será considerado 'Dueño' (Owner) si pertenece al grupo 'sudo' o 'admin' en el VPS."
+warn "El primer servidor que agregues en el panel será el utilizado para la autenticación."
+echo
 warn "¡IMPORTANTE! Si tienes un firewall (como ufw), asegúrate de abrir el puerto 3000:"
 echo -e "  ${YELLOW}sudo ufw allow 3000${NC}"
 echo

@@ -1,7 +1,6 @@
 
 import { getSession, logout } from './actions';
 import { UserManager } from '@/components/user-manager';
-import { ManagerAdmin } from '@/components/manager-admin';
 import { SshConfigManager } from '@/components/ssh-config-manager';
 import { BackupManager } from '@/components/backup-manager';
 import { Users, LogOut, UserCog, Server, Database } from 'lucide-react';
@@ -60,7 +59,7 @@ export default async function Home() {
               <span className="text-sm text-muted-foreground">
                 <span className="hidden sm:inline">Bienvenido, </span>
                 <strong className="font-medium text-foreground">{username}</strong>
-                 {isOwner && <span className="text-amber-500 ml-1">(Dueño)</span>}
+                 {isOwner ? <span className="text-amber-500 ml-1">(Dueño)</span> : <span className="text-cyan-500 ml-1">(Manager)</span>}
               </span>
               <form action={logout}>
                 <Button variant="outline" size="sm">
@@ -74,7 +73,7 @@ export default async function Home() {
       </header>
       <div className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
          <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-4' : 'grid-cols-1'} max-w-3xl mx-auto`}>
+          <TabsList className={`grid w-full ${isOwner ? 'grid-cols-3' : 'grid-cols-1'} max-w-xl mx-auto`}>
             {isOwner && (
                 <TabsTrigger value="servers">
                     <Server className="mr-2 h-4 w-4" />
@@ -85,12 +84,6 @@ export default async function Home() {
               <Users className="mr-2 h-4 w-4" />
               Usuarios VPN
             </TabsTrigger>
-            {isOwner && (
-              <TabsTrigger value="managers">
-                <UserCog className="mr-2 h-4 w-4" />
-                Managers
-              </TabsTrigger>
-            )}
             {isOwner && (
                 <TabsTrigger value="backup">
                     <Database className="mr-2 h-4 w-4" />
@@ -119,11 +112,6 @@ export default async function Home() {
               />
             )}
           </TabsContent>
-          {isOwner && (
-            <TabsContent value="managers">
-               <ManagerAdmin />
-            </TabsContent>
-          )}
            {isOwner && (
             <TabsContent value="backup">
                <BackupManager />

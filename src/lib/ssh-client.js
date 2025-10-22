@@ -45,7 +45,10 @@ async function execCommand(ssh, command, timeout = 15000) {
             stream.on('close', (code) => {
                 clearTimeout(timer);
                 if (code !== 0 && stderr) {
-                    return reject(new Error(stderr.trim()));
+                    // Ignore "not a tty" error for sudo commands
+                    if (!stderr.includes('not a tty')) {
+                        return reject(new Error(stderr.trim()));
+                    }
                 }
                 resolve({ stdout, stderr });
             }).on('data', (data) => {
@@ -107,7 +110,6 @@ async function main(action, payload) {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${sshConfig.username}@${sshConfig.host}:${sshConfig.port || 22}...` });
                 ssh = await getSshConnection(sshConfig);
                 log.push({ level: 'SUCCESS', message: 'Connection established & authenticated.' });
-                log.push({ level: 'SUCCESS', message: 'SSH Connection Verified!' });
                 return { success: true, message: 'Connection successful', log };
             } catch (e) {
                 let errorMessage = e.message;
@@ -140,7 +142,7 @@ async function main(action, payload) {
             case 'restartService': {
                 const serviceCommand = sshConfig.serviceCommand || 'systemctl restart zivpn';
                 const { stdout, stderr } = await execCommand(ssh, `sudo ${serviceCommand}`);
-                if (stderr) throw new Error(stderr);
+                if (stderr && !stderr.includes('not a tty')) throw new Error(stderr);
                 return { data: stdout };
             }
             
@@ -151,6 +153,14 @@ async function main(action, payload) {
                     throw new Error(`Script execution failed: ${stderr}`);
                 }
                 return { message: "Reset script executed." };
+            }
+
+            case 'checkUserSudo': {
+                const { usernameToCheck } = payload;
+                const command = `groups ${usernameToCheck}`;
+                const { stdout } = await execCommand(ssh, command);
+                const isSudoer = stdout.includes('sudo') || stdout.includes('admin');
+                return { data: { isSudoer } };
             }
 
             default:

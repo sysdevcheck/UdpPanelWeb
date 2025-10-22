@@ -8,11 +8,3 @@ runConfig:
   cpu: 1
   # Automatically spin up more instances in response to increased traffic.
   maxInstances: 1
-
-# Environment variables are key-value pairs that you can pass into your application.
-# https://firebase.google.com/docs/app-hosting/configure#environment-variables
-env:
-  - variable: OWNER_USERNAME
-    value: "admin"
-  - variable: OWNER_PASSWORD
-    value: "password"
