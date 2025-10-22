@@ -8,7 +8,6 @@ type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
 const remoteBasePath = '/etc/zivpn';
 const remoteConfigPath = `${remoteBasePath}/config.json`;
-const SERVERS_PATH = path.join(process.cwd(), 'data', 'servers.json');
 
 const defaultConfig = {
   "listen": ":5667",
@@ -95,16 +94,6 @@ async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Pro
     });
 }
 
-const readServers = async () => {
-    try {
-        const data = await fs.readFile(SERVERS_PATH, 'utf-8');
-        return JSON.parse(data);
-    } catch (e: any) {
-        if (e.code === 'ENOENT') return [];
-        throw e;
-    }
-};
-
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
     let ssh: Client | null = null;
@@ -120,18 +109,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'SSH host and username are required.', log }, { status: 400 });
         }
         
-        if (!finalSshConfig.password) {
-            const servers = await readServers();
-            const server = servers.find((s: any) => s.id === finalSshConfig.id);
-            if (server && server.password) {
-                finalSshConfig.password = server.password;
-            } else {
-                 log.push({ level: 'ERROR', message: 'SSH password not provided and not found in local data.' });
-                 return NextResponse.json({ success: false, error: 'SSH password not available for this operation.', log }, { status: 400 });
-            }
-        }
-
-
         if (action === 'testConnection') {
             try {
                 log.push({ level: 'INFO', message: `Attempting to connect to ${finalSshConfig.username}@${finalSshConfig.host}:${finalSshConfig.port || 22}...` });
@@ -172,7 +149,8 @@ export async function POST(request: Request) {
             }
             
             case 'restartService': {
-                 const { stdout, stderr } = await execCommand(ssh, 'sudo /usr/bin/systemctl restart zivpn');
+                 const serviceCommand = finalSshConfig.serviceCommand || 'systemctl restart zivpn';
+                 const { stdout, stderr } = await execCommand(ssh, `sudo ${serviceCommand}`);
                  if (stderr) {
                      return NextResponse.json({ success: false, error: stderr }, { status: 500 });
                  }

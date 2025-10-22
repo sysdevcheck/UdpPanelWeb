@@ -23,7 +23,8 @@
         "host": { "type": "string" },
         "port": { "type": "number" },
         "username": { "type": "string" },
-        "password": { "type": "string", "description": "SSH password for the server." }
+        "password": { "type": "string", "description": "SSH password for the server." },
+        "serviceCommand": { "type": "string", "description": "The command to restart the VPN service, e.g., 'systemctl restart zivpn'." }
       },
       "required": ["name", "host", "port", "username", "password"]
     },

@@ -30,19 +30,24 @@ export async function POST(request: NextRequest) {
   const serversCollection = collection(firestore, 'servers');
   try {
     const body = await request.json();
-    const { serverId, name, host, port, username, password } = body;
+    const { serverId, name, host, port, username, password, serviceCommand } = body;
     
-    const serverData = { name, host, port, username, password };
+    const serverData: any = { 
+        name, 
+        host, 
+        port, 
+        username,
+        serviceCommand: serviceCommand || 'systemctl restart zivpn'
+    };
 
     if (serverId) {
         const serverDocRef = doc(firestore, 'servers', serverId);
-        // Do not update password if it's not provided
-        const updateData: Partial<typeof serverData> = { name, host, port, username };
         if (password) {
-            updateData.password = password;
+            serverData.password = password;
         }
-        await updateDoc(serverDocRef, updateData);
+        await updateDoc(serverDocRef, serverData);
     } else {
+        serverData.password = password;
         await addDoc(serversCollection, serverData);
     }
     

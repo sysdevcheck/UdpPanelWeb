@@ -41,6 +41,7 @@ type SshConfig = {
     port: number;
     username: string;
     password?: string;
+    serviceCommand?: string;
 }
 
 type ServerStatus = 'online' | 'offline' | 'comprobando' | 'unknown';
@@ -120,6 +121,7 @@ export function SshConfigManager() {
         const port = formData.get('port') as string;
         const username = formData.get('username') as string;
         const password = formData.get('password') as string;
+        const serviceCommand = formData.get('serviceCommand') as string;
 
         if (!name || !host || !username || (!password && !serverId)) {
             toast({ variant: 'destructive', title: 'Error', description: 'Nombre, host, usuario y contraseña son requeridos para nuevos servidores.' });
@@ -132,6 +134,7 @@ export function SshConfigManager() {
             host,
             port: port ? parseInt(port, 10) : 22,
             username,
+            serviceCommand: serviceCommand || 'systemctl restart zivpn'
         };
         if(serverId) serverData.id = serverId;
 
@@ -377,6 +380,10 @@ export function SshConfigManager() {
                                 <Label htmlFor="ssh-password">Contraseña SSH</Label>
                                 <Input name="password" id="ssh-password" type="password" placeholder={editingServer?.id ? 'Dejar en blanco para no cambiar' : 'Introduce la contraseña SSH'} required={!editingServer?.id} disabled={isSavingPending} />
                             </div>
+                        </div>
+                         <div className="grid gap-1.5">
+                            <Label htmlFor="serviceCommand">Comando de Servicio</Label>
+                            <Input name="serviceCommand" id="serviceCommand" placeholder="Ej: systemctl restart zivpn" defaultValue={editingServer?.serviceCommand || 'systemctl restart zivpn'} disabled={isSavingPending} />
                         </div>
                     </div>
 
