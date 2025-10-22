@@ -80,8 +80,8 @@ OWNER_USERNAME=admin
 OWNER_PASSWORD=tu_contraseña_segura
 
 # URL base donde se ejecutará el panel.
-# Si lo ejecutas en el mismo VPS y en el puerto 9002, usa esta:
-NEXT_PUBLIC_BASE_URL=http://localhost:9002
+# Si lo ejecutas en el mismo VPS y en el puerto 3000, usa esta:
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 > **Guardar y salir en `nano`**: `Ctrl+X`, luego `Y`, y finalmente `Enter`.
 
