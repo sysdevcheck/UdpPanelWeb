@@ -80,29 +80,18 @@ git clone "$REPO_URL"
 cd "$PROJECT_DIR"
 success "Paso 3 completado: Proyecto clonado en el directorio '$PROJECT_DIR'."
 
-# 4. PEDIR CREDENCIALES DEL DUEÑO
-info "Paso 4: Configuración de la cuenta del Dueño (Owner)..."
-read -p "Introduce el nombre de usuario para el Dueño (ej. admin): " owner_username
-read -s -p "Introduce la contraseña para el Dueño: " owner_password
-echo
-
-# Crear el archivo .env.local
-info "Creando archivo de configuración .env.local..."
-cat > .env.local << EOL
-# Credenciales del usuario Dueño (Owner)
-OWNER_USERNAME=${owner_username:-admin}
-OWNER_PASSWORD=${owner_password:-password}
-
-# URL base donde se ejecutará el panel.
-# No cambies esto a menos que uses un proxy inverso.
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-EOL
-success "Paso 4 completado: Archivo .env.local creado con las credenciales del Dueño."
-
-# 5. INSTALAR DEPENDENCIAS DEL PROYECTO
-info "Paso 5: Instalando dependencias del proyecto con npm..."
+# 4. INSTALAR DEPENDENCIAS DEL PROYECTO
+info "Paso 4: Instalando dependencias del proyecto con npm..."
 npm install
-success "Paso 5 completado: Dependencias del proyecto instaladas."
+success "Paso 4 completado: Dependencias del proyecto instaladas."
+
+# 5. ELIMINAR ARCHIVO .env.local si existe
+if [ -f ".env.local" ]; then
+    warn "El archivo '.env.local' ya no es necesario y ha sido eliminado."
+    rm .env.local
+fi
+success "Paso 5 completado: Configuración de entorno actualizada."
+
 
 # 6. CREAR ARCHIVO DE INTERCAMBIO (SWAP) PARA EVITAR ERRORES DE MEMORIA
 info "Paso 6: Creando archivo de intercambio (swap) para asegurar memoria suficiente..."
@@ -141,6 +130,9 @@ success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 info "Configurando PM2 para que se inicie al arrancar el sistema..."
 pm2 save
 # Obtener el comando de startup y ejecutarlo con sudo.
+# El 'env PATH...' asegura que el comando sudo tenga el path correcto al ejecutable de node/pm2.
+# '-u $(whoami)' asegura que el servicio se ejecute como el usuario actual.
+# '--hp $(echo $HOME)' establece el directorio home correcto.
 sudo env PATH=$PATH:/usr/bin $(command -v pm2) startup -u $(whoami) --hp $(echo $HOME)
 success "Paso 8 completado: PM2 configurado para arrancar con el sistema."
 
@@ -150,7 +142,9 @@ success "¡Instalación completada!"
 echo
 info "Tu panel ZiVPN Multi-Manager ya está corriendo."
 info "Puedes acceder a él en: http://<IP_DE_TU_VPS>:3000"
-info "Usa las credenciales del Dueño que acabas de configurar para iniciar sesión."
+info "Para iniciar sesión, usa un usuario y contraseña de un usuario del sistema operativo de tu VPS."
+warn "IMPORTANTE: Un usuario será considerado 'Dueño' (Owner) si pertenece al grupo 'sudo' o 'admin' en el VPS."
+warn "El primer servidor que agregues en el panel será el utilizado para la autenticación."
 echo
 warn "¡IMPORTANTE! Si tienes un firewall (como ufw), asegúrate de abrir el puerto 3000:"
 echo -e "  ${YELLOW}sudo ufw allow 3000${NC}"
