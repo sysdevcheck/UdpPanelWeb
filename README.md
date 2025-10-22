@@ -6,7 +6,7 @@ El panel está diseñado con un sistema de roles:
 - **Dueño (Owner)**: Tiene control total. Puede configurar múltiples servidores VPS, crear cuentas de manager y asignar cada manager a un servidor específico. También puede gestionar los usuarios de cualquier servidor.
 - **Manager**: Tiene control limitado. Solo puede gestionar los usuarios VPN del servidor VPS que el dueño le ha asignado. No puede ver las credenciales de los servidores ni a otros managers.
 
-> **IMPORTANTE:** Esta versión está configurada para una **instalación integrada**, lo que significa que el panel se ejecuta en su propio servidor y gestiona los servidores ZiVPN de forma remota a través de SSH. La funcionalidad de gestión local ha sido eliminada para dar paso a la arquitectura multi-servidor.
+> **IMPORTANTE:** Esta aplicación está diseñada para ser desplegada en su **propio Servidor Privado Virtual (VPS)**. No es compatible con plataformas de hosting "serverless" como Vercel, Netlify o Firebase App Hosting debido a que requiere acceso directo a la red para conexiones SSH.
 
 ---
 
@@ -35,28 +35,113 @@ El panel está diseñado con un sistema de roles:
 
 ---
 
-## 🚀 Instalación y Despliegue
+## 🚀 Instalación en un VPS
 
-Este panel está diseñado para ser desplegado en un servicio de hosting (como Vercel, Firebase App Hosting, o tu propio VPS) y gestionar tus servidores `zivpn` remotamente.
+Sigue estos pasos para desplegar el panel en tu propio servidor (se recomienda Ubuntu 22.04 o superior).
 
-### 1. Despliega el Panel
+### 1. Requisitos Previos
 
-1.  **Haz un "Fork"** de este repositorio en tu cuenta de GitHub.
-2.  **Conecta tu repositorio a un servicio de hosting** (ej. Vercel, Netlify, Firebase). La plataforma debería detectar que es un proyecto Next.js y desplegarlo automáticamente.
+Asegúrate de tener lo siguiente instalado en tu VPS:
+- **Node.js**: Versión 18.x o 20.x recomendada.
+- **npm**: Generalmente se instala junto con Node.js.
+- **git**: Para clonar el repositorio.
 
-### 2. Accede y Configura
+Puedes instalar Node.js y npm fácilmente con `nvm` (Node Version Manager) o siguiendo guías oficiales.
 
-1.  **Visita la URL** que te proporcionó tu servicio de hosting (ej. `https://mi-panel.vercel.app`).
-2.  **Inicia sesión** con las credenciales por defecto:
-    - **Usuario:** `admin`
-    - **Contraseña:** `password`
-    > **Recomendación**: Cambia la contraseña del dueño inmediatamente después de iniciar sesión por primera vez.
-3.  **Ve a la pestaña "Servidores"**:
-    - Añade tu primer servidor VPS introduciendo su IP, puerto SSH, usuario y contraseña. El panel verificará la conexión antes de guardarlo.
-4.  **Ve a la pestaña "Managers" (Opcional)**:
-    - Si quieres delegar, crea cuentas de manager y asígnales uno de los servidores que acabas de configurar.
+### 2. Clonar el Repositorio
 
-### 3. Permisos en los Servidores ZiVPN Remotos
+Conéctate a tu VPS por SSH y clona el proyecto:
+```bash
+git clone https://github.com/sysdevcheck/UdpPanelWeb.git
+cd UdpPanelWeb
+```
+
+### 3. Instalar Dependencias
+
+Instala todas las dependencias del proyecto:
+```bash
+npm install
+```
+
+### 4. Configurar Variables de Entorno
+
+Crea un archivo `.env.local` para guardar tu configuración privada. **Este archivo no se sube a `git`**.
+```bash
+nano .env.local
+```
+Añade las siguientes líneas al archivo, personalizando los valores:
+```
+# Credenciales del usuario Dueño (Owner)
+OWNER_USERNAME=admin
+OWNER_PASSWORD=tu_contraseña_segura
+
+# URL base donde se ejecutará el panel.
+# Si lo ejecutas en el mismo VPS y en el puerto 9002, usa esta:
+NEXT_PUBLIC_BASE_URL=http://localhost:9002
+```
+> **Guardar y salir en `nano`**: `Ctrl+X`, luego `Y`, y finalmente `Enter`.
+
+### 5. Compilar la Aplicación
+
+Compila el proyecto para producción. Esto optimizará los archivos para un mejor rendimiento.
+```bash
+npm run build
+```
+
+### 6. Iniciar la Aplicación
+
+Ahora puedes iniciar el servidor de producción:
+```bash
+npm start
+```
+Por defecto, la aplicación se ejecutará en `http://localhost:9002`. Si estás accediendo a través de la IP de tu VPS, deberías poder verla en `http://<IP_DE_TU_VPS>:9002`.
+
+---
+
+## 🏃‍♂️ (Recomendado) Mantener la App Corriendo con PM2
+
+`pm2` es un gestor de procesos que mantendrá tu aplicación en línea, la reiniciará si se cae y te ayudará a gestionarla.
+
+1.  **Instala PM2 globalmente**:
+    ```bash
+    npm install pm2 -g
+    ```
+2.  **Inicia tu aplicación con PM2**:
+    Desde la carpeta de tu proyecto (`UdpPanelWeb`), ejecuta:
+    ```bash
+    pm2 start npm --name "zivpn-panel" -- start
+    ```
+3.  **Guarda la configuración para que se reinicie con el servidor**:
+    ```bash
+    pm2 save
+    pm2 startup
+    ```
+    (El último comando te dará una línea para copiar y pegar, ejecútala para completar la configuración).
+
+**Comandos útiles de PM2**:
+- `pm2 list`: Muestra el estado de tus aplicaciones.
+- `pm2 restart zivpn-panel`: Reinicia el panel.
+- `pm2 logs zivpn-panel`: Muestra los registros (logs) en tiempo real.
+- `pm2 stop zivpn-panel`: Detiene la aplicación.
+
+---
+
+## 🚑 Resolución de Problemas
+
+### Error de Conexión al Añadir un Servidor
+
+-   **"Authentication failed"**: Revisa el nombre de usuario y la contraseña del VPS remoto que estás intentando añadir.
+-   **"Connection timed out"**:
+    -   Verifica que la IP del servidor remoto es correcta.
+    -   Asegúrate de que el puerto SSH (usualmente 22) está abierto en el firewall del servidor remoto.
+-   **"Host not found"**: El nombre de host o la IP no se pudo resolver. Comprueba que está bien escrito.
+
+### Las Acciones (Añadir Usuario, Reiniciar) Fallan
+
+-   **Revisa los permisos `sudoers`**: Es la causa más común. Asegúrate de que el usuario SSH tiene permiso para ejecutar `systemctl restart zivpn` sin contraseña en el servidor remoto (ver la sección "Permisos en los Servidores ZiVPN Remotos" más abajo).
+-   **Consulta los logs**: Usa `pm2 logs zivpn-panel` para ver los errores detallados.
+---
+## 🔐 Permisos en los Servidores ZiVPN Remotos
 
 Para que el panel pueda gestionar tus servidores, el usuario SSH que configures en el panel (ej. `root`) necesita permisos para reiniciar el servicio `zivpn` sin contraseña.
 
@@ -73,37 +158,4 @@ root ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart zivpn
 > *   `nano`: `Ctrl+X`, luego `Y`, luego `Enter`.
 > *   `vim`: presiona `Esc`, escribe `:wq` y presiona `Enter`.
 
-¡Y listo! Tu panel "Multi-Manager" está configurado para gestionar todos tus servidores.
-
----
-
-## 💻 Desarrollo Local
-
-1.  **Clona el proyecto e instala dependencias**:
-    ```bash
-    git clone https://github.com/sysdevcheck/UdpPanelWeb.git
-    cd UdpPanelWeb
-    npm install
-    ```
-2.  **Ejecuta el servidor de desarrollo**:
-    ```bash
-    npm run dev
-    ```
-    La aplicación estará disponible en `http://localhost:9002`.
-
----
-
-## 🚑 Resolución de Problemas
-
-### Error de Conexión al Añadir un Servidor
-
--   **"Authentication failed"**: Revisa el nombre de usuario y la contraseña del VPS.
--   **"Connection timed out"**:
-    -   Verifica que la IP del servidor es correcta.
-    -   Asegúrate de que el puerto SSH (usualmente 22) está abierto en el firewall del VPS.
--   **"Host not found"**: El nombre de host o la IP no se pudo resolver. Comprueba que está bien escrito.
-
-### Las Acciones (Añadir Usuario, Reiniciar) Fallan
-
--   **Revisa los permisos `sudoers`**: Es la causa más común. Asegúrate de que el usuario SSH tiene permiso para ejecutar `systemctl restart zivpn` sin contraseña en el servidor remoto (ver paso 3 de la instalación).
--   **Consulta los logs del servidor del panel**: Si lo has desplegado en Vercel o similar, revisa los logs en tiempo real de la función que maneja la API SSH (`/api/ssh`) para ver errores detallados.
+¡Y listo! Tu panel "Multi-Manager" está configurado para gestionar todos tus servidores desde tu propio VPS.
