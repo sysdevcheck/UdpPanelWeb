@@ -21,7 +21,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # URL del Repositorio de GitHub
-# !!! IMPORTANTE: Cambia esta URL por la de tu repositorio !!!
 REPO_URL="https://github.com/sysdevcheck/UdpPanelWeb.git"
 PROJECT_DIR="UdpPanelWeb"
 
