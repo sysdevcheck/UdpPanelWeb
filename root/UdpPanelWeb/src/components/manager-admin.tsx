@@ -35,8 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from './ui/badge';
-import { Label } from './ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 
 type ServerInfo = {
     id: string;
