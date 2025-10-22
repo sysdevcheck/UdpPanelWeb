@@ -1,6 +1,5 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { readCredentials } from '@/lib/data';
 
 export async function POST(request: NextRequest) {
@@ -24,14 +23,15 @@ export async function POST(request: NextRequest) {
       };
 
       const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-      cookies().set('session', JSON.stringify(sessionPayload), {
+      const response = NextResponse.json({ success: true, user: sessionPayload });
+      response.cookies.set('session', JSON.stringify(sessionPayload), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         expires: Date.now() + thirtyDays,
         sameSite: 'lax',
         path: '/',
       });
-      return NextResponse.json({ success: true, user: sessionPayload });
+      return response;
     }
     
     // Handle Manager login via local file
@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     };
 
     const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    cookies().set('session', JSON.stringify(sessionPayload), {
+    const response = NextResponse.json({ success: true, user: sessionPayload });
+    response.cookies.set('session', JSON.stringify(sessionPayload), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       expires: Date.now() + thirtyDays,
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
 
-    return NextResponse.json({ success: true, user: sessionPayload });
+    return response;
 
   } catch (error: any) {
     console.error('Login API error:', error);
