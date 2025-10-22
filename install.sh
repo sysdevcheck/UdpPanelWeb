@@ -166,5 +166,3 @@ echo -e "  - ${YELLOW}pm2 list${NC} : Para ver el estado de la aplicación."
 echo
 info "Recuerda configurar los permisos 'sudoers' en tus servidores ZiVPN remotos como se indica en el README."
 echo
-
-    
