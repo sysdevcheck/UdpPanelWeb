@@ -330,7 +330,7 @@ export function ManagerAdmin() {
                              {assignedServer ? (
                                 <div className='flex items-center gap-2'>
                                   <Server className='w-4 h-4 text-muted-foreground'/>
-                                  <span className='font-medium'>{assignedServer.name}</span
+                                  <span className='font-medium'>{assignedServer.name}</span>
                                 </div>
                              ) : (
                                 <div className='flex items-center gap-2 text-destructive'>
