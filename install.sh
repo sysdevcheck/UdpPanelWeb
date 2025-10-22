@@ -151,9 +151,11 @@ success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 
 info "Configurando PM2 para que se inicie al arrancar el sistema..."
 pm2 save
-# El siguiente comando genera una salida que debe ser ejecutada por el usuario
-# Se le añade 'sudo bash -' para automatizarlo
-pm2 startup | sudo bash -
+# Obtener el comando de startup y ejecutarlo con sudo.
+# El 'env PATH...' asegura que el comando sudo tenga el path correcto al ejecutable de node/pm2.
+# '-u $(whoami)' asegura que el servicio se ejecute como el usuario actual.
+# '--hp $(echo $HOME)' establece el directorio home correcto.
+sudo env PATH=$PATH:/usr/bin $(command -v pm2) startup -u $(whoami) --hp $(echo $HOME)
 success "Paso 8 completado: PM2 configurado para arrancar con el sistema."
 
 # 9. MENSAJE FINAL
