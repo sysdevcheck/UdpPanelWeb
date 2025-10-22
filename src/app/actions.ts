@@ -112,12 +112,11 @@ export async function syncVpnUsersWithVps(serverId: string, sshConfig: any) {
 // ====================================================================
 
 export async function getSession() {
-    const cookieStore = cookies();
-    return cookieStore.get('session');
+    return (await cookies()).get('session');
 }
 
-export function logout() {
-  cookies().delete('session');
+export async function logout() {
+  (await cookies()).delete('session');
   redirect('/login');
 }
 
