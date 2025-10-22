@@ -166,13 +166,13 @@ export function ManagerAdmin() {
     }
   }
 
-  const handleDeleteManager = async (manager: Manager) => {
+  const handleDeleteManager = async (managerId: string) => {
     setIsPending(true);
      try {
         const response = await fetch('/api/delete-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: manager.id })
+            body: JSON.stringify({ id: managerId })
         });
         const result = await response.json();
 
@@ -330,7 +330,7 @@ export function ManagerAdmin() {
                              {assignedServer ? (
                                 <div className='flex items-center gap-2'>
                                   <Server className='w-4 h-4 text-muted-foreground'/>
-                                  <span className='font-medium'>{assignedServer.name}</span>
+                                  <span className='font-medium'>{assignedServer.name}</span
                                 </div>
                              ) : (
                                 <div className='flex items-center gap-2 text-destructive'>
@@ -358,7 +358,7 @@ export function ManagerAdmin() {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteManager(manager)} className="bg-destructive hover:bg-destructive/90" disabled={isPending}>
+                                        <AlertDialogAction onClick={() => handleDeleteManager(manager.id)} className="bg-destructive hover:bg-destructive/90" disabled={isPending}>
                                             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                             Eliminar Manager
                                         </AlertDialogAction>
