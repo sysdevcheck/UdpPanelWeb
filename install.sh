@@ -45,7 +45,7 @@ set -e
 info "Iniciando la instalación del Panel ZiVPN Multi-Manager..."
 
 # 1. ACTUALIZAR EL SISTEMA E INSTALAR PRERREQUISITOS
-info "Paso 1: Actualizando el sistema e instalando 'git' y 'curl'..."
+info "Paso 1: Actualizando el sistema e instalando 'git', 'curl' y 'build-essential'..."
 sudo apt-get update
 sudo apt-get install -y git curl build-essential
 success "Paso 1 completado: Sistema actualizado y prerrequisitos instalados."
@@ -143,6 +143,7 @@ info "Iniciando la aplicación con PM2..."
 # Eliminar cualquier instancia anterior con el mismo nombre para evitar conflictos
 pm2 delete zivpn-panel || true
 
+# Inicia la aplicación con PM2. El puerto 9002 está definido en package.json
 pm2 start npm --name "zivpn-panel" -- start
 success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 
@@ -165,3 +166,5 @@ echo -e "  - ${YELLOW}pm2 list${NC} : Para ver el estado de la aplicación."
 echo
 info "Recuerda configurar los permisos 'sudoers' en tus servidores ZiVPN remotos como se indica en el README."
 echo
+
+    
