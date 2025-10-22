@@ -145,7 +145,7 @@ echo
 info "Comandos útiles de PM2:"
 echo -e "  - ${YELLOW}pm2 logs zivpn-panel${NC} : Para ver los registros en tiempo real."
 echo -e "  - ${YELLOW}pm2 restart zivpn-panel${NC} : Para reiniciar la aplicación."
-echo -e "  - ${YELLOW}pmx2 list${NC} : Para ver el estado de la aplicación."
+echo -e "  - ${YELLOW}pm2 list${NC} : Para ver el estado de la aplicación."
 echo
 info "Recuerda configurar los permisos 'sudoers' en tus servidores ZiVPN remotos como se indica en el README."
 echo
