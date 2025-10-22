@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, Plus, Loader2, User, Shield, Pencil, Server, AlertCircle } from 'lucide-react';
@@ -217,7 +217,7 @@ export function ManagerAdmin() {
     } finally {
         setIsPending(false);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -358,7 +358,7 @@ export function ManagerAdmin() {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => handleDeleteManager(manager.id)} className="bg-destructive hover:bg-destructive/90" disabled={isPending}>
+                                        <AlertDialogAction onClick={() => handleDeleteManager(manager.id)} className={buttonVariants({ variant: "destructive" })} disabled={isPending}>
                                             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                             Eliminar Manager
                                         </AlertDialogAction>
@@ -448,5 +448,3 @@ export function ManagerAdmin() {
     </div>
   );
 }
-
-    

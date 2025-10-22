@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Server, Trash2, Pencil, Plus, ServerCrash, RefreshCw, Settings2, Power } from 'lucide-react';
@@ -292,7 +292,7 @@ export function SshConfigManager() {
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
                                                 <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleServerAction('reset', server)} variant="destructive" disabled={pending}>
+                                                <AlertDialogAction onClick={() => handleServerAction('reset', server)} className={buttonVariants({ variant: "destructive" })} disabled={pending}>
                                                     {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                                     Sí, Resetear Servidor
                                                 </AlertDialogAction>
@@ -317,7 +317,7 @@ export function SshConfigManager() {
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
                                                 <AlertDialogCancel disabled={isDeletingPending}>Cancelar</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleDeleteServer(server.id)} className="bg-destructive hover:bg-destructive/90" disabled={isDeletingPending}>
+                                                <AlertDialogAction onClick={() => handleDeleteServer(server.id)} className={buttonVariants({ variant: "destructive" })} disabled={isDeletingPending}>
                                                     {isDeletingPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                                     Eliminar Servidor
                                                 </AlertDialogAction>

@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2, Plus, Loader2, User, Calendar, Pencil, RefreshCw, AlertCircle, Server, Power, Settings2, GitCommitHorizontal } from 'lucide-react';
@@ -412,7 +412,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                               <AlertDialogCancel disabled={isActionPending}>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleServerAction('reset')} variant="destructive" disabled={isActionPending}>
+                              <AlertDialogAction onClick={() => handleServerAction('reset')} className={buttonVariants({ variant: "destructive" })} disabled={isActionPending}>
                                   {isActionPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                   Sí, Resetear
                               </AlertDialogAction>
@@ -519,7 +519,7 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                                           </AlertDialogHeader>
                                           <AlertDialogFooter>
                                               <AlertDialogCancel disabled={isActionPending}>Cancelar</AlertDialogCancel>
-                                              <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90" disabled={isActionPending}>
+                                              <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className={buttonVariants({ variant: "destructive" })} disabled={isActionPending}>
                                                   {isActionPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Eliminar'}
                                               </AlertDialogAction>
                                           </AlertDialogFooter>
@@ -612,5 +612,3 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     </>
   );
 }
-
-    
