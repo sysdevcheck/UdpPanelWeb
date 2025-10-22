@@ -19,7 +19,7 @@ type SshApiResponse = {
 }
 
 async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
     try {
         const response = await fetch(`${baseUrl}/api/ssh`, {
