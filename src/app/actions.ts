@@ -18,6 +18,13 @@ type SshApiResponse = {
 }
 
 async function sshApiRequest(action: string, payload: any, sshConfig: any): Promise<SshApiResponse> {
+    if (process.env.NODE_ENV === 'production') {
+        return {
+            success: false,
+            error: "Las acciones SSH no están disponibles en el entorno de producción.",
+        };
+    }
+    
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
     
     try {
@@ -92,6 +99,9 @@ async function saveConfigToVps(usernames: string[], sshConfig: any): Promise<{ s
 }
 
 export async function syncVpnUsersWithVps(serverId: string, sshConfig: any, vpnUsers: any[]) {
+    if (process.env.NODE_ENV === 'production') {
+        return { success: false, error: "La sincronización SSH no está disponible en producción." };
+    }
     const usernames = vpnUsers.map(u => u.username);
     const saveResult = await saveConfigToVps(usernames, sshConfig);
 
@@ -124,11 +134,17 @@ export async function logout() {
 // ====================================================================
 
 export async function testServerConnection(serverConfig: any): Promise<{ success: boolean }> {
+  if (process.env.NODE_ENV === 'production') {
+    return { success: false };
+  }
   const result = await sshApiRequest('testConnection', {}, serverConfig);
   return { success: result?.success || false };
 }
 
 export async function resetServerConfig(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    if (process.env.NODE_ENV === 'production') {
+        return { success: false, error: "La acción de reseteo no está disponible en producción." };
+    }
     const serverId = formData.get('serverId') as string;
     const sshConfigPayload = formData.get('sshConfig') as string;
 
@@ -148,6 +164,9 @@ export async function resetServerConfig(prevState: any, formData: FormData): Pro
 }
 
 export async function restartService(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+    if (process.env.NODE_ENV === 'production') {
+        return { success: false, error: "La acción de reinicio no está disponible en producción." };
+    }
     const serverId = formData.get('serverId') as string;
     const sshConfigPayload = formData.get('sshConfig') as string;
 
