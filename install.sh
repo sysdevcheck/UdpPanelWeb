@@ -85,13 +85,23 @@ info "Paso 4: Instalando dependencias del proyecto con npm..."
 npm install
 success "Paso 4 completado: Dependencias del proyecto instaladas."
 
-# 5. ELIMINAR ARCHIVO .env.local si existe
-if [ -f ".env.local" ]; then
-    warn "El archivo '.env.local' ya no es necesario y ha sido eliminado."
-    rm .env.local
-fi
-success "Paso 5 completado: Configuración de entorno actualizada."
+# 5. CONFIGURAR CREDENCIALES DEL DUEÑO (OWNER)
+info "Paso 5: Configurando las credenciales del usuario 'Dueño' (Owner)..."
+read -p "Introduce el nombre de usuario para el Dueño (ej. admin): " owner_user
+read -sp "Introduce la contraseña para el Dueño: " owner_pass
+echo
 
+# Crear el archivo .env.local
+cat > .env.local << EOF
+# Credenciales del usuario Dueño (Owner) del panel
+OWNER_USERNAME=${owner_user}
+OWNER_PASSWORD=${owner_pass}
+
+# URL base donde se ejecutará el panel. Por defecto es el puerto 3000.
+# No es necesario cambiarlo a menos que uses un proxy inverso.
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+EOF
+success "Paso 5 completado: Archivo '.env.local' creado con las credenciales del Dueño."
 
 # 6. CREAR ARCHIVO DE INTERCAMBIO (SWAP) PARA EVITAR ERRORES DE MEMORIA
 info "Paso 6: Creando archivo de intercambio (swap) para asegurar memoria suficiente..."
@@ -142,9 +152,10 @@ success "¡Instalación completada!"
 echo
 info "Tu panel ZiVPN Multi-Manager ya está corriendo."
 info "Puedes acceder a él en: http://<IP_DE_TU_VPS>:3000"
-info "Para iniciar sesión, usa un usuario y contraseña de un usuario del sistema operativo de tu VPS."
-warn "IMPORTANTE: Un usuario será considerado 'Dueño' (Owner) si pertenece al grupo 'sudo' o 'admin' en el VPS."
-warn "El primer servidor que agregues en el panel será el utilizado para la autenticación."
+info "Para iniciar sesión como Dueño, usa las credenciales que acabas de configurar:"
+echo -e "  - ${YELLOW}Usuario:${NC} ${owner_user}"
+echo -e "  - ${YELLOW}Contraseña:${NC} (La que introdujiste)"
+warn "IMPORTANTE: Los usuarios 'Manager' se crean desde dentro del panel, en la pestaña 'Managers'."
 echo
 warn "¡IMPORTANTE! Si tienes un firewall (como ufw), asegúrate de abrir el puerto 3000:"
 echo -e "  ${YELLOW}sudo ufw allow 3000${NC}"
