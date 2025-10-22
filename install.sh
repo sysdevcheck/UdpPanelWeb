@@ -114,13 +114,28 @@ EOF
 fi
 success "Paso 5 completado: Variables de entorno configuradas."
 
-# 6. COMPILAR LA APLICACIÓN
-info "Paso 6: Compilando la aplicación para producción..."
-npm run build
-success "Paso 6 completado: Aplicación compilada."
+# 6. CREAR ARCHIVO DE INTERCAMBIO (SWAP) PARA EVITAR ERRORES DE MEMORIA
+info "Paso 6: Creando archivo de intercambio (swap) para asegurar memoria suficiente..."
+if [ -f /swapfile ]; then
+    warn "El archivo de intercambio '/swapfile' ya existe. Saltando creación."
+else
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    # Hacer el swap permanente
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    success "Archivo de intercambio de 2GB creado y activado."
+fi
+success "Paso 6 completado: Memoria de intercambio configurada."
 
-# 7. INSTALAR PM2 Y CONFIGURAR LA APLICACIÓN
-info "Paso 7: Instalando PM2 y configurando el servicio..."
+# 7. COMPILAR LA APLICACIÓN
+info "Paso 7: Compilando la aplicación para producción (esto puede tardar varios minutos)..."
+npm run build
+success "Paso 7 completado: Aplicación compilada."
+
+# 8. INSTALAR PM2 Y CONFIGURAR LA APLICACIÓN
+info "Paso 8: Instalando PM2 y configurando el servicio..."
 sudo npm install pm2 -g
 success "PM2 instalado globalmente."
 
@@ -134,9 +149,9 @@ success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 info "Configurando PM2 para que se inicie al arrancar el sistema..."
 pm2 startup | sudo bash -
 pm2 save
-success "Paso 7 completado: PM2 configurado para arrancar con el sistema."
+success "Paso 8 completado: PM2 configurado para arrancar con el sistema."
 
-# 8. MENSAJE FINAL
+# 9. MENSAJE FINAL
 echo
 success "¡Instalación completada!"
 echo
