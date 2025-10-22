@@ -342,8 +342,6 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
     setCurrentPage(1);
   };
 
-  const isProduction = process.env.NODE_ENV === 'production';
-  
   if (isOwner && !selectedServerId) {
     if (isLoading) {
         return <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -393,15 +391,15 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                         Cambiar Servidor
                     </Button>
                 )}
-                 <Button variant="outline" onClick={handleVpsSync} disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Forzar sincronización de usuarios con el VPS"}>
+                 <Button variant="outline" onClick={handleVpsSync} disabled={isActionPending || isLoading} title="Forzar sincronización de usuarios con el VPS">
                      {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitCommitHorizontal className="h-4 w-4" />} <span className='ml-2'>Sincronizar con VPS</span>
                  </Button>
-                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Reiniciar Servicio"}>
+                 <Button variant="outline" onClick={() => handleServerAction('restart')} disabled={isActionPending || isLoading} title="Reiniciar Servicio">
                      {isActionPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <Power className="h-4 w-4" />} <span className='ml-2'>Reiniciar Servicio</span>
                  </Button>
                   <AlertDialog>
                       <AlertDialogTrigger asChild>
-                          <Button variant="destructive" disabled={isActionPending || isLoading || isProduction} title={isProduction ? "No disponible en producción" : "Resetear Configuración"}>
+                          <Button variant="destructive" disabled={isActionPending || isLoading} title="Resetear Configuración">
                               <Settings2 className="h-4 w-4" /> <span className='ml-2'>Resetear Config</span>
                           </Button>
                       </AlertDialogTrigger>
@@ -429,11 +427,11 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
           <Input
             name="username"
             placeholder="Nuevo usuario"
-            disabled={isActionPending || isLoading || isProduction}
+            disabled={isActionPending || isLoading}
             className="text-base"
             required
           />
-          <Button type="submit" disabled={isActionPending || isLoading || isProduction} className="mt-2 sm:mt-0 w-full sm:w-auto">
+          <Button type="submit" disabled={isActionPending || isLoading} className="mt-2 sm:mt-0 w-full sm:w-auto">
             {isActionPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>Añadir Usuario</span>
           </Button>
@@ -503,12 +501,12 @@ export function UserManager({ user }: { user: { uid: string; username: string; r
                                   <Button onClick={() => handleRenewUser(user.id)} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-green-500/10 hover:text-green-500" disabled={isActionPending} title="Renovar Usuario">
                                       <RefreshCw className="h-4 w-4" />
                                   </Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending || isProduction} onClick={() => setEditingUser(user)} title={isProduction ? "No disponible en producción" : "Editar Usuario"}>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500" disabled={isActionPending} onClick={() => setEditingUser(user)} title="Editar Usuario">
                                       <Pencil className="h-4 w-4" />
                                   </Button>
                                   <AlertDialog>
                                       <AlertDialogTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending || isProduction} title={isProduction ? "No disponible en producción" : "Eliminar Usuario"}>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" disabled={isActionPending} title="Eliminar Usuario">
                                               <Trash2 className="h-4 w-4" />
                                           </Button>
                                       </AlertDialogTrigger>
