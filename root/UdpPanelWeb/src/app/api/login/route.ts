@@ -2,7 +2,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { readCredentials } from '@/lib/data';
-import bcrypt from 'bcryptjs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,7 +28,7 @@ export async function POST(request: NextRequest) {
       const manager = credentials.find(c => c.role === 'manager' && c.username === username);
 
       if (manager) {
-        const isPasswordValid = await bcrypt.compare(password, manager.password);
+        const isPasswordValid = password === manager.password;
         if (isPasswordValid) {
           sessionPayload = {
             username: manager.username,

@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { readCredentials, writeCredentials } from '@/lib/data';
 import { randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 
 export async function GET(request: NextRequest) {
     try {
@@ -33,14 +32,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
     
     const newUser = {
         id: randomBytes(8).toString('hex'),
         username,
-        password: hashedPassword, 
+        password: password, 
         role,
         assignedServerId: assignedServerId || null,
         createdAt: new Date().toISOString(),

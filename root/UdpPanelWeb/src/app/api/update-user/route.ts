@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { readCredentials, writeCredentials } from '@/lib/data';
-import bcrypt from 'bcryptjs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
     
     if (password) {
-        updateData.password = await bcrypt.hash(password, 10);
+        updateData.password = password;
     }
     if (assignedServerId !== undefined) {
         updateData.assignedServerId = assignedServerId;
