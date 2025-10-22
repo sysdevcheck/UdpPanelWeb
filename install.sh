@@ -5,7 +5,7 @@
 # ==============================================================================
 #
 # Este script automatiza la instalación completa del panel en un servidor
-# Ubuntu 22.04 o superior.
+# Ubuntu 22.04 o superior. También se puede usar para reinstalar/actualizar.
 #
 # Uso:
 # 1. Descargar: curl -o install.sh https://raw.githubusercontent.com/sysdevcheck/UdpPanelWeb/main/install.sh
@@ -69,15 +69,17 @@ nvm use 20
 nvm alias default 20
 success "Paso 2 completado: Node.js v$(node -v) y npm v$(npm -v) instalados."
 
-# 3. CLONAR EL REPOSITORIO
-info "Paso 3: Clonando el proyecto desde GitHub..."
+# 3. CLONAR EL REPOSITORIO (O RE-CLONAR SI YA EXISTE)
+info "Paso 3: Preparando para clonar el proyecto desde GitHub..."
 if [ -d "$PROJECT_DIR" ]; then
-    warn "El directorio '$PROJECT_DIR' ya existe. Saltando clonación."
-else
-    git clone "$REPO_URL"
+    warn "El directorio '$PROJECT_DIR' ya existe. Se eliminará para asegurar una instalación limpia."
+    rm -rf "$PROJECT_DIR"
+    success "Directorio anterior eliminado."
 fi
+git clone "$REPO_URL"
 cd "$PROJECT_DIR"
 success "Paso 3 completado: Proyecto clonado en el directorio '$PROJECT_DIR'."
+
 
 # 4. INSTALAR DEPENDENCIAS DEL PROYECTO
 info "Paso 4: Instalando dependencias del proyecto con npm..."
@@ -87,7 +89,7 @@ success "Paso 4 completado: Dependencias del proyecto instaladas."
 # 5. CONFIGURAR VARIABLES DE ENTORNO (.env.local)
 info "Paso 5: Configurando las variables de entorno..."
 if [ -f ".env.local" ]; then
-    warn "El archivo '.env.local' ya existe. No se realizarán cambios."
+    warn "El archivo '.env.local' ya existe. No se realizarán cambios para preservar las credenciales."
 else
     echo "Por favor, introduce las credenciales para el usuario Dueño (Owner):"
     read -p "Nombre de usuario para el Dueño [admin]: " owner_username
