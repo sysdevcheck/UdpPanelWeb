@@ -1,23 +1,20 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { collection, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readServers, writeServers, readCredentials, writeCredentials, readVpnUsers, writeVpnUsers } from '@/lib/data';
+import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
-    const { firestore } = getSdks();
-    const serversCollection = collection(firestore, 'servers');
     const { searchParams } = new URL(request.url);
     const serverId = searchParams.get('serverId');
 
     try {
+        const servers = await readServers();
         if (serverId) {
-            const serverDoc = await getDoc(doc(firestore, 'servers', serverId));
-            if (!serverDoc.exists()) {
+            const server = servers.find(s => s.id === serverId);
+            if (!server) {
                 return NextResponse.json({ error: 'Server not found' }, { status: 404 });
             }
-            return NextResponse.json({ id: serverDoc.id, ...serverDoc.data() });
+            return NextResponse.json(server);
         } else {
-            const querySnapshot = await getDocs(serversCollection);
-            const servers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             return NextResponse.json(servers);
         }
     } catch (error: any) {
@@ -26,30 +23,43 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { firestore } = getSdks();
-  const serversCollection = collection(firestore, 'servers');
   try {
     const body = await request.json();
     const { serverId, name, host, port, username, password, serviceCommand } = body;
     
+    const servers = await readServers();
+    
     const serverData: any = { 
         name, 
         host, 
-        port, 
+        port: parseInt(port) || 22,
         username,
         serviceCommand: serviceCommand || 'systemctl restart zivpn'
     };
 
     if (serverId) {
-        const serverDocRef = doc(firestore, 'servers', serverId);
-        if (password) {
-            serverData.password = password;
+        const serverIndex = servers.findIndex(s => s.id === serverId);
+        if (serverIndex === -1) {
+            return NextResponse.json({ error: 'Server not found' }, { status: 404 });
         }
-        await updateDoc(serverDocRef, serverData);
+        
+        const existingServer = servers[serverIndex];
+        serverData.id = serverId;
+        // Keep old password if new one isn't provided
+        serverData.password = password || existingServer.password;
+        
+        servers[serverIndex] = serverData;
+
     } else {
+        if (!password) {
+            return NextResponse.json({ error: 'Password is required for new servers.' }, { status: 400 });
+        }
+        serverData.id = randomBytes(8).toString('hex');
         serverData.password = password;
-        await addDoc(serversCollection, serverData);
+        servers.push(serverData);
     }
+    
+    await writeServers(servers);
     
     return NextResponse.json({ success: true, message: `Servidor "${name}" guardado exitosamente.` });
 
@@ -60,37 +70,32 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { firestore } = getSdks();
   try {
     const { serverId } = await request.json();
     
     if (!serverId) {
         return NextResponse.json({ error: 'Server ID is required.' }, { status: 400 });
     }
-    
-    const batch = writeBatch(firestore);
 
     // 1. Delete the server
-    const serverDocRef = doc(firestore, 'servers', serverId);
-    batch.delete(serverDocRef);
+    const servers = await readServers();
+    const updatedServers = servers.filter(s => s.id !== serverId);
+    await writeServers(updatedServers);
 
     // 2. Unassign managers
-    const credentialsSnap = await getDocs(collection(firestore, 'credentials'));
-    credentialsSnap.forEach(docSnap => {
-        if (docSnap.data().assignedServerId === serverId) {
-            batch.update(docSnap.ref, { assignedServerId: null });
+    const credentials = await readCredentials();
+    const updatedCredentials = credentials.map(c => {
+        if (c.assignedServerId === serverId) {
+            return { ...c, assignedServerId: null };
         }
+        return c;
     });
+    await writeCredentials(updatedCredentials);
 
     // 3. Delete associated VPN users
-    const vpnUsersSnap = await getDocs(collection(firestore, 'vpn-users'));
-    vpnUsersSnap.forEach(docSnap => {
-        if (docSnap.data().serverId === serverId) {
-            batch.delete(docSnap.ref);
-        }
-    });
-
-    await batch.commit();
+    const vpnUsers = await readVpnUsers();
+    const updatedVpnUsers = vpnUsers.filter(u => u.serverId !== serverId);
+    await writeVpnUsers(updatedVpnUsers);
     
     return NextResponse.json({ success: true, message: 'Server deleted successfully.' });
 

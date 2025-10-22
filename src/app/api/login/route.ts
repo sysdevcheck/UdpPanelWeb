@@ -1,11 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readCredentials } from '@/lib/data';
 
 export async function POST(request: NextRequest) {
-  const { firestore } = getSdks();
-  const credentialsCollection = collection(firestore, 'credentials');
   try {
     const body = await request.json();
     const { username, password } = body;
@@ -13,32 +10,34 @@ export async function POST(request: NextRequest) {
     if (!username || !password) {
       return NextResponse.json({ error: 'Usuario y contraseña son requeridos.' }, { status: 400 });
     }
+    
+    // Handle Owner login via environment variables first
+    const ownerUsername = process.env.OWNER_USERNAME || 'admin';
+    const ownerPassword = process.env.OWNER_PASSWORD || 'password';
 
-    const q = query(credentialsCollection, where('username', '==', username));
-    const querySnapshot = await getDocs(q);
+    if (username === ownerUsername && password === ownerPassword) {
+      const sessionPayload = {
+        username: ownerUsername,
+        role: 'owner',
+        assignedServerId: null
+      };
 
-    if (querySnapshot.empty) {
-        return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      await cookies().set('session', JSON.stringify(sessionPayload), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        expires: Date.now() + thirtyDays,
+        sameSite: 'lax',
+        path: '/',
+      });
+      return NextResponse.json({ success: true, user: sessionPayload });
     }
     
-    const userDoc = querySnapshot.docs[0];
-    const user = userDoc.data();
+    // Handle Manager login via local file
+    const credentials = await readCredentials();
+    const user = credentials.find(c => c.username === username && c.role === 'manager');
 
-    let passwordMatch = false;
-
-    if (user.role === 'owner') {
-        const ownerUsername = process.env.OWNER_USERNAME || 'admin';
-        const ownerPassword = process.env.OWNER_PASSWORD || 'password';
-        if (username === ownerUsername && password === ownerPassword) {
-            passwordMatch = true;
-        }
-    } else {
-        if (user.password === password) {
-            passwordMatch = true;
-        }
-    }
-
-    if (!passwordMatch) {
+    if (!user || user.password !== password) {
       return NextResponse.json({ error: 'Credenciales inválidas.' }, { status: 401 });
     }
 

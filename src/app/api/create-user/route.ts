@@ -1,14 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readCredentials, writeCredentials } from '@/lib/data';
+import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
-    const { firestore } = getSdks();
-    const credentialsCollection = collection(firestore, 'credentials');
     try {
-        const q = query(credentialsCollection, where('role', '==', 'manager'));
-        const querySnapshot = await getDocs(q);
-        const managers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const credentials = await readCredentials();
+        const managers = credentials.filter(c => c.role === 'manager');
         return NextResponse.json(managers);
     } catch (error: any) {
         console.error('Get Managers API error:', error);
@@ -17,8 +14,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { firestore } = getSdks();
-  const credentialsCollection = collection(firestore, 'credentials');
   try {
     const body = await request.json();
     const { username, password, role, assignedServerId } = body;
@@ -30,10 +25,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'A server must be assigned to a manager.' }, { status: 400 });
     }
     
-    const q = query(credentialsCollection, where('username', '==', username));
-    const existingUser = await getDocs(q);
+    const credentials = await readCredentials();
+    const existingUser = credentials.find(c => c.username === username);
 
-    if (!existingUser.empty) {
+    if (existingUser) {
       return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
     }
 
@@ -41,6 +36,7 @@ export async function POST(request: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + 30);
     
     const newUser = {
+        id: randomBytes(8).toString('hex'),
         username,
         password, 
         role,
@@ -49,9 +45,10 @@ export async function POST(request: NextRequest) {
         expiresAt: expiresAt.toISOString(),
     };
     
-    const docRef = await addDoc(credentialsCollection, newUser);
+    credentials.push(newUser);
+    await writeCredentials(credentials);
 
-    return NextResponse.json({ success: true, user: { id: docRef.id, ...newUser } });
+    return NextResponse.json({ success: true, user: newUser });
 
   } catch (error: any) {
     console.error('Create User API error:', error);

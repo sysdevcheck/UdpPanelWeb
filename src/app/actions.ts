@@ -4,8 +4,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readVpnUsers } from '@/lib/data';
 
 // ====================================================================
 // SSH API Wrapper Functions
@@ -94,10 +93,8 @@ async function saveConfigToVps(usernames: string[], sshConfig: any): Promise<{ s
 }
 
 export async function syncVpnUsersWithVps(serverId: string, sshConfig: any) {
-    const { firestore } = getSdks();
-    const vpnUsersQuery = query(collection(firestore, 'vpn-users'), where('serverId', '==', serverId));
-    const vpnUsersSnap = await getDocs(vpnUsersQuery);
-    const usernames = vpnUsersSnap.docs.map(doc => doc.data().username);
+    const allVpnUsers = await readVpnUsers();
+    const usernames = allVpnUsers.filter(u => u.serverId === serverId).map(u => u.username);
 
     const saveResult = await saveConfigToVps(usernames, sshConfig);
 

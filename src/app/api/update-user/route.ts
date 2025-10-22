@@ -1,10 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { doc, updateDoc, getDocs, query, where, collection } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readCredentials, writeCredentials } from '@/lib/data';
 
 export async function POST(request: NextRequest) {
-  const { firestore } = getSdks();
-  const credentialsCollection = collection(firestore, 'credentials');
   try {
     const body = await request.json();
     const { id, username, password, assignedServerId } = body;
@@ -13,14 +10,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required.' }, { status: 400 });
     }
     
-    const userDocRef = doc(firestore, 'credentials', id);
-    const updateData: any = {};
+    const credentials = await readCredentials();
+    const userIndex = credentials.findIndex(c => c.id === id);
+
+    if (userIndex === -1) {
+        return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+
+    const updateData = credentials[userIndex];
 
     if (username) {
-      const q = query(credentialsCollection, where('username', '==', username));
-      const existingUser = await getDocs(q);
-      const anotherUserExists = existingUser.docs.some(doc => doc.id !== id);
-
+      const anotherUserExists = credentials.some(c => c.username === username && c.id !== id);
       if (anotherUserExists) {
         return NextResponse.json({ error: 'Este nombre de usuario ya está en uso.' }, { status: 409 });
       }
@@ -30,9 +30,8 @@ export async function POST(request: NextRequest) {
     if (password) updateData.password = password;
     if (assignedServerId !== undefined) updateData.assignedServerId = assignedServerId;
 
-    if(Object.keys(updateData).length > 0) {
-        await updateDoc(userDocRef, updateData);
-    }
+    credentials[userIndex] = updateData;
+    await writeCredentials(credentials);
 
     return NextResponse.json({ success: true, message: 'User updated successfully.' });
 

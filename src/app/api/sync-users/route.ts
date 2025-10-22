@@ -1,9 +1,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { syncVpnUsersWithVps as syncVpnUsersAction } from '@/app/actions';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
-
 
 export async function POST(request: NextRequest) {
     try {

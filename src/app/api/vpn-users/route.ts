@@ -1,10 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readVpnUsers, writeVpnUsers } from '@/lib/data';
+import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
-    const { firestore } = getSdks();
-    const vpnUsersCollection = collection(firestore, 'vpn-users');
     try {
         const { searchParams } = new URL(request.url);
         const serverId = searchParams.get('serverId');
@@ -14,15 +12,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Server ID is required.' }, { status: 400 });
         }
         
-        const conditions = [where('serverId', '==', serverId)];
+        let users = await readVpnUsers();
+        users = users.filter(u => u.serverId === serverId);
+
         if (createdBy) {
-            conditions.push(where('createdBy', '==', createdBy));
+            users = users.filter(u => u.createdBy === createdBy);
         }
 
-        const q = query(vpnUsersCollection, ...conditions, orderBy('createdAt', 'desc'));
-        const querySnapshot = await getDocs(q);
-        
-        const users = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        users.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         
         return NextResponse.json(users);
 
@@ -33,8 +30,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { firestore } = getSdks();
-    const vpnUsersCollection = collection(firestore, 'vpn-users');
     try {
         const { username, serverId, createdBy } = await request.json();
 
@@ -44,18 +39,22 @@ export async function POST(request: NextRequest) {
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
+        
+        const users = await readVpnUsers();
 
         const newUser = {
+            id: randomBytes(8).toString('hex'),
             username,
             serverId,
             createdBy,
             createdAt: new Date().toISOString(),
             expiresAt: expiresAt.toISOString(),
         };
+        
+        users.push(newUser);
+        await writeVpnUsers(users);
 
-        const docRef = await addDoc(vpnUsersCollection, newUser);
-
-        return NextResponse.json({ success: true, id: docRef.id });
+        return NextResponse.json({ success: true, id: newUser.id });
 
     } catch (error: any) {
         console.error('VPN Users POST Error:', error);
@@ -64,7 +63,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const { firestore } = getSdks();
     try {
         const { docId, username, renew } = await request.json();
 
@@ -72,22 +70,27 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
         }
         
-        const userDocRef = doc(firestore, 'vpn-users', docId);
-        const updateData: any = {};
+        const users = await readVpnUsers();
+        const userIndex = users.findIndex(u => u.id === docId);
+
+        if (userIndex === -1) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+
+        const userToUpdate = users[userIndex];
 
         if (username) {
-            updateData.username = username;
+            userToUpdate.username = username;
         }
 
         if (renew) {
             const newExpiresAt = new Date();
             newExpiresAt.setDate(newExpiresAt.getDate() + 30);
-            updateData.expiresAt = newExpiresAt.toISOString();
+            userToUpdate.expiresAt = newExpiresAt.toISOString();
         }
         
-        if (Object.keys(updateData).length > 0) {
-             await updateDoc(userDocRef, updateData);
-        }
+        users[userIndex] = userToUpdate;
+        await writeVpnUsers(users);
 
         return NextResponse.json({ success: true, message: 'User updated successfully.' });
 
@@ -98,7 +101,6 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const { firestore } = getSdks();
     try {
         const { searchParams } = new URL(request.url);
         const docId = searchParams.get('docId');
@@ -106,9 +108,15 @@ export async function DELETE(request: NextRequest) {
         if (!docId) {
             return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
         }
+        
+        const users = await readVpnUsers();
+        const updatedUsers = users.filter(u => u.id !== docId);
 
-        const userDocRef = doc(firestore, 'vpn-users', docId);
-        await deleteDoc(userDocRef);
+        if (users.length === updatedUsers.length) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+
+        await writeVpnUsers(updatedUsers);
 
         return NextResponse.json({ success: true, message: 'User deleted successfully.' });
 

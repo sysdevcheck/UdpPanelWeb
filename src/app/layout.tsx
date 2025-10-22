@@ -5,7 +5,6 @@ import './globals.css';
 import { cn } from '@/lib/utils';
 import { Send } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
-import { FirebaseClientProvider } from '@/firebase';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -28,7 +27,6 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className={cn("dark flex flex-col min-h-screen", inter.variable)}>
-        <FirebaseClientProvider>
           <main className="flex-grow">
             {children}
           </main>
@@ -48,7 +46,6 @@ export default function RootLayout({
             </div>
           </footer>
           <Toaster />
-        </FirebaseClientProvider>
       </body>
     </html>
   );

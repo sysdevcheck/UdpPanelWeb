@@ -1,6 +1,15 @@
 
 import { NextResponse } from 'next/server';
-import type { Client, SFTPWrapper } from 'ssh2';
+
+// Lazy load ssh2
+let Client: any;
+
+async function loadSsh2() {
+    if (!Client) {
+        Client = (await import('ssh2')).Client;
+    }
+    return Client;
+}
 
 type LogEntry = { level: 'INFO' | 'SUCCESS' | 'ERROR'; message: string };
 
@@ -18,31 +27,19 @@ const defaultConfig = {
   }
 };
 
-// ====================================================================
-// Dynamic SSH2 Loader - This is the key to bypass Next.js build errors
-// ====================================================================
-let ssh2Client: typeof import('ssh2').Client;
-const loadSsh2 = (): typeof import('ssh2').Client => {
-    if (!ssh2Client) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        ssh2Client = require('ssh2').Client;
-    }
-    return ssh2Client;
-};
 
-
-async function getSshConnection(sshConfig: any): Promise<Client> {
-    const Client = loadSsh2();
-    const conn = new Client();
+async function getSshConnection(sshConfig: any): Promise<any> {
+    const SshClient = await loadSsh2();
+    const conn = new SshClient();
     return new Promise((resolve, reject) => {
         conn.on('ready', () => resolve(conn))
-            .on('error', (err) => reject(err))
+            .on('error', (err: any) => reject(err))
             .on('timeout', () => reject(new Error('Connection timed out')))
             .connect(sshConfig);
     });
 }
 
-async function execCommand(ssh: Client, command: string, timeout = 15000): Promise<{ stdout: string; stderr: string }> {
+async function execCommand(ssh: any, command: string, timeout = 15000): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
         let stdout = '';
         let stderr = '';
@@ -51,7 +48,7 @@ async function execCommand(ssh: Client, command: string, timeout = 15000): Promi
             reject(new Error(`El comando ha superado el tiempo de espera de ${timeout / 1000}s. Posiblemente es un comando interactivo no soportado.`));
         }, timeout);
 
-        ssh.exec(command, (err, stream) => {
+        ssh.exec(command, (err: any, stream: any) => {
             if (err) {
                 clearTimeout(timer);
                 return reject(err);
@@ -68,16 +65,16 @@ async function execCommand(ssh: Client, command: string, timeout = 15000): Promi
     });
 }
 
-function getSftp(ssh: Client): Promise<SFTPWrapper> {
+function getSftp(ssh: any): Promise<any> {
     return new Promise((resolve, reject) => {
-        ssh.sftp((err, sftp) => {
+        ssh.sftp((err: any, sftp: any) => {
             if (err) return reject(err);
             resolve(sftp);
         });
     });
 }
 
-async function readFileSftp(sftp: SFTPWrapper, path: string): Promise<string> {
+async function readFileSftp(sftp: any, path: string): Promise<string> {
     return new Promise((resolve, reject) => {
         sftp.readFile(path, 'utf8', (err: any, data: string) => {
             if (err) {
@@ -93,7 +90,7 @@ async function readFileSftp(sftp: SFTPWrapper, path: string): Promise<string> {
     });
 }
 
-async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Promise<void> {
+async function writeFileSftp(sftp: any, path: string, data: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const dirname = path.substring(0, path.lastIndexOf('/'));
         const ssh = sftp.getClient();
@@ -108,7 +105,7 @@ async function writeFileSftp(sftp: SFTPWrapper, path: string, data: string): Pro
 
 export async function POST(request: Request) {
     const log: LogEntry[] = [];
-    let ssh: Client | null = null;
+    let ssh: any | null = null;
     
     try {
         const body = await request.json();

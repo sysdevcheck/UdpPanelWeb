@@ -1,9 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readCredentials, writeCredentials } from '@/lib/data';
 
 export async function POST(request: NextRequest) {
-  const { firestore } = getSdks();
   try {
     const body = await request.json();
     const { id } = body;
@@ -12,8 +10,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required.' }, { status: 400 });
     }
     
-    const userDocRef = doc(firestore, 'credentials', id);
-    await deleteDoc(userDocRef);
+    const credentials = await readCredentials();
+    const updatedCredentials = credentials.filter(c => c.id !== id);
+
+    if (credentials.length === updatedCredentials.length) {
+        return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    }
+
+    await writeCredentials(updatedCredentials);
     
     return NextResponse.json({ success: true, message: 'User deleted successfully.' });
 

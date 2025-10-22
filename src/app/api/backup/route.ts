@@ -1,20 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
-import { getSdks } from '@/firebase';
+import { readCredentials, readServers, readVpnUsers, writeCredentials, writeServers, writeVpnUsers } from '@/lib/data';
 
 export async function GET(request: NextRequest) {
-    const { firestore } = getSdks();
     try {
-        const credentialsSnap = await getDocs(collection(firestore, 'credentials'));
-        const serversSnap = await getDocs(collection(firestore, 'servers'));
-        const vpnUsersSnap = await getDocs(collection(firestore, 'vpn-users'));
-
-        const allCredentials = credentialsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const allCredentials = await readCredentials();
         const owner = allCredentials.find((u: any) => u.role === 'owner');
         const managers = allCredentials.filter((u: any) => u.role === 'manager');
 
-        const servers = serversSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const vpnUsers = vpnUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const servers = await readServers();
+        const vpnUsers = await readVpnUsers();
         
         const vpnUsersByServer: { [key: string]: any[] } = {};
         vpnUsers.forEach((user: any) => {
@@ -40,50 +34,39 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { firestore } = getSdks();
-    const batch = writeBatch(firestore);
-
     try {
         const backup = await request.json();
 
-        // Clear existing data
-        const collections = ['servers', 'credentials', 'vpn-users'];
-        for (const coll of collections) {
-            const snap = await getDocs(collection(firestore, coll));
-            snap.docs.forEach(doc => batch.delete(doc.ref));
-        }
+        // Clear existing data by writing empty arrays
+        await writeServers([]);
+        await writeCredentials([]);
+        await writeVpnUsers([]);
 
         // Restore servers
         if (backup.servers) {
-            backup.servers.forEach((server: any) => {
-                const { id, ...data } = server;
-                batch.set(doc(collection(firestore, 'servers'), id), data);
-            });
+            await writeServers(backup.servers);
         }
 
         // Restore credentials
+        let credentialsToRestore = [];
         if (backup.owner) {
-             const { id, ...data } = backup.owner;
-             batch.set(doc(collection(firestore, 'credentials'), id), data);
+             credentialsToRestore.push(backup.owner);
         }
         if (backup.managers) {
-            backup.managers.forEach((manager: any) => {
-                const { id, ...data } = manager;
-                batch.set(doc(collection(firestore, 'credentials'), id), data);
-            });
+            credentialsToRestore.push(...backup.managers);
         }
+        await writeCredentials(credentialsToRestore);
 
         // Restore vpnUsers
+        let vpnUsersToRestore: any[] = [];
         if (backup.vpnUsers) {
             for (const serverId in backup.vpnUsers) {
                 backup.vpnUsers[serverId].forEach((user: any) => {
-                    const { id, ...data } = user;
-                    batch.set(doc(collection(firestore, 'vpn-users'), id), { ...data, serverId });
+                    vpnUsersToRestore.push({ ...user, serverId });
                 });
             }
         }
-        
-        await batch.commit();
+        await writeVpnUsers(vpnUsersToRestore);
         
         return NextResponse.json({ success: true, message: 'Backup importado exitosamente.' });
 
