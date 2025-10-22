@@ -69,7 +69,7 @@ nvm use 20
 nvm alias default 20
 success "Paso 2 completado: Node.js v$(node -v) y npm v$(npm -v) instalados."
 
-# 3. CLONAR EL REPOSITORIO (O RE-CLONAR SI YA EXISTE)
+# 3. CLONAR O ACTUALIZAR EL REPOSITORIO
 info "Paso 3: Preparando para clonar el proyecto desde GitHub..."
 if [ -d "$PROJECT_DIR" ]; then
     warn "El directorio '$PROJECT_DIR' ya existe. Se eliminará para asegurar una instalación limpia."
@@ -79,7 +79,6 @@ fi
 git clone "$REPO_URL"
 cd "$PROJECT_DIR"
 success "Paso 3 completado: Proyecto clonado en el directorio '$PROJECT_DIR'."
-
 
 # 4. INSTALAR DEPENDENCIAS DEL PROYECTO
 info "Paso 4: Instalando dependencias del proyecto con npm..."
@@ -109,8 +108,8 @@ OWNER_USERNAME=${OWNER_USERNAME}
 OWNER_PASSWORD=${owner_password}
 
 # URL base donde se ejecutará el panel.
-# Usamos localhost:9002 por defecto, ya que se ejecuta en el mismo VPS.
-NEXT_PUBLIC_BASE_URL=http://localhost:9002
+# Usamos localhost:3000 por defecto, ya que se ejecuta en el mismo VPS.
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
 EOF
     success "Archivo '.env.local' creado con éxito."
 fi
@@ -142,16 +141,19 @@ sudo npm install pm2 -g
 success "PM2 instalado globalmente."
 
 info "Iniciando la aplicación con PM2..."
-# Eliminar cualquier instancia anterior con el mismo nombre para evitar conflictos
+# Detener y eliminar cualquier instancia anterior para evitar conflictos
+pm2 stop zivpn-panel || true
 pm2 delete zivpn-panel || true
 
-# Inicia la aplicación con PM2. El puerto 9002 está definido en package.json
+# Inicia la aplicación con PM2. El puerto 3000 está definido en package.json
 pm2 start npm --name "zivpn-panel" -- start
 success "La aplicación ha sido iniciada con PM2 bajo el nombre 'zivpn-panel'."
 
 info "Configurando PM2 para que se inicie al arrancar el sistema..."
-pm2 startup | sudo bash -
 pm2 save
+# El siguiente comando genera una salida que debe ser ejecutada por el usuario
+# Se le añade 'sudo bash -' para automatizarlo
+pm2 startup | sudo bash -
 success "Paso 8 completado: PM2 configurado para arrancar con el sistema."
 
 # 9. MENSAJE FINAL
@@ -159,7 +161,9 @@ echo
 success "¡Instalación completada!"
 echo
 info "Tu panel ZiVPN Multi-Manager ya está corriendo."
-info "Puedes acceder a él en: http://<IP_DE_TU_VPS>:9002"
+info "Puedes acceder a él en: http://<IP_DE_TU_VPS>:3000"
+warn "¡IMPORTANTE! Si tienes un firewall (como ufw), asegúrate de abrir el puerto 3000:"
+echo -e "  ${YELLOW}sudo ufw allow 3000${NC}"
 echo
 info "Comandos útiles de PM2:"
 echo -e "  - ${YELLOW}pm2 logs zivpn-panel${NC} : Para ver los registros en tiempo real."
